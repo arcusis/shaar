@@ -98,4 +98,9 @@ python3 scripts/engine_payload.py --archive "$archive" --framework "$framework" 
   echo 'Engine payload verification failed; refusing bundle.' >&2
   exit 1
 }
+if ! /usr/bin/grep -a -q 'capture_changed' \
+  "$framework/Versions/Current/Chromium Framework"; then
+  echo 'Engine is missing the required capture indicator event.' >&2
+  exit 1
+fi
 printf '%s\n' "$framework"

@@ -563,6 +563,11 @@ class BundleAppTests(unittest.TestCase):
             "--product ShaarVerification -Xswiftc -enable-testing",
             self._log(),
         )
+        self.assertNotIn("-Xcc", self._log())
+        self.assertIn(
+            "SHAAR_PACKAGE_VERIFICATION_BUILD=1 swift_build --product",
+            SCRIPT.read_text(),
+        )
         self.assertNotIn("build/swiftpm/default", self._log())
         self.assertIn("Built build/Shaar Verification.app", result.stdout)
         plist = self._info_plist("build/Shaar Verification.app")

@@ -1495,6 +1495,35 @@ bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
   return true;
 }
 
+bool ParseProbePopupClickArguments(shaar_bytes args_json,
+                                   std::string* popup_id,
+                                   std::string* element_id) {
+  if (!popup_id || !element_id || !args_json.data || args_json.size == 0 ||
+      args_json.size > 256)
+    return false;
+  auto value = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+  if (!value || !value->is_dict() ||
+      !ExactKeys(value->GetDict(), {"schemaVersion", "popupId", "elementID"}) ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return false;
+  const std::string* id = value->GetDict().FindString("popupId");
+  const std::string* element = value->GetDict().FindString("elementID");
+  if (!id || id->size() != 36 || !element || *element != "engine-window-create")
+    return false;
+  for (size_t i = 0; i < id->size(); ++i) {
+    const char c = (*id)[i];
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      if (c != '-') return false;
+    } else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+      return false;
+    }
+  }
+  *popup_id = *id;
+  *element_id = *element;
+  return true;
+}
+
 bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
                        bool never_shown, const GURL& url) {
   return testing && owned_root && selected && never_shown &&
@@ -1644,6 +1673,30 @@ shaar_error_code HandleDevToolsOperation(
         ReplyContext{request_id, reply, reply_context}, x, y,
         std::move(element_id), scroll)
         ->Start(contents);
+    return SHAAR_OK;
+  }
+  if (operation == SHAAR_OP_PROBE_POPUP_TRUSTED_CLICK) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    const bool selected = context->browser_tabs->IsSelectedWebContents(
+        engine, window, tab, contents);
+    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
+                            shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
+                            shaar::windows_tabs::HasNeverShownPageHost(window, contents),
+                            contents->GetLastCommittedURL()) || !scope.profile ||
+        scope.private_session)
+      return Fail(error, SHAAR_POLICY_BLOCKED, "popup click probe is unavailable");
+    std::string popup_id;
+    std::string element_id;
+    if (!ParseProbePopupClickArguments(args_json, &popup_id, &element_id))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid popup click arguments");
+    content::WebContents* popup = shaar::extensions_host::ProbePopupContents(
+        engine, scope.profile, window, tab, popup_id);
+    if (!popup || !popup->GetRenderWidgetHostView() ||
+        !popup->GetRenderWidgetHostView()->GetRenderWidgetHost())
+      return Fail(error, SHAAR_NOT_READY, "popup click target is unavailable");
+    base::MakeRefCounted<ProbeTrustedClick>(
+        ReplyContext{request_id, reply, reply_context}, 0, 0,
+        std::move(element_id))->Start(popup);
     return SHAAR_OK;
   }
   if (operation == SHAAR_OP_PROBE_POPUP_EVALUATE ||

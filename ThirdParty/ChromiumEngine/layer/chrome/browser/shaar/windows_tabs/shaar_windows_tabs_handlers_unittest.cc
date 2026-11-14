@@ -5,6 +5,7 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
 #include <string>
 #include <memory>
@@ -95,6 +96,24 @@ TEST(ShaarWindowsTabsHandlersTest, PinnedTabsMustBeAnOrderedPrefix) {
   EXPECT_FALSE(ValidatePlacement({"a", "b"}, {"a", "b"}, {"outside"}));
 }
 
+TEST(ShaarWindowsTabsHandlersTest, WindowRegistryResolvesBrowserByProfile) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* alpha = reinterpret_cast<Browser*>(3);
+  auto* beta = reinterpret_cast<Browser*>(4);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "native-window"));
+  ASSERT_NE(registry.EnsureWindowState(engine, window, alpha, "alpha"), nullptr);
+  ASSERT_NE(registry.EnsureWindowState(engine, window, beta, "beta"), nullptr);
+
+  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "alpha"), alpha);
+  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "beta"), beta);
+  EXPECT_EQ(registry.FindBrowserForProfile(engine, window, "missing"), nullptr);
+  EXPECT_EQ(registry.FindBrowserForProfile(
+                reinterpret_cast<shaar_engine*>(5), window, "alpha"),
+            nullptr);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutation) {
   shaar::ModuleCall call = {};
   call.operation = SHAAR_OP_WINDOW_ACTIVATE_TAB;
@@ -131,6 +150,39 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
   EXPECT_EQ(registry.FindWindowOwner(window), nullptr);
   EXPECT_EQ(registry.FindTabWindow(tab), nullptr);
+}
+
+TEST(ShaarWindowsTabsHandlersTest,
+     RegistryResolvesExtensionActivatedTabToItsShaarIdentity) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* tab = reinterpret_cast<shaar_tab*>(3);
+  auto* browser = reinterpret_cast<Browser*>(4);
+  auto* contents = reinterpret_cast<content::WebContents*>(5);
+  registry.ReserveWindow(engine, window, "window-a");
+  registry.EnsureWindowState(engine, window, browser, "profile-a");
+  registry.BindTab(engine, window, tab, "tab-a", browser, contents);
+
+  auto identity = registry.FindRegularTabForBrowser(browser, contents);
+  ASSERT_TRUE(identity);
+  EXPECT_EQ(identity->engine, engine);
+  EXPECT_EQ(identity->profile_id, "profile-a");
+  EXPECT_EQ(identity->window_id, "window-a");
+  EXPECT_EQ(identity->tab_id, "tab-a");
+  EXPECT_FALSE(registry.FindRegularTabForBrowser(
+      reinterpret_cast<Browser*>(6), contents));
+}
+
+TEST(ShaarWindowsTabsHandlersTest,
+     TabActivationIgnoresFallbackSelectionAfterTabRemoval) {
+  TabStripSelectionChange selection;
+  selection.old_contents = reinterpret_cast<content::WebContents*>(1);
+  selection.new_contents = reinterpret_cast<content::WebContents*>(2);
+  EXPECT_TRUE(ShouldEmitTabActivation(selection));
+
+  selection.selected_tabs_were_removed = true;
+  EXPECT_FALSE(ShouldEmitTabActivation(selection));
 }
 
 TEST(ShaarWindowsTabsHandlersTest, ReservedWindowBindsBrowserAndClosesCleanly) {

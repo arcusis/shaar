@@ -145,41 +145,67 @@ final class ProfileOnboardingProbe {
     let address = String(data: try JSONEncoder().encode(fixture.absoluteString), encoding: .utf8)!
     // Install the opener listener in the same renderer task as window.open. A separate evaluate
     // could fail to install it while the later user-gesture evaluation still opened the popup.
-    let reply: String? = await withCheckedContinuation { continuation in
-      runtime.evaluateProbeUserGesture(
-        inTabID: tab.uuidString,
-        script: """
-          (()=>{
-            document.cookie='shaarOnboarding=\(token);path=/';
-            window.fixtureOpenerDocumentID='\(token)';
-            window.fixtureReply=null;
-            window.addEventListener('message',e=>{
-              // A restored renderer can expose a new WindowProxy wrapper for the same opener.
-              // Correlate this response by origin and its one-use token instead of source identity.
-              if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
-                window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
-            });
-            window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');
-            return !!window.fixturePopup;
-          })()
-          """
-      ) {
+    let armed = await value(
+      tab,
+      """
+      (()=>{
+        document.cookie='shaarOnboarding=\(token);path=/';
+        window.fixtureOpenerDocumentID='\(token)';
+        window.fixtureReply=null;
+        window.addEventListener('message',e=>{
+          // A restored renderer can expose a new WindowProxy wrapper for the same opener.
+          // Correlate this response by origin and its one-use token instead of source identity.
+          if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
+            window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
+        });
+        const button=document.createElement('button');button.id='popup';button.textContent='Open sign-in popup';
+        button.onclick=()=>{window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');};
+        document.body.append(button);return {ready:button.isConnected};
+      })()
+      """)
+    guard armed?["ready"] as? Bool == true else { throw Failure("Draft popup click was not armed") }
+    let clicked: Bool = await withCheckedContinuation { continuation in
+      runtime.clickProbeElement(inTabID: tab.uuidString, elementID: "popup") {
         continuation.resume(returning: $0)
       }
     }
-    guard reply == "true" else { throw Failure("Draft popup rejected") }
+    guard clicked else { throw Failure("Draft popup trusted click rejected") }
     let popupStep = "\(phase) \(flow.provider.title) popup"
-    try await wait("\(popupStep) adoption") { popupTab != nil && flow.windowIDs.count == 2 }
+    for _ in 0..<100 {
+      if popupTab != nil && flow.windowIDs.count == 2 { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    guard popupTab != nil && flow.windowIDs.count == 2 else {
+      let popupState = await value(
+        tab, "({opened:!!window.fixturePopup,opener:!!window.fixturePopup?.opener})")
+      throw Failure(
+        "Timed out: \(popupStep) adoption [popupTab=\(popupTab?.uuidString ?? "none"), "
+          + "windows=\(flow.windowIDs.sorted()), page=\(String(describing: popupState))]")
+    }
     guard let child = popupTab else { throw Failure("Popup tab missing") }
     guard let popupID = flow.windowIDs.first(where: { $0 != flow.engine.windowID }),
       let popupWindow = runtime.window(forID: popupID)
     else { throw Failure("Sign-in popup host missing") }
     try requireFullScreenAuxiliary(popupWindow, label: "sign-in popup")
-    try await wait("\(popupStep) session") {
-      let state = await self.value(
-        child, "({cookie:document.cookie,opener:!!window.opener,ready:document.readyState})")
-      return (state?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true
-        && state?["opener"] as? Bool == true && state?["ready"] as? String == "complete"
+    var popupSession: [String: Any]?
+    for _ in 0..<80 {
+      popupSession = await value(
+        child,
+        "({url:location.href,cookie:document.cookie,opener:!!window.opener,ready:document.readyState})"
+      )
+      if (popupSession?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true
+        && popupSession?["opener"] as? Bool == true
+        && popupSession?["ready"] as? String == "complete"
+      {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    guard (popupSession?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true,
+      popupSession?["opener"] as? Bool == true,
+      popupSession?["ready"] as? String == "complete"
+    else {
+      throw Failure("Timed out: \(popupStep) session [state=\(String(describing: popupSession))]")
     }
     if reloadOpener {
       guard runtime.reloadTabID(tab.uuidString, profileID: flow.profileID.uuidString) else {

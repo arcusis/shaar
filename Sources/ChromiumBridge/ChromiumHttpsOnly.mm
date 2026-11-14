@@ -84,3 +84,24 @@ NSNumber *ARCSeedHttpsOnlyPreference(
   if (!ARCWriteHttpsOnlyPreference(userDataDirectory, canonical, YES)) return nil;
   return @YES;
 }
+
+BOOL ARCCommitHttpsOnlyModeChange(
+    NSMutableDictionary<NSString *, NSNumber *> *cache,
+    NSMutableSet<NSString *> *dirtyProfiles,
+    NSString *profileID,
+    BOOL enabled,
+    BOOL hasLoadedProfile,
+    BOOL (^writePreference)(BOOL),
+    BOOL (^applyLive)(BOOL)) {
+  NSNumber *previous = cache[profileID];
+  BOOL changed = !previous || previous.boolValue != enabled;
+  BOOL needsWrite = changed || [dirtyProfiles containsObject:profileID];
+  if (needsWrite && !writePreference(enabled)) return NO;
+  if (hasLoadedProfile && changed && !applyLive(enabled)) {
+    [dirtyProfiles addObject:profileID];
+    return NO;
+  }
+  [dirtyProfiles removeObject:profileID];
+  cache[profileID] = @(enabled);
+  return YES;
+}

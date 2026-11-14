@@ -6,7 +6,7 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.target === "offscreen") return false;
   (async () => {
     if (message.action === "set") {
@@ -39,13 +39,18 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       return report;
     }
     if (message.action === "activate-probe") {
-      if (!Array.isArray(message.tabIDs) || message.tabIDs.length < 1 || message.tabIDs.length > 8
-        || !message.tabIDs.every(Number.isInteger) || !Number.isInteger(message.windowID)
+      if (!Array.isArray(message.tabTitles) || message.tabTitles.length < 1 || message.tabTitles.length > 8
+        || !message.tabTitles.every((title) => typeof title === "string" && title.length > 0 && title.length <= 128)
+        || !Number.isInteger(message.windowID)
         || !Number.isInteger(message.port) || message.port < 1 || message.port > 65535
         || typeof message.token !== "string" || !/^[0-9a-f-]{36}$/i.test(message.token)) {
         throw new Error("Bounded authored activation request required");
       }
-      const targets = await Promise.all(message.tabIDs.map((id) => chrome.tabs.get(id)));
+      const targets = await Promise.all(message.tabTitles.map(async (title) => {
+        const matches = await chrome.tabs.query({ windowId: message.windowID, title });
+        if (matches.length !== 1) throw new Error("Unique owned activation target required");
+        return matches[0];
+      }));
       for (const target of targets) {
         const url = new URL(target.url);
         if (target.windowId !== message.windowID || url.protocol !== "http:"
@@ -53,9 +58,10 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
           throw new Error("Owned loopback fixture window required");
         }
       }
-      for (const id of message.tabIDs) await chrome.tabs.update(id, { active: true });
+      for (const target of targets) await chrome.tabs.update(target.id, { active: true });
       const [active] = await chrome.tabs.query({ active: true, windowId: message.windowID });
-      const report = { token: message.token, windowID: message.windowID, tabID: active?.id ?? null };
+      const report = { token: message.token, windowID: message.windowID,
+        tabID: active?.id ?? null, title: active?.title ?? null };
       await chrome.storage.local.set({ activationProbe: report });
       return report;
     }

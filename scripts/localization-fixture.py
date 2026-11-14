@@ -25,7 +25,7 @@ import engine_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "build/Shaar Verification.app"
+APP = Path(os.environ.get("SHAAR_VERIFICATION_APP", ROOT / "build/Shaar Verification.app"))
 MARKER = ".arcusis-localization-probe"
 BACKTRACE_SETTING = "enable=yes,interactive=no,color=no,output-to=stderr,limit=128,top=0"
 

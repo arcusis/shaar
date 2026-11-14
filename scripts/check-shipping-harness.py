@@ -297,9 +297,8 @@ def engine_testing_findings(path: Path, text: str) -> list[str]:
     found = []
     for match in re.finditer(re.escape(ENGINE_TESTING), cleaned):
         number = cleaned.count("\n", 0, match.start()) + 1
-        if number in verification_lines:
-            continue
-        found.append(f"{path}:{number}: {ENGINE_TESTING}")
+        if number not in verification_lines:
+            found.append(f"{path}:{number}: {ENGINE_TESTING}")
     return found
 
 

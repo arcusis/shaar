@@ -1520,6 +1520,7 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
 
 static const shaar_operation kProbePopupEvaluateOperation = static_cast<shaar_operation>(1095);
 static const shaar_operation kProbePopupCaptureOperation = static_cast<shaar_operation>(1096);
+static const shaar_operation kProbePopupTrustedClickOperation = static_cast<shaar_operation>(1097);
 
 static NSDictionary *ProbePopupOwner(ARCShaarRuntime *runtime, NSString *popupID) {
   if (!ProbeCaptureAllowed() || !ARCProbePopupIdentifier(popupID)) return nil;
@@ -1542,8 +1543,8 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   NSSet<NSString *> *allowed = [NSSet setWithArray:@[
     @"blank", @"popup", @"plain", @"performance-input",
     @"arcusis-download-probe", @"window-client-download",
-    @"external-consent-probe", @"arcusis-private-quit-activation",
-    @"parity-action"]];
+    @"external-consent-probe", @"arcusis-private-quit-activation", @"engine-window-request",
+    @"engine-window-create", @"parity-action"]];
   return [allowed containsObject:elementID];
 }
 
@@ -2088,6 +2089,34 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
       return;
     }
     completion(ARCProbePNGFromDevToolsResult(reply));
+  }];
+}
+
+- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
+              completion:(void (^)(BOOL))completion {
+  if (!completion || ![title isEqualToString:@"Create window"] ||
+      !ARCProbeTrustedClickElementAllowed(@"engine-window-create")) {
+    if (completion) completion(NO);
+    return;
+  }
+  NSDictionary *owner = ProbePopupOwner(self, popupID);
+  if (!owner) {
+    completion(NO);
+    return;
+  }
+  NSString *tabID = owner[@"tabID"];
+  NSString *profileID = owner[@"profileID"];
+  NSString *windowID = owner[@"windowID"];
+  __weak ARCShaarRuntime *weakRuntime = self;
+  [self shaarDevToolsSubmit:kProbePopupTrustedClickOperation tabID:tabID
+                  profileID:profileID windowID:windowID
+                    payload:@{@"schemaVersion": @1, @"popupId": popupID,
+                              @"elementID": @"engine-window-create"}
+                  completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *runtime = weakRuntime;
+    NSDictionary *current = runtime ? ProbePopupOwner(runtime, popupID) : nil;
+    completion(!error && [reply[@"submitted"] boolValue] &&
+               [current isEqualToDictionary:owner]);
   }];
 }
 

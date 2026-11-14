@@ -111,7 +111,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onQuitRequested)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
 /// Synchronous: return a newly created window before Chromium attaches its browser.
-@property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type);
+@property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type, BOOL userGesture);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowShowRequest)(NSString *windowID, BOOL active);
 /// DevTools external navigation; the app validates source ownership before opening a tab.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDevToolsOpenURLRequest)(NSDictionary<NSString *, id> *request);
@@ -177,6 +177,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID, NSString *windowID);
+/// A browser window is about to close and its remaining tab closures are teardown.
+@property(copy, nullable) void (^onWindowClosing)(NSString *windowID, BOOL closing);
 /// Chromium discarded, froze, or woke a tab. `state` is active, frozen, or discarded.
 @property(copy, nullable) void (^onTabLifecycle)(NSString *tabID, NSString *state, BOOL audible, BOOL capturing);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onTabActivated)(NSString *tabID, NSString *profileID);
@@ -280,6 +282,8 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
                         password:(nullable NSString *)password;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
+/// On-disk Chromium profile directory for a loaded regular profile.
+- (nullable NSURL *)profileDataDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;
 - (void)quit;
 @end

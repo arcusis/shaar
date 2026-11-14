@@ -78,8 +78,14 @@ struct PrivateMultiTabProbe {
       if findMatches > 0 { break }
       try await Task.sleep(for: .milliseconds(50))
     }
+    let findState = owner.store.pageFind
+    let matchCount = findState?.matchCount.map { String($0) } ?? "nil"
     owner.store.dismissPageFind()
-    guard findMatches > 0 else { throw Failure("Private Find did not return page matches.") }
+    guard findMatches > 0 else {
+      throw Failure(
+        "Private Find did not return page matches [unavailable=\(findState?.unavailable ?? false), "
+          + "searching=\(findState?.searching ?? false), matchCount=\(matchCount)].")
+    }
     var reselected: [[String: Any]] = []
     for index in (0..<3).reversed() {
       let tabID = tabs[index]["tabID"] as! String

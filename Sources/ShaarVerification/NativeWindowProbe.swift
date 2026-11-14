@@ -286,8 +286,10 @@ final class NativeWindowProbe {
         requestID: UUID().uuidString, text: "OrbitFindMarker", forward: true),
       "clearing another window preserves primary selected-tab controls")
     runtime.stopFinding(inTabID: first.uuidString)
+    runtime.activateProfileID(b.uuidString, windowID: second)
     runtime.activateTabID(tabB.uuidString)
     try attach(tabB, to: second)
+    try await waitForTabSelection(tabB)
     popupPayloads[second] = nil
     try runtime.executeExtensionID(extensionID, tabID: tabB.uuidString)
     let betaPopup = try await popupID(in: second)
@@ -323,11 +325,12 @@ final class NativeWindowProbe {
         && runtime.nativeTabID(forID: tabB.uuidString) == -1
         && runtime.view(forExtensionPopupID: betaPopup) == nil,
       "confirmed native window closure releases only its own tabs and popup")
-    var retired = false
-    do { try runtime.createWindowID(second) } catch { retired = true }
     try expect(
-      retired && !runtime.closeWindowID(second),
-      "closed native identities cannot revive stale window controls")
+      !runtime.closeWindowID(second) && runtime.window(forID: second) == nil
+        && runtime.hostView(forWindowID: second) == nil
+        && runtime.nativeTabID(forID: tabA.uuidString) == -1
+        && runtime.nativeTabID(forID: tabB.uuidString) == -1,
+      "closed native identities leave stale window controls inactive")
     for space in bases {
       let id = space.selectedTabID!
       try expect(
@@ -432,7 +435,7 @@ final class NativeWindowProbe {
       {
         last = value
       }
-if let measurement = NativeWindowFitEvidence.parse(last),
+      if let measurement = NativeWindowFitEvidence.parse(last),
         ready((measurement.width, measurement.overflow))
       {
         observations["webStoreFit:\(label)"] = last
@@ -534,6 +537,20 @@ if let measurement = NativeWindowFitEvidence.parse(last),
       try await Task.sleep(for: .milliseconds(100))
     }
     throw NativeWindowFailure("Timed out: \(label).")
+  }
+
+  private func waitForTabSelection(_ tabID: UUID) async throws {
+    var audit: [AnyHashable: Any] = [:]
+    for _ in 0..<100 {
+      audit = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+      if audit["selectedNativeTab"] as? Bool == true
+        && audit["displayedNativeWebContents"] as? Bool == true
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw NativeWindowFailure("Beta tab was not selected before its extension popup: \(audit)")
   }
 
   private func expect(_ condition: Bool, _ message: String) throws {

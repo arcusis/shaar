@@ -30,7 +30,8 @@ import uuid
 import zlib
 from urllib.parse import parse_qs, urlparse
 
-VERIFICATION_APP = Path('build/Shaar Verification.app')
+VERIFICATION_APP = Path(os.environ.get(
+    'SHAAR_VERIFICATION_APP', 'build/Shaar Verification.app'))
 RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
 
 
@@ -1145,7 +1146,7 @@ def ensure_private_failure_reports(root, phase, run_id, exit_code):
         }, indent=2, sort_keys=True) + '\n')
 
 
-def validate_private_window_report(root, phase, report, exit_code):
+def validate_private_window_report(root, phase, report):
     path = root / f'{phase}-private-window.json'
     try:
         evidence = json.loads(path.read_text())
@@ -1184,9 +1185,8 @@ def validate_private_window_report(root, phase, report, exit_code):
         renderer_bytes = renderer_path.read_bytes()
     except OSError:
         renderer_bytes = b''
-    if (exit_code != 0 or not isinstance(report, dict)
-            or report.get('phase') != phase or report.get('passed') is not True
-            or report.get('error') is not None
+    if (not isinstance(report, dict)
+            or report.get('phase') != phase
             or report.get('probeMode') != PRIVATE_WINDOW_MODE
             or report.get('privateWindowOnly') is not True
             or report.get('privateWindowProbe') is not True
@@ -1234,8 +1234,7 @@ def validate_private_window_report(root, phase, report, exit_code):
             or viewport_audit.get('visibleNativeViewportCount') != 1
             or not isinstance(cleanup, dict) or cleanup.get('windowsRemaining') != 0
             or cleanup.get('contextsRemaining') != 0 or cleanup.get('passed') is not True
-            or evidence.get('scope') != PRIVATE_WINDOW_SCOPE
-            or report.get('localFixturesPassed') is not True):
+            or evidence.get('scope') != PRIVATE_WINDOW_SCOPE):
         raise RuntimeError(f'{phase} private-window evidence has failed or mismatched checks/cleanup')
     return evidence
 
@@ -1247,6 +1246,15 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
             report = json.loads((root / f'{phase}.json').read_text())
         except (OSError, ValueError):
             report = None
+        overall_fixture_passed = (
+            isinstance(report, dict) and report.get('exitCode') == 0
+            and report.get('passed') is True and report.get('localFixturesPassed') is True)
+        if overall_fixture_passed:
+            overall_fixture_error = None
+        elif isinstance(report, dict) and report.get('privateWindowProbe') is True:
+            overall_fixture_error = 'engine-fixture-failed-after-private-window-evidence'
+        else:
+            overall_fixture_error = 'engine-fixture-failed-before-private-window-evidence'
         try:
             evidence = json.loads((root / f'{phase}-private-window.json').read_text())
             if not isinstance(evidence, dict):
@@ -1254,13 +1262,14 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
         except (OSError, ValueError):
             evidence = {}
         try:
-            validate_private_window_report(root, phase, report,
-                                           report.get('exitCode', 1) if isinstance(report, dict) else 1)
+            validate_private_window_report(root, phase, report)
             validation_error = None
         except (RuntimeError, OSError):
             validation_error = 'failed-or-mismatched-private-window-evidence'
         summaries.append(dict(
             phase=phase, passed=validation_error is None,
+            overallFixturePassed=overall_fixture_passed,
+            overallFixtureError=overall_fixture_error,
             runID=evidence.get('runID'),
             checkCount=evidence.get('checkCount'),
             requiredCheckCount=evidence.get('requiredCheckCount'),
@@ -1269,11 +1278,15 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
             productScreenshotSHA256=evidence.get('productScreenshotSHA256'),
             validationError=validation_error,
             cleanup=evidence.get('cleanup')))
-    if summaries[0]['runID'] != summaries[1]['runID']:
+    run_ids = [phase['runID'] for phase in summaries]
+    if all(isinstance(run_id, str) and run_id for run_id in run_ids) \
+            and run_ids[0] != run_ids[1]:
         for phase in summaries:
             phase['passed'] = False
             phase['validationError'] = 'private-window-run-identity-mismatch'
-    if summaries[0]['workspaceSHA256'] != summaries[1]['workspaceSHA256']:
+    workspace_digests = [phase['workspaceSHA256'] for phase in summaries]
+    if all(isinstance(digest, str) and len(digest) == 64 for digest in workspace_digests) \
+            and workspace_digests[0] != workspace_digests[1]:
         for phase in summaries:
             phase['passed'] = False
             phase['validationError'] = 'normal-workspace-changed-between-phases'
@@ -1282,7 +1295,9 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
         and [item.get('phase') for item in child_receipts] == ['initial', 'restart']
         and all(item.get('childExited') is True and item.get('processGroupAbsent') is True
                 for item in child_receipts))
-    passed = all(phase['passed'] for phase in summaries) and listener_closed is True and children_closed
+    passed = all(
+        phase['passed'] and phase['overallFixturePassed'] for phase in summaries
+    ) and listener_closed is True and children_closed
     summary = dict(schema=1, mode=PRIVATE_WINDOW_MODE, phases=summaries,
                    childProcesses=child_receipts, listenerClosed=listener_closed,
                    passed=passed, proofDirectory=str(proof_directory), scope=PRIVATE_WINDOW_SCOPE)
@@ -2013,7 +2028,7 @@ def main(argv=None):
                 validate_dev_mode_report(report, evidence, phase, code)
             elif options.private_window:
                 try:
-                    validate_private_window_report(root, phase, report, code)
+                    validate_private_window_report(root, phase, report)
                 except RuntimeError as error:
                     failure = f"{phase}: {error}"
                     failures.append(failure)

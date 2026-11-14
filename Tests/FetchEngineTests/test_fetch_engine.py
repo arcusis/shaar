@@ -18,10 +18,13 @@ REPO = Path(__file__).resolve().parents[2]
 FRAMEWORK = "Chromium Framework.framework"
 
 
-def write_archive(path, receipt=None):
+def write_archive(path, receipt=None, capture_event=True):
     with tarfile.open(path, "w:xz", format=tarfile.PAX_FORMAT) as archive:
+        engine_binary = b"engine binary bytes"
+        if capture_event:
+            engine_binary += b"\0capture_changed\0"
         files = {
-            f"{FRAMEWORK}/Versions/A/Chromium Framework": b"engine binary bytes",
+            f"{FRAMEWORK}/Versions/A/Chromium Framework": engine_binary,
             f"{FRAMEWORK}/Resources/helper.dat": b"pinned resource",
         }
         for directory in (
@@ -174,7 +177,7 @@ class FetchEngineTests(unittest.TestCase):
         result = self._run()
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Refusing symlinked engine archive cache", result.stderr)
+        self.assertIn("Engine archive cache paths must not be symlinks", result.stderr)
         self.assertEqual(external.read_bytes(), expected)
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
 
@@ -188,7 +191,7 @@ class FetchEngineTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
-        self.assertIn("Refusing symlinked engine cache directory", result.stderr)
+        self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
         self.assertEqual(list(outside.iterdir()), [])
 
@@ -202,7 +205,7 @@ class FetchEngineTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
-        self.assertIn("Refusing symlinked engine cache directory", result.stderr)
+        self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertEqual(self.tool_log.read_text() if self.tool_log.exists() else "", "")
         self.assertEqual(list(outside.iterdir()), [])
 
@@ -355,6 +358,23 @@ exit 99
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Engine cache root must not be a symlink", result.stderr)
         self.assertFalse((external / "EngineCache" / self.destination.name).exists())
+
+    def test_engine_without_capture_event_fails_closed(self):
+        staged = self.root / "without-capture-event.tar.xz"
+        write_archive(staged, {"schemaVersion": 1, "chromiumRevision": "a" * 40,
+                               "patches": [{"file": "ThirdParty/ChromiumEngine/patches/0001-test.patch",
+                                            "sha256": "b" * 64}]}, capture_event=False)
+        self.archive.write_bytes(staged.read_bytes())
+        self.pin["sha256"] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        self._write_pin()
+        shutil.rmtree(self.destination)
+        self._extract_fixture()
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("missing the required capture indicator event", result.stderr)
 
 if __name__ == "__main__":
     unittest.main()

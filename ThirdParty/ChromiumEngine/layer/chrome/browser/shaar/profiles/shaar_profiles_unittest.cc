@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/functional/bind.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/language/core/browser/pref_names.h"
@@ -18,6 +19,26 @@
 namespace {
 
 void NoopReply(void*, const shaar_result*) {}
+
+void MarkNotified(bool* notified) {
+  *notified = true;
+}
+
+TEST(ShaarProfilesTest, ProfileHandleDestructionCallbackRunsAfterHandleIsCleared) {
+  content::BrowserTaskEnvironment task_environment;
+  auto profile = std::make_unique<TestingProfile>();
+  Profile* borrowed = profile.get();
+  bool notified = false;
+  shaar::profiles::ProfileHandleObserver observer;
+  observer.Observe(profile.get(), &borrowed);
+  observer.SetWillBeDestroyedCallback(
+      base::BindOnce(&MarkNotified, &notified));
+
+  profile.reset();
+
+  EXPECT_EQ(borrowed, nullptr);
+  EXPECT_TRUE(notified);
+}
 
 TEST(ShaarProfilesTest, LoadedProfileFollowsApplicationLanguage) {
   content::BrowserTaskEnvironment task_environment;
@@ -42,6 +63,30 @@ TEST(ShaarProfilesTest, LoadedProfileFollowsApplicationLanguage) {
             "en,he,en-US");
 }
 
+TEST(ShaarProfilesTest, ReapplyingHebrewLocaleOnlyUpdatesPersistedPreferences) {
+  content::BrowserTaskEnvironment task_environment;
+  TestingProfile profile;
+  TestingPrefServiceSimple local_state;
+  local_state.registry()->RegisterStringPref(
+      language::prefs::kApplicationLocale, "en-US");
+  profile.GetPrefs()->SetString(language::prefs::kSelectedLanguages,
+                                "en-US,en");
+  profile.GetPrefs()->SetString(language::prefs::kAcceptLanguages,
+                                "en-US,en");
+
+  // Restart can load the same locale more than once. Persist the profile
+  // language each time without changing Chromium's process-global locale after
+  // startup.
+  shaar::profiles::ApplyApplicationLocale(&profile, &local_state, "he");
+  shaar::profiles::ApplyApplicationLocale(&profile, &local_state, "he");
+
+  EXPECT_EQ(local_state.GetString(language::prefs::kApplicationLocale), "he");
+  EXPECT_EQ(profile.GetPrefs()->GetString(language::prefs::kSelectedLanguages),
+            "he,en-US,en");
+  EXPECT_EQ(profile.GetPrefs()->GetString(language::prefs::kAcceptLanguages),
+            "he,en-US,en");
+}
+
 TEST(ShaarProfilesTest, UUIDMappingIsCanonicalAndContained) {
   std::string relative;
   constexpr char kID[] = "4a4d4885-d38a-4b4a-bc03-b12f634bff01";
@@ -53,6 +98,19 @@ TEST(ShaarProfilesTest, UUIDMappingIsCanonicalAndContained) {
   constexpr char kTraversal[] = "../Default";
   EXPECT_FALSE(shaar::profiles::CanonicalDirectory(
       {kTraversal, sizeof(kTraversal) - 1}, &relative));
+}
+
+TEST(ShaarProfilesTest, BorrowedProfileIsClearedBeforeDestruction) {
+  content::BrowserTaskEnvironment task_environment;
+  shaar::profiles::ProfileHandleObserver observer;
+  Profile* borrowed = nullptr;
+  {
+    TestingProfile profile;
+    borrowed = &profile;
+    observer.Observe(&profile, &borrowed);
+    ASSERT_EQ(borrowed, &profile);
+  }
+  EXPECT_EQ(borrowed, nullptr);
 }
 
 TEST(ShaarProfilesTest, RegistersOnlyTheProfileOperationRange) {

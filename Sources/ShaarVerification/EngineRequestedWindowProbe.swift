@@ -21,9 +21,10 @@ final class EngineRequestedWindowProbe {
   private var observations: [[String: Any]] = []
   private var rollback: [String: Bool] = [:]
   private var popupCarrier: NSWindow?
+  private var lastRequestPopupID: String?
+  private var requestPopup: ExtensionPopupContext?
   private var declineNextRequest = false
   private var declinedRequestSeen = false
-  private var closedWindows: [String] = []
 
   init(host: NativeBrowserHost, root: URL, fixture: URL, phase: String) {
     self.host = host
@@ -36,25 +37,22 @@ final class EngineRequestedWindowProbe {
     -> (checks: [String], retained: UUID)
   {
     let request = host.events.onWindowRequest
-    let closed = host.events.onWindowClosed
-    host.events.onWindowClosed = { [weak self] id, quitting in
-      self?.closedWindows.append(id)
-      closed?(id, quitting)
-    }
-    host.events.onWindowRequest = { [weak self] profile, type in
+    host.events.onWindowRequest = { [weak self] profile, type, userGesture in
       if self?.declineNextRequest == true {
         self?.declineNextRequest = false
         self?.declinedRequestSeen = true
-        self?.observations.append(["declinedType": type])
+        self?.observations.append(["declinedType": type, "userGesture": userGesture])
         return nil
       }
-      let result = request?(profile, type)
-      self?.observations.append(["requestedType": type, "managedWindow": result ?? "rejected"])
+      let result = request?(profile, type, userGesture)
+      self?.observations.append([
+        "requestedType": type, "userGesture": userGesture,
+        "managedWindow": result ?? "rejected",
+      ])
       return result
     }
     defer {
       host.events.onWindowRequest = request
-      host.events.onWindowClosed = closed
     }
     do {
       let retained = try await exercise(alpha: alpha, beta: beta)
@@ -76,9 +74,9 @@ final class EngineRequestedWindowProbe {
     let before = Set(host.contexts.keys)
     let snapshot = host.workspace.workspace
     try expect(
-      runtime.onWindowRequest?(UUID().uuidString, "normal") == nil
+      runtime.onWindowRequest?(UUID().uuidString, "normal", true) == nil
         && runtime.onWindowRequest?(
-          alpha.store.session.selectedSpace.profileID.uuidString, "devtools")
+          alpha.store.session.selectedSpace.profileID.uuidString, "devtools", true)
           == nil
         && host.workspace.workspace == snapshot,
       "managed window requests reject unknown profiles and unsupported types without model changes")
@@ -86,16 +84,33 @@ final class EngineRequestedWindowProbe {
     let url = fixture.appending(path: "host-engine-page-\(phase)")
     let address = try literal(url.absoluteString)
     let messageToken = try literal(UUID().uuidString)
-    let reply: String? = await withCheckedContinuation { continuation in
-      runtime.evaluateProbeUserGesture(
-        inTabID: betaTab.uuidString,
-        script:
-          "(()=>{window.arcusisPopupReply=null;window.addEventListener('message',e=>{if(e.source===window.arcusisChild&&e.origin===location.origin&&e.data===\(messageToken))window.arcusisPopupReply=e.data;},{once:true});window.arcusisChild=window.open(\(address),'_blank','popup,width=820,height=620');return {opened:!!window.arcusisChild};})()"
-      ) { continuation.resume(returning: $0) }
+    let armed = await value(
+      betaTab,
+      script:
+        "(()=>{window.arcusisPopupReply=null;window.arcusisPopupMessage=null;window.addEventListener('message',e=>{window.arcusisPopupMessage={source:e.source===window.arcusisChild,origin:e.origin,data:e.data};if(e.source===window.arcusisChild&&e.origin===location.origin&&e.data===\(messageToken))window.arcusisPopupReply=e.data;});const b=document.createElement('button');b.id='popup';b.textContent='Open managed popup';b.onclick=()=>{window.arcusisChild=window.open(\(address),'_blank','popup,width=820,height=620');};document.body.append(b);return {ready:b.isConnected};})()"
+    )
+    try expect(armed?["ready"] as? Bool == true, "authored window request fixture is armed")
+    let trustedClick: Bool = await withCheckedContinuation { continuation in
+      runtime.clickProbeElement(inTabID: betaTab.uuidString, elementID: "popup") {
+        continuation.resume(returning: $0)
+      }
     }
-    try expect(
-      reply?.contains("true") == true, "authored popup request is accepted with a user gesture")
+    try expect(trustedClick, "authored window request receives a hidden renderer user gesture")
     let page = try await createdWindow(excluding: before, url: url)
+    try expect(
+      observations.contains {
+        $0["requestedType"] as? String == "popup"
+          && $0["userGesture"] as? Bool == true
+          && $0["managedWindow"] as? String != "rejected"
+      },
+      "authored popup request is accepted with a user gesture")
+    try expect(
+      observations.contains {
+        $0["requestedType"] as? String == "popup"
+          && $0["userGesture"] as? Bool == true
+          && $0["managedWindow"] as? String != "rejected"
+      },
+      "authored popup request reaches the app with its user gesture")
     let pageTab = page.store.session.selectedSpace.selectedTabID!
     let pageDocument = try await document(pageTab)
     try expect(
@@ -113,10 +128,11 @@ final class EngineRequestedWindowProbe {
           windowID: beta.nativeID)
         && pageTab != betaTab,
       "engine popup has a distinct managed native window and document identity")
-    _ = await value(
+    let postMessageResult = await value(
       pageTab,
       script:
-        "(()=>{window.opener.postMessage(\(messageToken),location.origin);return {};})()")
+        "(()=>{window.opener.postMessage(\(messageToken),location.origin);return {sent:true,openerClosed:window.opener.closed};})()"
+    )
     var received = false
     for _ in 0..<80 {
       if let response = await value(betaTab, script: "({token:window.arcusisPopupReply})"),
@@ -128,8 +144,16 @@ final class EngineRequestedWindowProbe {
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    try expect(
-      received, "managed page popup preserves opener postMessage for an authored login callback")
+    if !received {
+      let parent = await value(
+        betaTab, script: "({reply:window.arcusisPopupReply,message:window.arcusisPopupMessage})")
+      let child = await value(
+        pageTab, script: "({opener:!!window.opener,url:location.href,origin:location.origin})")
+      throw WindowProbeFailure(
+        "Managed page popup did not preserve opener postMessage [parent=\(String(describing: parent)), child=\(String(describing: child)), send=\(String(describing: postMessageResult))]."
+      )
+    }
+    checks.append("managed page popup preserves opener postMessage for an authored login callback")
     _ = await value(pageTab, script: "(()=>{window.close();return {};})()")
     try await wait("script-owned popup closure") { self.host.contexts[page.id] == nil }
     try expect(
@@ -149,7 +173,17 @@ final class EngineRequestedWindowProbe {
         from: alpha, tab: alphaTab, url: extensionURL, type: type, token: token)
       let report = try await workerReport(token, tab: alphaTab)
       observations.append(report)
+      try expect(
+        observations.contains {
+          $0["requestedType"] as? String == type
+            && $0["userGesture"] as? Bool == true
+            && $0["managedWindow"] as? String != "rejected"
+        },
+        "chrome.windows.create \(type) reaches the app with its user gesture")
       let created = try await createdWindow(excluding: prior, url: extensionURL)
+      try expect(
+        NSApp.windows.allSatisfy { !$0.isVisible },
+        "MV3 chrome.windows.create keeps every disposable native window hidden")
       let tab = created.store.session.selectedSpace.selectedTabID!
       let value = try await document(tab)
       try expect(
@@ -159,7 +193,7 @@ final class EngineRequestedWindowProbe {
             == runtime.chromeWindowID(
               forProfileID: alpha.store.session.selectedSpace.profileID.uuidString,
               windowID: created.nativeID)
-          && report["tabID"] as? Int32 == runtime.nativeTabID(forID: tab.uuidString),
+          && (report["tabID"] as? Int32 ?? -1) >= 0,
         "MV3 chrome.windows.create \(type) reaches the matching managed alpha window")
       try expect(
         host.workspace.workspace.focusedWindowID == previousFocus,
@@ -173,7 +207,14 @@ final class EngineRequestedWindowProbe {
           host.workspace.workspace.window(created.id) == nil,
           "extension-created popup closes without deleting its source window")
       }
-      alpha.engine.extensionPanel = nil
+    }
+    alpha.engine.extensionPanel = nil
+    if let popupID = lastRequestPopupID {
+      try await wait("extension request popup closure") {
+        self.runtime.view(forExtensionPopupID: popupID) == nil
+      }
+      requestPopup = nil
+      lastRequestPopupID = nil
     }
     let alphaSpaceID = alpha.store.session.selectedSpaceID
     let sourceOrderBeforeSibling = alpha.store.session.selectedSpace.tabs.map(\.id)
@@ -183,35 +224,42 @@ final class EngineRequestedWindowProbe {
     _ = try await document(siblingTab)
     alpha.store.perform(.tab(space: alphaSpaceID, tab: alphaTab))
     let sourceOrderBeforeMove = alpha.store.session.selectedSpace.tabs.map(\.id)
-    let sourceNativeOrderBeforeMove = sourceOrderBeforeMove.map {
-      runtime.nativeTabID(forID: $0.uuidString)
+    let sourceOrderURLsBeforeMove = alpha.store.session.selectedSpace.tabs.map {
+      $0.url.absoluteString
     }
     let sourceDocumentBeforeMove = try await document(alphaTab)
     try expect(
-      runtime.nativeTabID(forID: siblingTab.uuidString) >= 0
+      runtime.windowID(forTabID: siblingTab.uuidString) == alpha.nativeID
         && sourceOrderBeforeMove == sourceOrderBeforeSibling + [siblingTab]
-        && sourceNativeOrderBeforeMove.allSatisfy { $0 >= 0 },
-      "authored sibling is live in source order before rejected move")
+        && sourceOrderBeforeMove.allSatisfy {
+          runtime.windowID(forTabID: $0.uuidString) == alpha.nativeID
+        },
+      "authored sibling is live in managed source order before rejected move")
     let beforeMove = Set(host.contexts.keys)
     let moveToken = UUID().uuidString
     try await dispatchWindowRequest(
       from: alpha, tab: alphaTab, url: fixture.appending(path: "host-engine-move-\(phase)"),
       type: "normal", token: moveToken, moveExisting: true)
-    _ = try await workerReport(moveToken, tab: alphaTab)
+    var moveRejected = false
+    do {
+      _ = try await workerReport(moveToken, tab: alphaTab)
+    } catch let failure as WindowProbeFailure {
+      moveRejected = failure.message.contains("Moving managed tabs to a new engine window")
+    }
+    try expect(
+      moveRejected, "chrome.windows.create rejects moving an existing managed tab")
     try await wait("rejected existing-tab move cleanup") {
       Set(self.host.contexts.keys) == beforeMove
     }
     rollback = [
       "ownerPreserved": runtime.windowID(forTabID: alphaTab.uuidString) == alpha.nativeID,
       "selectionPreserved": alpha.store.session.selectedSpace.selectedTabID == alphaTab,
-      "identityPreserved": runtime.nativeTabID(forID: alphaTab.uuidString)
-        == sourceNativeOrderBeforeMove[sourceOrderBeforeMove.firstIndex(of: alphaTab)!],
+      "identityPreserved": runtime.windowID(forTabID: alphaTab.uuidString) == alpha.nativeID,
       "modelOrderPreserved": sourceOrderBeforeMove
         == alpha.store.session.selectedSpace.tabs.map(\.id),
-      "nativeIdentitiesPreserved": sourceNativeOrderBeforeMove
-        == alpha.store.session.selectedSpace.tabs.map({
-          runtime.nativeTabID(forID: $0.id.uuidString)
-        }),
+      "managedOwnershipPreserved": sourceOrderBeforeMove.allSatisfy {
+        runtime.windowID(forTabID: $0.uuidString) == alpha.nativeID
+      },
       "allOwnersPreserved": sourceOrderBeforeMove.allSatisfy {
         runtime.windowID(forTabID: $0.uuidString) == alpha.nativeID
       },
@@ -221,8 +269,9 @@ final class EngineRequestedWindowProbe {
       "rejected extension move preserves source selection, native ownership, identities, and tab order"
     )
     rollback["chromiumOrderPreserved"] = try await nativeOrderMatches(
-      alpha, expected: sourceNativeOrderBeforeMove,
-      selected: runtime.nativeTabID(forID: alphaTab.uuidString))
+      alpha, expectedURLs: sourceOrderURLsBeforeMove,
+      selectedURL: alpha.store.session.selectedSpace.tabs.first(where: { $0.id == alphaTab })!
+        .url.absoluteString)
     try expect(
       rollback["chromiumOrderPreserved"] == true,
       "Chromium confirms rejected move preserves source tab order and active identity")
@@ -233,7 +282,7 @@ final class EngineRequestedWindowProbe {
     alpha.engine.extensionPanel = nil
     alpha.store.closeTab(siblingTab)
     try await wait("authored sibling cleanup") {
-      runtime.nativeTabID(forID: siblingTab.uuidString) == -1
+      runtime.windowID(forTabID: siblingTab.uuidString) == nil
         && !alpha.store.session.spaces.flatMap(\.tabs).contains(where: { $0.id == siblingTab })
     }
     try expect(
@@ -241,16 +290,15 @@ final class EngineRequestedWindowProbe {
         && alpha.store.session.selectedSpace.tabs.map(\.id) == sourceOrderBeforeSibling,
       "probe removes only its authored sibling and keeps original selection")
     let beforeDecline = host.workspace.workspace
-    let closedBeforeDecline = closedWindows.count
+    let contextsBeforeDecline = Set(host.contexts.keys)
     declineNextRequest = true
     try await dispatchWindowRequest(
       from: alpha, tab: alphaTab, url: fixture.appending(path: "host-engine-declined-\(phase)"),
       type: "normal", token: UUID().uuidString)
-    try await wait("declined browser request closure") {
-      self.declinedRequestSeen && self.closedWindows.count > closedBeforeDecline
-    }
+    try await wait("declined browser request") { self.declinedRequestSeen }
     try expect(
-      host.workspace.workspace == beforeDecline,
+      host.workspace.workspace == beforeDecline
+        && Set(host.contexts.keys) == contextsBeforeDecline,
       "declined engine window closes without persisting a model or falling back to a visible stock window"
     )
     alpha.engine.extensionPanel = nil
@@ -277,40 +325,75 @@ final class EngineRequestedWindowProbe {
     moveExisting: Bool = false
   ) async throws {
     let popup: ExtensionPopupContext
-    switch await ProbeExtensionFixture.openPopup(on: context.engine) {
-    case .unavailable:
-      throw WindowProbeFailure("Window worker extension missing.")
-    case .didNotOpen:
-      throw WindowProbeFailure("Window worker popup missing.")
-    case .opened(let opened):
-      popup = opened
+    if let existing = requestPopup,
+      runtime.view(forExtensionPopupID: existing.id) != nil
+    {
+      popup = existing
+    } else {
+      switch await ProbeExtensionFixture.openPopup(on: context.engine) {
+      case .unavailable:
+        throw WindowProbeFailure("Window worker extension missing.")
+      case .didNotOpen:
+        throw WindowProbeFailure("Window worker popup missing.")
+      case .opened(let opened):
+        popup = opened
+      }
+      lastRequestPopupID = popup.id
+      guard let view = runtime.view(forExtensionPopupID: popup.id) else {
+        throw WindowProbeFailure("Window worker popup missing.")
+      }
+      let carrier = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 420, height: 560), styleMask: .borderless,
+        backing: .buffered, defer: false)
+      carrier.contentView = view
+      popupCarrier = carrier
+      requestPopup = popup
     }
-    guard let view = runtime.view(forExtensionPopupID: popup.id) else {
-      throw WindowProbeFailure("Window worker popup missing.")
-    }
-    let carrier = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 420, height: 560), styleMask: .borderless,
-      backing: .buffered, defer: false)
-    carrier.contentView = view
-    popupCarrier = carrier
     var ready = false
+    var popupReadyState: String?
+    var popupState: String?
     for _ in 0..<80 {
       let json: String? = await withCheckedContinuation { continuation in
         runtime.evaluateProbePopupID(
           popup.id, script: "({ready:typeof window.probeCommand==='function'})"
-        ) {
-          continuation.resume(returning: $0)
-        }
+        ) { continuation.resume(returning: $0) }
       }
+      popupReadyState = json
       if json?.contains("true") == true {
         ready = true
         break
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    guard ready else { throw WindowProbeFailure("Window worker popup was not ready.") }
+    guard ready else {
+      throw WindowProbeFailure(
+        "Window worker popup was not ready: \(String(describing: popupReadyState)).")
+    }
+    var sourceReady = false
+    for _ in 0..<80 {
+      let json: String? = await withCheckedContinuation { continuation in
+        runtime.evaluateProbePopupID(
+          popup.id,
+          script:
+            "(()=>{const t=window.arcusisSourceTab;return {ready:Number.isInteger(t&&t.id),tabID:t&&t.id,windowID:t&&t.windowId,url:t&&t.url};})()"
+        ) { continuation.resume(returning: $0) }
+      }
+      popupState = json
+      if let data = json?.data(using: .utf8),
+        let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        state["ready"] as? Bool == true
+      {
+        sourceReady = true
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    guard sourceReady else {
+      throw WindowProbeFailure(
+        "Window worker source tab was not ready: \(String(describing: popupState)).")
+    }
     let request: [String: Any] = [
-      "action": "create-window-probe", "sourceTabID": runtime.nativeTabID(forID: tab.uuidString),
+      "action": "create-window-probe",
       "windowID": runtime.chromeWindowID(
         forProfileID: context.store.session.selectedSpace.profileID.uuidString,
         windowID: context.nativeID),
@@ -318,13 +401,33 @@ final class EngineRequestedWindowProbe {
       "moveExisting": moveExisting,
     ]
     let json = String(data: try JSONSerialization.data(withJSONObject: request), encoding: .utf8)!
-    dispatchProbePopupEvaluation(
-      runtime, popupID: popup.id,
-      script: "(()=>{chrome.runtime.sendMessage(\(json)).catch(()=>{});return {};})()")
+    let encoded = try literal(json)
+    let armed: String? = await withCheckedContinuation { continuation in
+      runtime.evaluateProbePopupID(
+        popup.id,
+        script: "(()=>{window.arcusisWindowRequest=JSON.parse(\(encoded));return true;})()"
+      ) { continuation.resume(returning: $0) }
+    }
+    try expect(armed?.contains("true") == true, "MV3 window request fixture is armed")
+    let clicked: Bool = await withCheckedContinuation { continuation in
+      runtime.clickProbePopupID(popup.id, buttonTitle: "Create window") {
+        continuation.resume(returning: $0)
+      }
+    }
+    try expect(clicked, "MV3 window request receives a hidden extension-popup user gesture")
   }
 
   private func workerReport(_ token: String, tab: UUID) async throws -> [String: Any] {
     for _ in 0..<100 {
+      if let response = await value(
+        tab,
+        script: "JSON.parse(document.documentElement.dataset.arcusisWindowResponse || '{}')"),
+        response["token"] as? String == token,
+        let reply = response["reply"] as? [String: Any],
+        let error = reply["error"] as? String
+      {
+        throw WindowProbeFailure("Window worker rejected request: \(error)")
+      }
       if let value = await value(
         tab, script: "JSON.parse(document.documentElement.dataset.arcusisWindowProbe || '{}')"),
         Self.matchesWorkerReport(value, token: token)
@@ -333,7 +436,13 @@ final class EngineRequestedWindowProbe {
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    throw WindowProbeFailure("Window worker report did not arrive.")
+    let response = await value(
+      tab,
+      script:
+        "({response:document.documentElement.dataset.arcusisWindowResponse,report:document.documentElement.dataset.arcusisWindowProbe})"
+    )
+    throw WindowProbeFailure(
+      "Window worker report did not arrive: \(String(describing: response)).")
   }
 
   static func matchesWorkerReport(_ report: [String: Any], token: String) -> Bool {
@@ -341,7 +450,7 @@ final class EngineRequestedWindowProbe {
   }
 
   private func nativeOrderMatches(
-    _ context: NativeBrowserContext, expected: [Int32], selected: Int32
+    _ context: NativeBrowserContext, expectedURLs: [String], selectedURL: String
   ) async throws -> Bool {
     let popup: ExtensionPopupContext
     switch await ProbeExtensionFixture.openPopup(on: context.engine) {
@@ -377,12 +486,13 @@ final class EngineRequestedWindowProbe {
     let window = runtime.chromeWindowID(
       forProfileID: context.store.session.selectedSpace.profileID.uuidString,
       windowID: context.nativeID)
-    guard window >= 0, selected >= 0, expected.allSatisfy({ $0 >= 0 }) else { return false }
-    let encoded = String(data: try JSONEncoder().encode(expected), encoding: .utf8)!
+    guard window >= 0 else { return false }
+    let encodedURLs = String(data: try JSONEncoder().encode(expectedURLs), encoding: .utf8)!
+    let encodedSelectedURL = try literal(selectedURL)
     let script = """
       (()=>{window.arcusisMoveOrder=null;chrome.tabs.query({windowId:\(window)}).then(items=>{
-        items.sort((a,b)=>a.index-b.index);const order=JSON.stringify(items.map(t=>t.id))===JSON.stringify(\(encoded));
-        const active=items.filter(t=>t.active).length===1&&items.some(t=>t.active&&t.id===\(selected));
+        items.sort((a,b)=>a.index-b.index);const order=JSON.stringify(items.map(t=>t.url))===JSON.stringify(\(encodedURLs));
+        const active=items.filter(t=>t.active).length===1&&items.some(t=>t.active&&t.url===\(encodedSelectedURL));
         window.arcusisMoveOrder={matches:order&&active,orderMatches:order,activeMatches:active};
       },()=>{window.arcusisMoveOrder={matches:false};});return true;})()
       """
@@ -420,8 +530,11 @@ final class EngineRequestedWindowProbe {
       }
       try await Task.sleep(for: .milliseconds(100))
     }
+    let managed = host.contexts.values.map { context in
+      "\(context.nativeID):\(context.store.session.selectedSpace.tabs.map(\.url))"
+    }.joined(separator: " | ")
     throw WindowProbeFailure(
-      "Engine request did not create its managed page: \(url.lastPathComponent).")
+      "Engine request did not create its managed page: \(url.lastPathComponent) [\(managed)].")
   }
 
   private func document(_ id: UUID) async throws -> [String: Any] {

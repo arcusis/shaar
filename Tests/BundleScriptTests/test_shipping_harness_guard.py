@@ -210,6 +210,15 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
 
+    def test_engine_testing_read_is_allowed_in_verification_compile_guard(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            'const char *testing = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        self.assertEqual(GUARD.findings(self.root), [])
+
     def test_engine_testing_start_write_is_allowed(self):
         self.plant(
             "Sources/ChromiumBridge/ChromiumShaarBackend.mm",
@@ -262,6 +271,63 @@ class ShippingHarnessGuardTests(unittest.TestCase):
         )
         found = GUARD.findings(self.root)
         self.assertTrue(any("SHAAR_ENGINE_TESTING" in item for item in found), found)
+
+    def test_engine_testing_read_in_verification_else_branch_fails(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":4: SHAAR_ENGINE_TESTING", found[0])
+
+    def test_engine_testing_read_in_verification_elif_branch_is_allowed(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(OTHER_FEATURE)\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#elif defined(SHAAR_VERIFICATION)\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *also_shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 2, found)
+        self.assertTrue(all(":2:" in item or ":6:" in item for item in found), found)
+
+    def test_nested_conditionals_keep_the_outer_verification_branch_scope(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#if defined(SHAAR_VERIFICATION)\n"
+            "  #if defined(OPTIONAL_FIXTURE)\n"
+            '    const char *nested = getenv("SHAAR_ENGINE_TESTING");\n'
+            "  #endif\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":7: SHAAR_ENGINE_TESTING", found[0])
+
+    def test_ifdef_verification_branch_is_allowed_but_else_is_not(self):
+        self.plant(
+            "Sources/ChromiumBridge/Planted.mm",
+            "#ifdef SHAAR_VERIFICATION\n"
+            '  const char *verification = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#else\n"
+            '  const char *shipping = getenv("SHAAR_ENGINE_TESTING");\n'
+            "#endif\n",
+        )
+        found = GUARD.findings(self.root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":4: SHAAR_ENGINE_TESTING", found[0])
 
     def test_probe_operation_reference_fails_in_shipping_source_and_binary(self):
         operation = "SHAAR_OP_PROBE_PLANTED_FIXTURE"

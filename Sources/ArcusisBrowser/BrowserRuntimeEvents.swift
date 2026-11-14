@@ -11,9 +11,10 @@ final class BrowserRuntimeEvents {
   let router = BrowserRuntimeRouter()
   var onWindowClosed: ((String, Bool) -> Void)?
   var onDeviceChooserResolution: ((String, String, String?) -> Void)?
+  var onTabClosed: ((String, String) -> Void)?
   var onQuitRequested: (() -> Void)?
   var onQuitCancelled: (() -> Void)?
-  var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
+  var onWindowRequest: (@MainActor @Sendable (String, String, Bool) -> String?)? {
     didSet { runtime.onWindowRequest = onWindowRequest }
   }
   var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {
@@ -34,6 +35,9 @@ final class BrowserRuntimeEvents {
     runtime.onWindowClosed = { [weak self] id, quitting in
       self?.windowClosed(id, quitting: quitting)
     }
+    runtime.onWindowClosing = { [weak self] id, closing in
+      self?.router.setWindowClosing(closing, id: id)
+    }
     runtime.onNotice = { [weak self] message in
       for client in self?.router.clients ?? [] { client.onNotice?(message) }
     }
@@ -43,6 +47,7 @@ final class BrowserRuntimeEvents {
     }
     runtime.onTabClosed = { [weak self] id, windowID in
       self?.router.tabClosed(id, windowID: windowID)
+      self?.onTabClosed?(id, windowID)
     }
     runtime.onTabActivated = { [weak self] id, profile in
       guard self?.router.isQuitting == false else { return }
@@ -370,8 +375,9 @@ final class BrowserRuntimeEvents {
 
   func resolveHTTPAuth(_ request: HTTPAuthRequest, username: String?, password: String?) {
     guard router.consume(.httpAuth, id: request.id, windowID: request.windowID) else { return }
-    runtime.resolveHTTPAuthRequestID(request.id, tabID: request.tabID.uuidString,
-                                     username: username, password: password)
+    runtime.resolveHTTPAuthRequestID(
+      request.id, tabID: request.tabID.uuidString,
+      username: username, password: password)
   }
 
   func rejectHTTPAuth(_ id: String, tabID: String, windowID: String) {

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/shaar/media/shaar_media.h"
 #include "chrome/browser/shaar/media/shaar_media_permission.h"
+#include "chrome/browser/shaar/media/shaar_desktop_capture.h"
 
 #include <algorithm>
 #include <cmath>
@@ -346,6 +347,25 @@ public:
       shaar_tab *tab, shaar_operation operation, shaar_bytes args_json,
       shaar_request_id request_id, shaar_reply_fn reply, void *reply_context,
       shaar_error *error) override {
+    if (operation == SHAAR_OP_MEDIA_CAPTURE_REPLY) {
+      auto args = ParseArguments(args_json);
+      const std::string *prompt_id =
+          args ? args->FindString("promptID") : nullptr;
+      const std::string *decision =
+          args ? args->FindString("decision") : nullptr;
+      const std::string *source_token =
+          args ? args->FindString("sourceToken") : nullptr;
+      if (!prompt_id || !decision || !source_token || !reply || !request_id)
+        return Fail(error, SHAAR_INVALID_ARGUMENT,
+                    "capture reply is missing required fields");
+      const shaar_error_code result = shaar::desktop_capture::Resolve(
+          engine, window, tab, *prompt_id, *decision, *source_token);
+      if (result != SHAAR_OK)
+        return Fail(error, result, "capture prompt is stale or invalid");
+      Reply(ReplyContext{request_id, reply, reply_context},
+            base::DictValue().Set("schemaVersion", 1));
+      return SHAAR_OK;
+    }
     if (operation != SHAAR_OP_MEDIA_SET_AUTO_PIP)
       return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "media capture controls are not connected");

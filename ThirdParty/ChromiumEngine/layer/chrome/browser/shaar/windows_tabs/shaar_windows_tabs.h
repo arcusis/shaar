@@ -65,6 +65,7 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
                                          shaar_tab*) override;
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
                                              std::string_view) override;
+  content::WebContents* FindWebContentsByID(shaar_engine*, std::string_view);
   std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override;
   // BEGIN find
   std::string_view WindowID(shaar_engine*, shaar_window*) override;

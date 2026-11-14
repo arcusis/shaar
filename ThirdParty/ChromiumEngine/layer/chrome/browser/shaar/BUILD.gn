@@ -109,6 +109,8 @@ source_set("engine") {
     "media/shaar_media_lifecycle_adapter.cc",
     "media/shaar_media_permission.cc",
     "media/shaar_media_permission.h",
+    "media/shaar_desktop_capture.cc",
+    "media/shaar_desktop_capture.h",
     # END media
     # BEGIN permissions
     "permissions/shaar_permission_prompt.cc",

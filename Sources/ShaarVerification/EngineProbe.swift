@@ -28,6 +28,10 @@ enum EngineProbeMeasurementArguments {
     return supportedCounts.contains(count)
   }
 
+  static func conflictsWithOtherMode(arguments: [String], conflictingFlags: [String]) -> Bool {
+    conflictingFlags.filter { $0 != flag }.contains(where: arguments.contains)
+  }
+
   static func modeDependencyFailure(arguments: [String], tabCount: Int?) -> String? {
     let eager = arguments.contains("--probe-measure-eager")
     let sleeping = arguments.contains("--probe-measure-sleeping")
@@ -337,8 +341,8 @@ final class EngineProbe {
           || !conflictingFlags.filter({ $0 != "--probe-devtools-route-only" }).contains(
             where: arguments.contains),
         measurementTabCount == nil
-          || !conflictingFlags.filter({ $0 != "--probe-measure-tabs" }).contains(
-            where: arguments.contains),
+          || !EngineProbeMeasurementArguments.conflictsWithOtherMode(
+            arguments: arguments, conflictingFlags: conflictingFlags),
         !localizationMode
           || !conflictingFlags.filter({ $0 != "--probe-localization" }).contains(
             where: arguments.contains)

@@ -50,4 +50,15 @@ import Testing
       EngineProbeMeasurementArguments.modeDependencyFailure(
         arguments: ["--probe-measure-sleeping", "--probe-measure-eager"], tabCount: 10) == nil)
   }
+
+  @Test func measurementModeIgnoresItsOwnFlagButRejectsOtherProbeModes() {
+    let modes = ["--probe-measure-tabs", "--probe-localization", "--probe-basic-browsing"]
+    #expect(
+      !EngineProbeMeasurementArguments.conflictsWithOtherMode(
+        arguments: ["--probe-measure-tabs", "10"], conflictingFlags: modes))
+    #expect(
+      EngineProbeMeasurementArguments.conflictsWithOtherMode(
+        arguments: ["--probe-measure-tabs", "10", "--probe-localization"],
+        conflictingFlags: modes))
+  }
 }

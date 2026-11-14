@@ -109,6 +109,7 @@ final class SharedExtensionSettingsModel {
   }
 
   func reconcile(profileID: UUID) async {
+    guard !Task.isCancelled else { return }
     let request = UUID()
     reconcileIDs[profileID] = request
     let details = await home.reconcileDetails(profileID: profileID)

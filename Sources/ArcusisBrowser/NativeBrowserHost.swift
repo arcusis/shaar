@@ -610,6 +610,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
   }
 
+  static func bookmarkCurrentPage(in store: BrowserStore) {
+    store.bookmarkCurrentPage()
+  }
+
   private func perform(_ command: BrowserMenuCommand, in context: NativeBrowserContext) {
     let store = context.store
     switch command {
@@ -639,7 +643,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .closeWindow: requestCloseWindow(context)
     case .reopenClosed: store.reopenLastClosedTab()
     case .recentlyClosed: store.showRecentlyClosed()
-    case .bookmarkPage: store.bookmarkCurrentPage()
+    case .bookmarkPage: Self.bookmarkCurrentPage(in: store)
     case .bookmarks: store.showLibrary(.bookmarks)
     case .history: store.showLibrary(.history)
     case .downloads: store.showDownloads()

@@ -164,6 +164,21 @@ import Testing
   #expect(NativeBrowserHost.shareURL(for: store) == url)
 }
 
+@Test @MainActor func bookmarkPageMenuOpensTheCurrentPageBookmarkEditor() {
+  let store = BrowserStore()
+  store.perform(.open(URL(string: "https://bookmark.example/current")!))
+
+  NativeBrowserHost.bookmarkCurrentPage(in: store)
+
+  guard case .bookmarkEditor(let route)? = store.sheet,
+    case .newBookmark(_, _, let address) = route.mode
+  else {
+    Issue.record("Bookmark this page should open the bookmark editor")
+    return
+  }
+  #expect(address == "https://bookmark.example/current")
+}
+
 @Test @MainActor func fullScreenCommandTitleTracksItsToggleState() {
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: false) == "Enter Full Screen")
   #expect(NativeBrowserHost.fullScreenTitle(isFullScreen: true) == "Exit Full Screen")

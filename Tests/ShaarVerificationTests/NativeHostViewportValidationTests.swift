@@ -8,6 +8,17 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct NativeHostViewportValidationTests {
+  @Test func cookieAccountParserRequiresExactCookieNameAndValue() {
+    #expect(
+      NativeHostViewportValidation.accountID(
+        fromCookie: "theme=dark; account=alpha; token=a=b") == "alpha")
+    #expect(NativeHostViewportValidation.accountID(fromCookie: " account=beta ") == "beta")
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "accountant=alpha; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "account; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "account=; token=x") == nil)
+    #expect(NativeHostViewportValidation.accountID(fromCookie: "theme=dark") == nil)
+  }
+
   @Test func stableViewportAllowsOnePixelRoundingButRejectsRealResize() {
     let baseline = CGSize(width: 1200, height: 780)
     #expect(

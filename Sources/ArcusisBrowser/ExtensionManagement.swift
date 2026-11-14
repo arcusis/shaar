@@ -246,9 +246,10 @@ enum ExtensionIconLoader {
     let manifestURL = resolvedFolder.appending(path: "manifest.json")
     guard
       let manifestValues = try? manifestURL.resourceValues(
-        forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+        forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
       manifestValues.isRegularFile == true, manifestValues.isSymbolicLink != true,
-      let data = try? Data(contentsOf: manifestURL),
+      let manifestSize = manifestValues.fileSize, manifestSize <= 1_048_576,
+      let data = try? Data(contentsOf: manifestURL), data.count <= 1_048_576,
       let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let relative = largestIcon(in: manifest)
     else { return nil }

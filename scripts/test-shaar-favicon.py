@@ -79,11 +79,23 @@ def verification_app_path(value: str) -> Path:
     return app
 
 
+def evidence_output_path(path: Path) -> Path:
+    if path.is_symlink():
+        raise ValueError(f"favicon evidence output must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise ValueError(f"favicon evidence output parent must not be a symlink: {path.parent}")
+    return path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=verification_app_path)
     options = parser.parse_args()
     app = options.app.resolve()
+    try:
+        evidence = evidence_output_path(Path("build/favicon-1045-evidence"))
+    except ValueError as error:
+        parser.error(str(error))
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -112,7 +124,6 @@ def main() -> None:
                     and restored["restoredFavoriteDormant"]
                     and 640 <= restored["sidebarIconPixels"] <= 960
                     and restored["allWindowsHidden"]), restored
-            evidence = Path("build/favicon-1045-evidence")
             evidence.mkdir(parents=True, exist_ok=True)
             sidebar = root / "favicon-sidebar.png"
             if sidebar.exists():

@@ -173,7 +173,7 @@ struct InspectorBoxModel: View {
       .padding(.horizontal, 2)
       .background(.background, in: RoundedRectangle(cornerRadius: 3))
       .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.primary.opacity(0.35)))
-      .accessibilityLabel(InspectorL10n.string("Edit box model value"))
+      .accessibilityLabel(Self.editorAccessibilityLabel(region: region, index: index))
       .focused($fieldFocused)
       .onKeyPress(keys: [.upArrow, .downArrow], phases: [.down, .repeat]) { press in
         nudgeBox(press)
@@ -215,6 +215,22 @@ struct InspectorBoxModel: View {
         .string(InspectorL10n.string(region.capitalized)),
         .string(InspectorL10n.string(side.capitalized)), .string(raw),
       ])
+  }
+
+  static func edgeAccessibilityLabel(region: String, index: Int) -> String {
+    let side = ["top", "right", "bottom", "left"][index]
+    return InspectorL10n.format(
+      "Edit %@ %@",
+      arguments: [
+        .string(InspectorL10n.string(region.capitalized)),
+        .string(InspectorL10n.string(side.capitalized)),
+      ])
+  }
+
+  static func editorAccessibilityLabel(region: String, index: Int) -> String {
+    guard region == "content" else { return edgeAccessibilityLabel(region: region, index: index) }
+    return InspectorL10n.format(
+      "Edit %@", arguments: [.string(InspectorL10n.string(index == 0 ? "Width" : "Height"))])
   }
 
   private func hover(_ key: String, region: String, index: Int, active: Bool) {

@@ -74,6 +74,7 @@ struct FirstRunSetupView: View {
   @State private var showImport = false
   @State private var defaultStatus = false
   @State private var defaultError: String?
+
   @State private var spaceName: String
   @State private var spaceError: String?
 
@@ -86,6 +87,11 @@ struct FirstRunSetupView: View {
     self.onFinish = onFinish
     _step = State(initialValue: initialStep)
     _spaceName = State(initialValue: store.session.selectedSpace.name)
+  }
+
+  static func defaultBrowserFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Could not set the default browser.", table: "Settings", language: language)
   }
 
   var body: some View {
@@ -273,7 +279,7 @@ struct FirstRunSetupView: View {
       do {
         try await DefaultBrowserService.makeDefault()
         defaultError = nil
-      } catch { defaultError = error.localizedDescription }
+      } catch { defaultError = Self.defaultBrowserFailure() }
       defaultStatus = DefaultBrowserService.isDefault()
     }
   }

@@ -52,6 +52,14 @@ struct DevToolsPanelTests {
       payloadJSON: Data(payload.utf8))
   }
 
+  @Test func responseBodyRequiresJSONBooleanEncodingFlag() {
+    for value in ["0", "1"] {
+      let payload =
+        #"{"schemaVersion":1,"body":"data","base64Encoded":\#(value)}"#
+      #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
+    }
+  }
+
   @Test func exactScopeLeaseAndSequenceAreRequired() {
     let payload =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":4,"leaseID":42,"data":{"requestID":"r1","url":"https://example.test","method":"GET","truncated":false}}"#

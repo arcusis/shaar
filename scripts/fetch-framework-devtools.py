@@ -184,7 +184,7 @@ def validate_archive_directory(path):
 
 
 def archive_matches(name, archive):
-    if not archive.is_file():
+    if archive.is_symlink() or not archive.is_file():
         return False
     with archive.open("rb") as source:
         data = source.read(MAX_ARCHIVE_SIZE + 1)

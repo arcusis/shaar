@@ -232,6 +232,22 @@ struct DeviceChooserTests {
       canGrant: true) == nil)
   }
 
+  @Test func chooserRejectsDuplicateOptionIndexes() throws {
+    let store = try store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    let payload = event(
+      transport: "usb", id: "duplicate-index", page: tab.url,
+      options: [
+        ["index": 0, "name": "First adapter"],
+        ["index": 0, "name": "Second adapter"],
+      ], canGrant: true)
+
+    #expect(
+      DeviceChooserIntake.request(
+        tabID: tab.id, profileID: store.session.selectedSpace.profileID, pageURL: tab.url,
+        payload: payload) == nil)
+  }
+
   @Test func unnamedDevicesHaveAVisibleFallbackLabel() throws {
     let store = try store()
     let request = try #require(

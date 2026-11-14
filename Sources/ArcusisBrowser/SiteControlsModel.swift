@@ -188,7 +188,6 @@ final class SiteControlsModel: Identifiable {
     } catch is CancellationError {
       permissionValues[permission] = previous
     } catch {
-      guard !Task.isCancelled else { return }
       permissionValues[permission] = previous
       guard !Task.isCancelled else { return }
       failure = ShellL10n.string("Could not update this permission. Try again.")
@@ -221,7 +220,10 @@ final class SiteControlsModel: Identifiable {
     guard let backend, hasCertificate else { return nil }
     do {
       return try await backend.certificateChain(for: target)
+    } catch is CancellationError {
+      return nil
     } catch {
+      guard !Task.isCancelled else { return nil }
       failure = ShellL10n.string("Could not load this site’s certificate. Try again.")
       return nil
     }

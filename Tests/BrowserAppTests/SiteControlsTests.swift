@@ -49,6 +49,7 @@ private final class FakeSiteBackend: SiteControlBackend {
   var finishRead: CheckedContinuation<Void, Never>?
   var suspendNextAction = false
   var finishAction: CheckedContinuation<Void, Never>?
+  var suspendNextCertificateLookup = false
 
   func security(of target: SiteControlTarget) -> SiteSecurity { securityValue }
 
@@ -89,6 +90,10 @@ private final class FakeSiteBackend: SiteControlBackend {
   }
 
   func certificateChain(for target: SiteControlTarget) async throws -> [SecCertificate] {
+    if suspendNextCertificateLookup {
+      suspendNextCertificateLookup = false
+      try await Task.sleep(for: .seconds(60))
+    }
     throw FakeFailure()
   }
 }
@@ -319,6 +324,18 @@ private func target(_ address: String) -> SiteControlTarget {
   let model = SiteControlsModel(target: target("https://news.example"), backend: backend)
   #expect(await model.certificateChain() == nil)
   #expect(model.failure == ShellL10n.string("Could not load this site’s certificate. Try again."))
+}
+
+@MainActor @Test func cancelledCertificateLookupDoesNotShowFailure() async {
+  let backend = FakeSiteBackend()
+  backend.suspendNextCertificateLookup = true
+  let model = SiteControlsModel(target: target("https://news.example"), backend: backend)
+  let lookup = Task { await model.certificateChain() }
+  await Task.yield()
+  lookup.cancel()
+
+  #expect(await lookup.value == nil)
+  #expect(model.failure == nil)
 }
 
 @MainActor @Test func reloadActionsShowTheirMenuShortcuts() {

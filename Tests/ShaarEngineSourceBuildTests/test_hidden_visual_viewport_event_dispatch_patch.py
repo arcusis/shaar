@@ -39,6 +39,8 @@ class HiddenVisualViewportEventDispatchPatchTests(unittest.TestCase):
                 patch,
             )
         self.assertIn("event->target() == target", patch)
+        self.assertIn("DispatchEvents(blink::BindRepeating(", patch)
+        self.assertIn("WrapPersistent(visual_viewport)));", patch)
         self.assertIn("HiddenDocumentVisualViewportEventsDispatchWithoutAnimationFrame", patch)
         for event_type in ("scroll", "scrollend", "resize"):
             self.assertIn(f'AtomicString("{event_type}")', patch)

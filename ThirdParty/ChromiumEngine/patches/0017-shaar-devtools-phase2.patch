@@ -1,4 +1,3 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 @@ -8,10 +8,12 @@
@@ -14,8 +13,8 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  #include <set>
  #include <string>
  #include <string_view>
-@@ -32,6 +34,8 @@
- #include "content/public/browser/navigation_handle.h"
+@@ -31,6 +33,8 @@
+ #include "content/public/browser/devtools_agent_host_client.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_observer.h"
 +#include "url/gurl.h"
@@ -23,7 +22,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  
  namespace shaar::devtools {
  namespace {
-@@ -46,6 +50,8 @@
+@@ -45,6 +49,8 @@
  constexpr size_t kMaxQueuedBytes = 2 * 1024 * 1024;
  constexpr size_t kMaxRequestIDs = 512;
  constexpr size_t kMaxPendingBodies = 16;
@@ -32,7 +31,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  
  struct ReplyTarget {
    shaar_request_id id;
-@@ -301,6 +307,648 @@
+@@ -332,6 +338,648 @@
           output->size() <= limit;
  }
  
@@ -681,7 +680,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  class PanelClient;
  std::map<content::WebContents*, PanelClient*>& Leases() {
    static base::NoDestructor<std::map<content::WebContents*, PanelClient*>> leases;
-@@ -321,7 +969,8 @@
+@@ -352,7 +1000,8 @@
        : content::WebContentsObserver(contents), engine_(engine), scope_(scope),
          window_(window), tab_(tab), contents_(contents),
          identity_(std::move(identity)), host_(std::move(host)),
@@ -691,7 +690,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  
    bool Attach() {
      attached_ = host_->AttachClient(this);
-@@ -333,9 +982,14 @@
+@@ -364,9 +1013,14 @@
          R"({"id":-3,"method":"Network.enable"})",
          R"({"id":-4,"method":"Page.enable"})",
          R"({"id":-5,"method":"Page.setLifecycleEventsEnabled","params":{"enabled":true}})",
@@ -708,7 +707,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      return true;
    }
  
-@@ -365,10 +1019,13 @@
+@@ -396,10 +1050,13 @@
      StopScreencast();
      Leases().erase(contents_);
      auto pending = std::move(pending_bodies_);
@@ -722,7 +721,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      delete this;
    }
  
-@@ -437,6 +1094,30 @@
+@@ -468,6 +1125,30 @@
      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid screencast command");
    }
  
@@ -753,7 +752,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    void DispatchProtocolMessage(content::DevToolsAgentHost*,
                                 base::span<const uint8_t> message) override {
      if (closing_)
-@@ -452,6 +1133,23 @@
+@@ -483,6 +1164,23 @@
        return;
      const auto& root = parsed->GetDict();
      if (auto id = root.FindInt("id")) {
@@ -777,7 +776,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
        if (*id == mask_setup_id_) {
          mask_setup_id_ = 0;
          if (!BooleanResult(root)) {
-@@ -519,7 +1217,9 @@
+@@ -550,7 +1248,9 @@
        return;
      }
      Projection projection{};
@@ -788,7 +787,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
        return;
      if (projection.id == SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT) {
        const auto* request_id = params->FindString("requestId");
-@@ -679,6 +1379,21 @@
+@@ -705,6 +1405,21 @@
      }
    }
  
@@ -810,7 +809,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    void BodyTimedOut(int command_id) {
      auto found = pending_bodies_.find(command_id);
      if (found == pending_bodies_.end())
-@@ -768,6 +1483,7 @@
+@@ -794,6 +1509,7 @@
    DevToolsTargetIdentity identity_;
    scoped_refptr<content::DevToolsAgentHost> host_;
    int lease_id_;
@@ -818,7 +817,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    int next_command_id_ = 1000000;
    bool attached_ = false;
    bool closing_ = false;
-@@ -779,6 +1495,12 @@
+@@ -805,6 +1521,12 @@
    std::set<std::string> known_requests_;
    std::deque<std::string> request_order_;
    std::map<int, ReplyTarget> pending_bodies_;
@@ -831,7 +830,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    std::unique_ptr<ReplyTarget> pending_start_;
    std::unique_ptr<PendingFrame> pending_frame_;
    int mask_setup_id_ = 0;
-@@ -807,6 +1529,38 @@
+@@ -833,6 +1555,38 @@
           EncodeProjectedEvent(std::move(projection), lease_id, output);
  }
  
@@ -870,7 +869,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  void ClosePanelLeaseForTab(content::WebContents* contents) {
    auto found = Leases().find(contents);
    if (found != Leases().end())
-@@ -829,7 +1583,7 @@
+@@ -855,7 +1609,7 @@
      shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
      void* reply_context, shaar_error* error) {
    if (!context || !context->devtools_runtime || !engine || !contents || !reply ||
@@ -879,7 +878,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid panel request");
    auto parsed = base::JSONReader::Read(
        std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
-@@ -906,6 +1660,18 @@
+@@ -932,6 +1686,18 @@
        return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
      return lease->ControlScreencast(*command, session.value_or(0), target, error);
    }
@@ -898,7 +897,6 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown panel operation");
  }
  
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
 @@ -12,6 +12,11 @@

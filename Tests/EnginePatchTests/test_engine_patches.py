@@ -145,6 +145,59 @@ class EnginePatchTests(unittest.TestCase):
         self.assertIn("differs from upstream", result.stderr)
         self.assertFalse(self.output.exists())
 
+    def test_verify_tree_accepts_recorded_builder_baseline(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest["layer"] = {"sha256": "a" * 64}
+        self.manifest.write_text(json.dumps(manifest))
+        builder = self.root / "builder.json"
+        builder.write_text(json.dumps({
+            "schemaVersion": 1,
+            "chromium": {"commit": self.revision},
+            "sourceBuildManifestSha256": hashlib.sha256(self.manifest.read_bytes()).hexdigest(),
+            "layerSha256": manifest["layer"]["sha256"],
+            "shaarPatches": self.entries,
+            "upstreamPatchSeries": [{"file": "upstream.patch"}],
+            "preShaarFiles": {
+                name: {"kind": "file", "sha256": hashlib.sha256(old.encode()).hexdigest(),
+                       "executable": False}
+                for name, old in (("a.txt", "one\n"), ("b.txt", "first\n"))
+            },
+        }))
+        self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
+        result = self.run_script("--verify-tree", self.src, "--builder-receipt", builder,
+                                 "--output", self.output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(self.output.read_text())["patches"], self.entries)
+
+        tampered = json.loads(builder.read_text())
+        tampered["preShaarFiles"]["a.txt"]["sha256"] = "0" * 64
+        builder.write_text(json.dumps(tampered))
+        result = self.run_script("--verify-tree", self.src, "--builder-receipt", builder,
+                                 "--output", self.output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("differs from builder baseline", result.stderr)
+        self.assertFalse(self.output.exists())
+
+    def test_builder_receipt_must_match_literal_manifest(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest["layer"] = {"sha256": "a" * 64}
+        self.manifest.write_text(json.dumps(manifest))
+        self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
+        builder = self.root / "builder.json"
+        builder.write_text(json.dumps({
+            "schemaVersion": 1, "chromium": {"commit": self.revision},
+            "sourceBuildManifestSha256": hashlib.sha256(self.manifest.read_bytes()).hexdigest(),
+            "layerSha256": manifest["layer"]["sha256"],
+            "shaarPatches": self.entries[:1],
+            "upstreamPatchSeries": [{"file": "upstream.patch"}],
+            "preShaarFiles": {},
+        }))
+        result = self.run_script("--verify-tree", self.src, "--builder-receipt", builder,
+                                 "--output", self.output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("builder receipt does not match", result.stderr)
+        self.assertFalse(self.output.exists())
+
     def test_archive_receipt_requires_complete_ordered_series(self):
         self.assertEqual(self.run_script("--apply", self.src, "--output", self.output).returncode, 0)
         archive = self.root / "engine.tar.xz"

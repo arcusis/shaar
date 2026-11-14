@@ -22,7 +22,7 @@ class HeapProfilerPatchTests(unittest.TestCase):
         self.assertIn("HeapProfiler.startTrackingHeapObjects", source)
         self.assertIn("HeapProfiler.stopTrackingHeapObjects", source)
         self.assertIn("HeapProfiler.addHeapSnapshotChunk", source)
-        self.assertIn("id > 79", source)
+        self.assertIn("id <= SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS", source)
         self.assertIn('"command":80', source)
         self.assertIn("heap snapshot is empty", source)
         self.assertIn("SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT = 77", source)

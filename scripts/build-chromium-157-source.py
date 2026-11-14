@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -84,15 +85,13 @@ def sha256(path: Path) -> str:
 
 
 def verify_manifest_hashes() -> None:
-    for section, entries in (("patches", SPEC["patches"]),
-                             ("devtoolsFrontend157.patches", SPEC["devtoolsFrontend157"]["patches"])):
-        for entry in entries:
-            patch_path = REPO / entry["file"]
-            actual = sha256(patch_path)
-            if actual != entry["sha256"]:
-                raise RuntimeError(
-                    f"{section} digest mismatch for {entry['file']}: {actual} != {entry['sha256']}"
-                )
+    for entry in SPEC["patches"]:
+        patch_path = REPO / entry["file"]
+        actual = sha256(patch_path)
+        if actual != entry["sha256"]:
+            raise RuntimeError(
+                f"patches digest mismatch for {entry['file']}: {actual} != {entry['sha256']}"
+            )
     for relative, expected in SPEC["layer"]["files"].items():
         actual = sha256(REPO / "ThirdParty/ChromiumEngine/layer" / relative)
         if actual != expected:
@@ -190,25 +189,34 @@ def copy_layer(source: Path) -> None:
 
 
 def ordered_shaar_patches() -> list[dict[str, str]]:
-    frontend = SPEC["devtoolsFrontend157"]["patches"]
-    ordinary = SPEC["patches"]
-    ordered: list[dict[str, str]] = []
-    frontend_inserted = False
-    for entry in ordinary:
-        patch_name = Path(entry["file"]).name
-        if patch_name == Path(SPEC["devtoolsFrontend157"]["replacesPatch"]).name:
-            continue
-        if not frontend_inserted and patch_name.startswith("0066-"):
-            ordered.extend(frontend)
-            frontend_inserted = True
-        ordered.append(entry)
-    if not frontend_inserted:
-        ordered.extend(frontend)
-    return ordered
+    return SPEC["patches"]
+
+
+def pre_shaar_files(source: Path) -> dict[str, dict[str, Any]]:
+    paths = sorted({relative for entry in ordered_shaar_patches()
+                    for relative in patch_touched_paths(REPO / entry["file"])})
+    files: dict[str, dict[str, Any]] = {}
+    for relative in paths:
+        path = source / relative
+        if path.is_symlink():
+            files[relative] = {"kind": "symlink", "target": os.readlink(path)}
+        elif path.is_file():
+            files[relative] = {"kind": "file", "sha256": sha256(path),
+                               "executable": bool(path.stat().st_mode & stat.S_IXUSR)}
+        elif not path.exists():
+            files[relative] = {"kind": "missing"}
+        else:
+            raise RuntimeError(f"Patch baseline is not a file: {relative}")
+    return files
 
 
 def apply_shaar_patches(source: Path, root: Path, receipt: dict[str, Any]) -> None:
     applied: list[dict[str, str]] = []
+    receipt["sourceBuildManifestSha256"] = sha256(SPEC_PATH)
+    receipt["layerSha256"] = SPEC["layer"]["sha256"]
+    receipt["preShaarFiles"] = pre_shaar_files(source)
+    receipt["shaarPatches"] = applied
+    write_receipt(root, receipt)
     for index, entry in enumerate(ordered_shaar_patches(), start=1):
         patch_path = REPO / entry["file"]
         expected = entry["sha256"]
@@ -446,12 +454,6 @@ def resume_after_sync(root: Path, build: bool, reference_source: Path | None) ->
         "sourceBuildManifestSha256": sha256(SPEC_PATH),
         "layerSha256": SPEC["layer"]["sha256"],
         "chromiumObjectReference": str(root / "chromium_git/chromium/src" / ".git/objects/info/alternates"),
-        "supersededPatches": [{
-            "file": SPEC["devtoolsFrontend157"]["replacesPatch"],
-            "sha256": sha256(REPO / SPEC["devtoolsFrontend157"]["replacesPatch"]),
-            "replacedBy": [entry["file"] for entry in SPEC["devtoolsFrontend157"]["patches"]],
-            "reason": "The Chromium 157 DevTools frontend patch pair supersedes 0014.",
-        }],
     }
     write_receipt(root, receipt)
     receipt["referenceSourceTree"] = str(reference_source) if reference_source else None
@@ -574,12 +576,6 @@ def prepare(root: Path, build: bool, chromium_reference: Path | None,
         "sourceBuildManifestSha256": sha256(SPEC_PATH),
         "layerSha256": SPEC["layer"]["sha256"],
         "chromiumObjectReference": str(chromium_reference) if chromium_reference else None,
-        "supersededPatches": [{
-            "file": SPEC["devtoolsFrontend157"]["replacesPatch"],
-            "sha256": sha256(REPO / SPEC["devtoolsFrontend157"]["replacesPatch"]),
-            "replacedBy": [entry["file"] for entry in SPEC["devtoolsFrontend157"]["patches"]],
-            "reason": "The Chromium 157 DevTools frontend patch pair supersedes 0014.",
-        }],
     }
     write_receipt(root, receipt)
     receipt["referenceSourceTree"] = str(reference_source) if reference_source else None

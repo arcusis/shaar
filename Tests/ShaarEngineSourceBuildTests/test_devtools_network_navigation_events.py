@@ -28,7 +28,7 @@ class DevToolsNetworkNavigationEventTests(unittest.TestCase):
         manifest = json.loads((ROOT / "ThirdParty/ChromiumEngine/source-build.json").read_text())
         patch_name = str(PATCH.relative_to(ROOT))
         listed = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}
-        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), listed[patch_name])
+        self.assertNotIn(patch_name, listed)
         layer = manifest["layer"]
         for name, expected in layer["files"].items():
             path = ROOT / "ThirdParty/ChromiumEngine/layer" / name

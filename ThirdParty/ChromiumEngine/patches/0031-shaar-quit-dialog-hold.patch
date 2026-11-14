@@ -1,18 +1,14 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
-index a3ebdc2..457f4e5 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -213,6 +213,9 @@ constexpr CommandEntry kCommands[] = {
-      true},
-     {SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE,
+@@ -223,6 +223,7 @@
       "Emulation.setSafeAreaInsetsOverride", false, true},
+     {SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG,
+      "Page.handleJavaScriptDialog", false, true},
 +    {SHAAR_DEVTOOLS_PAGE_DISABLE, "Page.disable", true, true},
-+    {SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG,
-+     "Page.handleJavaScriptDialog", false, true},
- };
- 
- struct ReplyContext {
-@@ -387,6 +390,7 @@ bool ValidateParams(shaar_devtools_command command,
+     {SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES, "DOM.requestChildNodes", true, false},
+     {SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE, "DOM.setAttributeValue", true, false},
+     {SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE, "DOM.removeAttribute", true, false},
+@@ -619,6 +620,7 @@
      case SHAAR_DEVTOOLS_DOM_ENABLE:
      case SHAAR_DEVTOOLS_CSS_ENABLE:
      case SHAAR_DEVTOOLS_PAGE_ENABLE:
@@ -20,25 +16,7 @@ index a3ebdc2..457f4e5 100644
      case SHAAR_DEVTOOLS_PAGE_GET_RESOURCE_TREE:
      case SHAAR_DEVTOOLS_OVERLAY_ENABLE:
      case SHAAR_DEVTOOLS_OVERLAY_DISABLE:
-@@ -482,6 +486,8 @@ bool ValidateParams(shaar_devtools_command command,
-     case SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES:
-       return ParamsHaveOnly(params,
-                             {"name", "url", "domain", "path", "partitionKey"});
-+    case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
-+      return ParamsHaveOnly(params, {"accept", "promptText"});
-   }
-   return false;
- }
-@@ -585,6 +591,8 @@ bool HasRequiredFields(shaar_devtools_command command,
-       return HasRequiredString(params, "name") &&
-              (HasRequiredString(params, "url") ||
-               HasRequiredString(params, "domain"));
-+    case SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG:
-+      return HasRequiredBoolean(params, "accept");
-     default:
-       return true;
-   }
-@@ -633,7 +641,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -947,7 +949,7 @@
      if (!parsed || !parsed->is_dict() ||
          parsed->GetDict().FindInt("id") != static_cast<int>(request.request_id))
        return false;
@@ -47,7 +25,7 @@ index a3ebdc2..457f4e5 100644
        return false;
      pending_.push_back({request, json, std::move(main_frame_id),
                          std::move(visibility_lease)});
-@@ -675,6 +683,8 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -990,6 +992,8 @@
        }
        return;
      }
@@ -56,7 +34,7 @@ index a3ebdc2..457f4e5 100644
      if (!active_)
        return;
      if (dict.FindInt("id") == -1) {
-@@ -695,12 +705,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -1010,12 +1014,7 @@
        Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol response has no result");
        return;
      }
@@ -70,7 +48,7 @@ index a3ebdc2..457f4e5 100644
    }
  
    void AgentHostClosed(content::DevToolsAgentHost*) override {
-@@ -712,7 +717,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -1027,7 +1026,15 @@
      if (closing_)
        return;
      closing_ = true;
@@ -86,7 +64,7 @@ index a3ebdc2..457f4e5 100644
      auto pending = std::move(pending_);
      for (auto& request : pending) {
        request.visibility_lease.RunAndReset();
-@@ -764,11 +777,89 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -1079,11 +1086,89 @@
      if (context == contexts_.end())
        return;
      auto command = base::JSONReader::Read(pending.json, base::JSON_PARSE_RFC);
@@ -177,7 +155,7 @@ index a3ebdc2..457f4e5 100644
    }
  
    void OnTimeout() {
-@@ -796,8 +887,10 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -1111,8 +1196,10 @@
  
    scoped_refptr<content::DevToolsAgentHost> host_;
    std::deque<Pending> pending_;
@@ -188,33 +166,26 @@ index a3ebdc2..457f4e5 100644
    bool closing_ = false;
    bool active_ = false;
    bool awaiting_context_ = false;
-@@ -805,6 +898,15 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
+@@ -1120,6 +1207,10 @@
+   bool dom_enabled_ = false;
    base::WeakPtrFactory<ProtocolClient> weak_factory_{this};
  };
- 
-+bool KnownDevToolsCommand(int id) {
-+  constexpr int kLayerEnd = static_cast<int>(
-+      SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE);
-+  if (id >= 1 && id <= kLayerEnd)
-+    return true;
-+  return id == SHAAR_DEVTOOLS_PAGE_DISABLE ||
-+         id == SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG;
-+}
 +
++bool KnownDevToolsCommand(int id) {
++  return id >= 1 && id <= SHAAR_DEVTOOLS_PAGE_DISABLE;
++}
+ 
  shaar_error_code DecodeOperation(shaar_operation operation,
                                   shaar_bytes args_json,
-                                  shaar_devtools_capability* capability,
-@@ -834,7 +936,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
+@@ -1152,7 +1243,7 @@
    }
    const int cap = *root.FindInt("capability");
    const int id = *root.FindInt("command");
--  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 44) {
+-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 62) {
 +  if ((cap != kInspector && cap != kDeveloper) || !KnownDevToolsCommand(id)) {
      *reason = "unknown DevTools capability or command";
      return SHAAR_INVALID_ARGUMENT;
    }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-index 7496b19..352683a 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 @@ -8,7 +8,9 @@
@@ -227,55 +198,33 @@ index 7496b19..352683a 100644
  
  #include "base/containers/span.h"
  #include "base/scoped_environment_variable_override.h"
-@@ -432,6 +434,47 @@ TEST(ShaarDevToolsTest, SafeAreaInsetsAreBoundedAndDeveloperOnly) {
+@@ -503,6 +505,25 @@
    }
  }
  
-+TEST(ShaarDevToolsTest, PageDisableAndJavaScriptDialogStayOutsideTheDomTreeIds) {
-+  for (const std::string args : {
-+           R"({"schemaVersion":1,"capability":2,"command":62,"params":{}})",
-+           R"({"schemaVersion":1,"capability":1,"command":62,"params":{}})"}) {
++TEST(ShaarDevToolsTest, PageDisableUsesId63WithoutChangingDialogProbe) {
++  for (int capability : {1, 2}) {
 +    std::string output;
 +    std::string reason;
-+    EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 62, &output, &reason))
++    const std::string args = "{\"schemaVersion\":1,\"capability\":" +
++                             std::to_string(capability) +
++                             ",\"command\":63,\"params\":{}}";
++    EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 63, &output, &reason))
 +        << reason;
 +    EXPECT_NE(std::string::npos, output.find("Page.disable"));
 +  }
 +  std::string output;
 +  std::string reason;
 +  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":62,"params":{"extra":true}})"),
-+      62, &output, &reason));
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{"accept":false}})"),
-+      63, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("Page.handleJavaScriptDialog"));
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{"accept":false,"promptText":""}})"),
-+      63, &output, &reason)) << reason;
-+  EXPECT_EQ(nullptr, ProtocolMethod(
-+      SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
-+      SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG));
-+  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":1,"command":63,"params":{"accept":false}})"),
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{"extra":true}})"),
 +      63, &output, &reason));
-+  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":63,"params":{}})"),
-+      63, &output, &reason));
-+  EXPECT_EQ("DevTools command is missing required parameters", reason);
-+  for (const char* args : {
-+           R"({"schemaVersion":1,"capability":2,"command":45,"params":{}})",
-+           R"({"schemaVersion":1,"capability":2,"command":61,"params":{}})"}) {
-+    EXPECT_EQ(SHAAR_INVALID_ARGUMENT,
-+              EncodeProtocolRequest(Bytes(args), 45, &output, &reason));
-+    EXPECT_EQ("unknown DevTools capability or command", reason);
-+  }
++  EXPECT_EQ(SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG, 45);
 +}
 +
  TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
    const std::string args =
        R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";
-@@ -819,6 +862,116 @@ TEST(ShaarDevToolsTest, ProtocolReleasesVisibilityLeaseOnTimeoutAndClose) {
+@@ -890,6 +911,116 @@
    }
  }
  
@@ -392,19 +341,15 @@ index 7496b19..352683a 100644
  TEST_F(ShaarPrivateDevToolsPageTargetTest, RendererVisibilityRejectsOverlappingLease) {
    web_contents()->WasHidden();
    auto first = StartHiddenProbeCapture(web_contents());
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
-index 18af1fa..42505d5 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -350,7 +350,10 @@ typedef enum {
-   SHAAR_DEVTOOLS_NETWORK_GET_COOKIES = 41,
-   SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
-   SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43,
--  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44
-+  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44,
-+  // 45-61 belong to the DOM-tree patch. Keep these explicit so both can land.
-+  SHAAR_DEVTOOLS_PAGE_DISABLE = 62,
-+  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 63
+@@ -432,7 +432,8 @@
+   SHAAR_DEVTOOLS_OVERLAY_HIDE_HIGHLIGHT = 59,
+   SHAAR_DEVTOOLS_DOM_RESOLVE_NODE = 60,
+   SHAAR_DEVTOOLS_RUNTIME_CALL_FUNCTION_ON = 61,
+-  SHAAR_DEVTOOLS_DOM_GET_OUTER_HTML = 62
++  SHAAR_DEVTOOLS_DOM_GET_OUTER_HTML = 62,
++  SHAAR_DEVTOOLS_PAGE_DISABLE = 63
  } shaar_devtools_command;
  typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
  // END devtools command and module IDs.

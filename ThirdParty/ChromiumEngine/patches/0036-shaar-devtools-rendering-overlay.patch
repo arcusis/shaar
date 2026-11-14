@@ -1,8 +1,6 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
-index 4b690ba..1a42b2d 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -173,8 +173,8 @@ constexpr CommandEntry kCommands[] = {
+@@ -176,8 +176,8 @@
       false},
      {SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT, "Page.captureScreenshot", true,
       true},
@@ -13,7 +11,7 @@ index 4b690ba..1a42b2d 100644
      {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_GRID_OVERLAYS,
       "Overlay.setShowGridOverlays", true, false},
      {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FLEX_OVERLAYS,
-@@ -242,6 +242,12 @@ constexpr CommandEntry kCommands[] = {
+@@ -228,6 +228,12 @@
       false},
      {SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED,
       "Emulation.setTouchEmulationEnabled", false, true},
@@ -23,10 +21,10 @@ index 4b690ba..1a42b2d 100644
 +     "Overlay.setShowLayoutShiftRegions", false, true},
 +    {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FPS_COUNTER, "Overlay.setShowFPSCounter",
 +     false, true},
- };
- 
- struct ReplyContext {
-@@ -725,6 +731,11 @@ bool ValidateParams(shaar_devtools_command command,
+     {SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES, "DOM.requestChildNodes", true, false},
+     {SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE, "DOM.setAttributeValue", true, false},
+     {SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE, "DOM.removeAttribute", true, false},
+@@ -789,6 +795,11 @@
               ForcedPseudoClassListIsValid(params);
      case SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED:
        return ParamsHaveOnly(params, {"enabled"});
@@ -35,10 +33,10 @@ index 4b690ba..1a42b2d 100644
 +      return ParamsHaveOnly(params, {"result"});
 +    case SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FPS_COUNTER:
 +      return ParamsHaveOnly(params, {"show"});
-   }
-   return false;
- }
-@@ -866,6 +877,11 @@ bool HasRequiredFields(shaar_devtools_command command,
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return ParamsHaveOnly(params, {"urls"});
+     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+@@ -929,6 +940,11 @@
               params.FindList("forcedPseudoClasses") != nullptr;
      case SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED:
        return HasRequiredBoolean(params, "enabled");
@@ -47,37 +45,24 @@ index 4b690ba..1a42b2d 100644
 +      return HasRequiredBoolean(params, "result");
 +    case SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FPS_COUNTER:
 +      return HasRequiredBoolean(params, "show");
-     default:
-       return true;
-   }
-@@ -1212,7 +1228,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
-   }
-   const int cap = *root.FindInt("capability");
-   const int id = *root.FindInt("command");
--  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 65) {
-+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 68) {
-     *reason = "unknown DevTools capability or command";
-     return SHAAR_INVALID_ARGUMENT;
-   }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-index f6b82d3..93e7c00 100644
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return !params.Find("urls") || params.FindList("urls") != nullptr;
+     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+@@ -1258,7 +1274,7 @@
+ };
+ 
+ bool KnownDevToolsCommand(int id) {
+-  return id >= 1 && id <= SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED;
++  return id >= 1 && id <= SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FPS_COUNTER;
+ }
+ 
+ shaar_error_code DecodeOperation(shaar_operation operation,
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -499,8 +499,8 @@ TEST(ShaarDevToolsTest, PageDisableAndJavaScriptDialogStayOutsideTheDomTreeIds)
-       Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"nodeId":1}})"),
-       61, &output, &reason)) << reason;
-   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
--      Bytes(R"({"schemaVersion":1,"capability":2,"command":66,"params":{}})"),
--      66, &output, &reason));
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":69,"params":{}})"),
-+      69, &output, &reason));
-   EXPECT_EQ("unknown DevTools capability or command", reason);
- }
- 
-@@ -565,6 +565,54 @@ TEST(ShaarDevToolsTest, TouchEmulationIsDeveloperOnlyAndCommand65) {
-   }
- }
- 
+@@ -581,6 +581,54 @@
+            R"({"schemaVersion":1,"capability":2,"command":65,"params":{"enabled":true,"extra":1}})",
+            R"({"schemaVersion":1,"capability":2,"command":66,"params":{"enabled":true}})"}) {
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 65, &output, &reason))
 +TEST(ShaarDevToolsTest, RenderingOverlayCommandsAreDeveloperOnly) {
 +  std::string output;
 +  std::string reason;
@@ -129,13 +114,11 @@ index f6b82d3..93e7c00 100644
  TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
    const std::string args =
        R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
-index 53b61f0..a4b760a 100644
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -385,7 +385,10 @@ typedef enum {
-   SHAAR_DEVTOOLS_PAGE_DISABLE = 62,
-   SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 63,
+@@ -435,7 +435,10 @@
+   SHAAR_DEVTOOLS_DOM_GET_OUTER_HTML = 62,
+   SHAAR_DEVTOOLS_PAGE_DISABLE = 63,
    SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE = 64,
 -  SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED = 65
 +  SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED = 65,

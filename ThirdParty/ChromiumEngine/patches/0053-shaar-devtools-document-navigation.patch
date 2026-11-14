@@ -1,8 +1,7 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-index bdb2ec9..f3a8d17 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -37,6 +37,7 @@
+@@ -36,7 +36,8 @@
+ #include "content/public/browser/devtools_agent_host_client.h"
  #include "content/public/browser/navigation_handle.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_observer.h"
@@ -10,10 +9,11 @@ index bdb2ec9..f3a8d17 100644
  #include "url/gurl.h"
  #include "url/origin.h"
  
-@@ -472,6 +473,29 @@ struct Projection {
+@@ -470,6 +471,29 @@
+   base::DictValue data;
    bool truncated = false;
  };
- 
++
 +Projection CommittedDocumentRequest(std::string_view request_id,
 +                                    const std::string& url,
 +                                    const std::string& method) {
@@ -36,11 +36,10 @@ index bdb2ec9..f3a8d17 100644
 +  projection.data.Set("truncated", projection.truncated);
 +  return projection;
 +}
-+
+ 
  // Only these fixed protocol notifications can cross the ABI. Each projection
  // copies named scalar fields; headers, cookies, post data and protocol JSON
- // never enter the event envelope.
-@@ -1658,7 +1682,18 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+@@ -1689,7 +1713,18 @@
          !ProjectPhase2Event(*method, *params, origin_, &projection,
                              &worker_scopes_))
        return;
@@ -60,7 +59,7 @@ index bdb2ec9..f3a8d17 100644
        const auto* request_id = params->FindString("requestId");
        if (request_id && request_id->size() <= 128 &&
            known_requests_.insert(*request_id).second) {
-@@ -1669,7 +1704,15 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+@@ -1700,7 +1735,15 @@
          }
        }
      }
@@ -77,7 +76,7 @@ index bdb2ec9..f3a8d17 100644
    }
  
    void AgentHostClosed(content::DevToolsAgentHost*) override {
-@@ -1677,6 +1720,12 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+@@ -1708,6 +1751,12 @@
      Close();
    }
    void WebContentsDestroyed() override { Close(); }
@@ -90,10 +89,11 @@ index bdb2ec9..f3a8d17 100644
    void DidFinishNavigation(content::NavigationHandle* navigation) override {
      if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
          navigation->IsSameDocument())
-@@ -1685,6 +1734,22 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+@@ -1715,6 +1764,22 @@
+     if (!StillOwnsTarget()) {
        Close();
        return;
-     }
++    }
 +    const std::string url = navigation->GetURL().spec();
 +    const net::HttpResponseHeaders* headers = navigation->GetResponseHeaders();
 +    if (navigation->GetURL().SchemeIsHTTPOrHTTPS() &&
@@ -109,11 +109,10 @@ index bdb2ec9..f3a8d17 100644
 +      if (found == document_response_ids_.end())
 +        Enqueue(CommittedDocumentResponse(request_id, url,
 +                                          headers->response_code()));
-+    }
+     }
      // The lease belongs to the tab. A document load changes its origin and
      // invalidates resource IDs, but the DevTools session keeps receiving the
-     // new document's early console and network events.
-@@ -2057,6 +2122,8 @@ class PanelClient final : public content::DevToolsAgentHostClient,
+@@ -2087,6 +2152,8 @@
    std::deque<std::string> queue_;
    std::set<std::string> known_requests_;
    std::deque<std::string> request_order_;
@@ -122,10 +121,12 @@ index bdb2ec9..f3a8d17 100644
    std::map<int, ReplyTarget> pending_bodies_;
    std::map<int, PendingPhase2> pending_phase2_;
    std::optional<PendingRules> pending_rules_;
-@@ -2136,6 +2203,21 @@ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+@@ -2164,6 +2231,21 @@
+   Projection projection{};
+   return method && params && Project(*method, *params, &projection) &&
           EncodeProjectedEvent(std::move(projection), lease_id, output);
- }
- 
++}
++
 +bool ProjectCommittedDocumentForTesting(std::string_view request_id,
 +                                        const std::string& url,
 +                                        const std::string& method,
@@ -139,16 +140,12 @@ index bdb2ec9..f3a8d17 100644
 +                              lease_id, request) &&
 +         EncodeProjectedEvent(CommittedDocumentResponse(request_id, url, status),
 +                              lease_id, response);
-+}
-+
+ }
+ 
  bool BuildPhase2CommandForTesting(int command_id, std::string_view params,
-                                   std::string_view origin, std::string* output) {
-   if (!output || params.size() > 20 * 1024)
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
-index d070519..841e6f2 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
-@@ -12,6 +12,12 @@ namespace shaar::devtools {
+@@ -12,6 +12,12 @@
  // Test seam for the same allowlist and payload encoder used by live leases.
  bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
                                   std::string* output);
@@ -161,14 +158,14 @@ index d070519..841e6f2 100644
  bool HasDOMPanelLeaseForHost(content::DevToolsAgentHost* host);
  void RouteDOMPanelEventForProtocolHost(content::DevToolsAgentHost* host,
                                         std::string_view message);
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-index 1208f24..3fd2d66 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -1405,6 +1405,27 @@ TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
-       0, &output));
- }
- 
+@@ -1429,6 +1429,27 @@
+   EXPECT_TRUE(ProjectPanelEventForTesting(
+       R"({"method":"Network.webSocketClosed","params":{"requestId":"ws-1","timestamp":1}})",
+       42, &output));
++}
++
 +TEST(ShaarDevToolsPanelTest, ProjectsCommittedDocumentFallbackWithMethod) {
 +  std::string request;
 +  std::string response;
@@ -188,8 +185,6 @@ index 1208f24..3fd2d66 100644
 +  EXPECT_EQ(5, response_event->GetDict().FindInt("eventID"));
 +  EXPECT_EQ("navigation-17", *response_data.FindString("requestID"));
 +  EXPECT_EQ(200, response_data.FindInt("status"));
-+}
-+
+ }
+ 
  TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {
-   std::string output;
-   const std::string message =

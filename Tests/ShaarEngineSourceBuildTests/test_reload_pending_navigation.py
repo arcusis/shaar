@@ -26,8 +26,7 @@ class PendingNavigationReloadTests(unittest.TestCase):
         manifest = json.loads(MANIFEST.read_text())
         listed = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}
         patch_name = str(PATCH.relative_to(ROOT))
-        self.assertIn(patch_name, listed)
-        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), listed[patch_name])
+        self.assertNotIn(patch_name, listed)
         for name, expected in manifest["layer"]["files"].items():
             path = LAYER / name
             self.assertTrue(path.is_file(), name)
@@ -37,10 +36,9 @@ class PendingNavigationReloadTests(unittest.TestCase):
             digest.update(name.encode("utf-8") + b"\0" + expected.encode("ascii") + b"\n")
         self.assertEqual(digest.hexdigest(), manifest["layer"]["sha256"])
 
-    def test_source_patch_carries_the_regression(self):
-        patch = PATCH.read_text()
-        self.assertIn("GetPendingEntry", patch)
-        self.assertIn("ReloadDuringNavigationKeepsPendingDestination", patch)
+    def test_layer_carries_the_regression(self):
+        self.assertIn("GetPendingEntry", (LAYER / "chrome/browser/shaar/navigation/shaar_navigation.cc").read_text())
+        self.assertIn("ReloadDuringNavigationKeepsPendingDestination", (LAYER / "chrome/browser/shaar/navigation/shaar_navigation_unittest.cc").read_text())
 
 
 if __name__ == "__main__":

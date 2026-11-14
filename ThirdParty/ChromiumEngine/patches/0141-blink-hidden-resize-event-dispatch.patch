@@ -1,42 +1,9 @@
-diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
---- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
-+++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
-@@ -237,6 +237,19 @@
-   ScheduleAnimationIfNeeded();
- }
- 
-+void ScriptedAnimationController::EnqueueHiddenResizeEvent(Event* event) {
-+  if (!InsertToPerFrameEventsMap(event))
-+    return;
-+  EnqueueEvent(event);
-+}
-+
-+void ScriptedAnimationController::DispatchHiddenResizeEvents() {
-+  DispatchEvents(base::BindRepeating([](Event* event) {
-+    return event->type() == AtomicString("resize");
-+  }));
-+}
-+
-+
- void ScriptedAnimationController::ScheduleAnimationIfNeeded(
-     cc::BeginMainFrameReason reason) {
-   if (!GetExecutionContext() || GetExecutionContext()->IsContextPaused())
-diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
---- a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
-+++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
-@@ -95,6 +95,8 @@
-   void ContextDestroyed() final {}
- 
-   void DispatchMediaQueryListEventsAndCallbacks();
-+  void EnqueueHiddenResizeEvent(Event*);
-+  void DispatchHiddenResizeEvents();
- 
-   LocalDOMWindow* GetWindow() const;
-   void ScheduleAnimationIfNeeded(
 diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
 --- a/third_party/blink/renderer/core/dom/document.cc
 +++ b/third_party/blink/renderer/core/dom/document.cc
-@@ -6742,10 +6742,45 @@
+@@ -6760,14 +6760,49 @@
+ }
+ 
  void Document::EnqueueResizeEvent() {
 +  if (!GetExecutionContext())
 +    return;
@@ -64,7 +31,7 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
  }
  
  void Document::EnqueueMediaQueryChangeListeners(
-   HeapVector<Member<MediaQueryListListener>>& listeners) {
+     HeapVector<Member<MediaQueryListListener>>& listeners) {
 +  if (!GetExecutionContext())
 +    return;
    scripted_animation_controller_->EnqueueMediaQueryChangeListeners(listeners);
@@ -83,10 +50,12 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
 +    return;
 +  scripted_animation_controller_->DispatchMediaQueryListEventsAndCallbacks();
  }
+ 
+ void Document::EnqueueVisualViewportScrollEvent() {
 diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/renderer/core/dom/document.h
 --- a/third_party/blink/renderer/core/dom/document.h
 +++ b/third_party/blink/renderer/core/dom/document.h
-@@ -3141,8 +3141,12 @@
+@@ -3148,8 +3148,12 @@
    Member<MediaQueryMatcher> media_query_matcher_;
    bool write_recursion_is_too_deep_ = false;
    unsigned write_recursion_depth_ = 0;
@@ -99,6 +68,41 @@ diff --git a/third_party/blink/renderer/core/dom/document.h b/third_party/blink/
    void ElementDataCacheClearTimerFired(TimerBase*);
    HeapTaskRunnerTimer<Document> element_data_cache_clear_timer_;
  
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.cc
+@@ -265,6 +265,19 @@
+   ScheduleAnimationIfNeeded();
+ }
+ 
++void ScriptedAnimationController::EnqueueHiddenResizeEvent(Event* event) {
++  if (!InsertToPerFrameEventsMap(event))
++    return;
++  EnqueueEvent(event);
++}
++
++void ScriptedAnimationController::DispatchHiddenResizeEvents() {
++  DispatchEvents(base::BindRepeating([](Event* event) {
++    return event->type() == AtomicString("resize");
++  }));
++}
++
++
+ void ScriptedAnimationController::ScheduleAnimationIfNeeded(
+     cc::BeginMainFrameReason reason) {
+   if (!GetExecutionContext() || GetExecutionContext()->IsContextPaused())
+diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller.h b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
+--- a/third_party/blink/renderer/core/dom/scripted_animation_controller.h
++++ b/third_party/blink/renderer/core/dom/scripted_animation_controller.h
+@@ -96,6 +96,8 @@
+   void ContextDestroyed() final {}
+ 
+   void DispatchMediaQueryListEventsAndCallbacks();
++  void EnqueueHiddenResizeEvent(Event*);
++  void DispatchHiddenResizeEvents();
+ 
+   LocalDOMWindow* GetWindow() const;
+   void ScheduleAnimationIfNeeded(
 diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 --- a/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
 +++ b/third_party/blink/renderer/core/dom/scripted_animation_controller_test.cc
@@ -112,7 +116,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
  
  #include "base/memory/raw_ptr.h"
  #include "testing/gmock/include/gmock/gmock.h"
-@@ -179,6 +181,7 @@
+@@ -221,6 +224,7 @@
    EXPECT_EQ(1, observer.Order()[1]);
  }
  
@@ -120,7 +124,7 @@ diff --git a/third_party/blink/renderer/core/dom/scripted_animation_controller_t
  namespace {
  
  class RunTaskCallback final : public FrameCallback {
-@@ -241,6 +244,75 @@
+@@ -283,6 +287,75 @@
                                            {{Controller(), false}});
    EXPECT_FALSE(Controller().HasFrameCallback());
  }

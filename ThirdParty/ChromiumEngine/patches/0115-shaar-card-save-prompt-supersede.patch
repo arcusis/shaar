@@ -1,16 +1,15 @@
-diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
 --- a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
 +++ b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
-@@ -1,4 +1,7 @@
+@@ -67,6 +67,8 @@
+ }
+ 
  namespace shaar::save_prompts {
 +void SupersedeSavePrompts(content::WebContents* contents)
 +    __attribute__((weak_import));
-+
+ 
+ // Decisions are 1 save, 2 dismiss, and 3 never for a new password.
  bool OfferSavePrompt(content::WebContents* contents,
-                      const char* prompt,
-                      const char* detail,
-@@ -134,6 +137,8 @@
-     if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete)
+@@ -139,6 +141,8 @@
        HideBubble(/*initiated_by_bubble_manager=*/false);
      const std::string detail =
          base::UTF16ToUTF8(card.NetworkAndLastFourDigits());
@@ -18,3 +17,4 @@ diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_imp
 +      shaar::save_prompts::SupersedeSavePrompts(web_contents());
      SetupLocalSave(card, options, std::move(save_card_prompt_callback));
      auto decision = base::BindOnce(
+         [](base::WeakPtr<SaveCardBubbleControllerImpl> controller, int choice) {

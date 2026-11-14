@@ -131,14 +131,11 @@ class DevToolsFrontend157Tests(unittest.TestCase):
             "third_party/devtools-frontend/src/front_end/panels/shaar",
         )
         self.assertEqual(
-            frontend["replacesPatch"],
-            "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
-        )
-        self.assertEqual(
             frontend["stageScript"],
             "scripts/stage-shaar-devtools-frontend.py",
         )
-        pinned = {entry["file"]: entry["sha256"] for entry in frontend["patches"]}
+        self.assertNotIn("patches", frontend)
+        pinned = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}
         self.assertEqual(
             pinned[str(THEME.relative_to(ROOT))],
             hashlib.sha256(THEME.read_bytes()).hexdigest(),
@@ -147,17 +144,19 @@ class DevToolsFrontend157Tests(unittest.TestCase):
             pinned[str(REGISTRATION.relative_to(ROOT))],
             hashlib.sha256(REGISTRATION.read_bytes()).hexdigest(),
         )
-        chromium_155_patches = [entry["file"] for entry in manifest["patches"]]
-        self.assertIn(
+        active_patches = [entry["file"] for entry in manifest["patches"]]
+        self.assertNotIn(
             "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
-            chromium_155_patches,
+            active_patches,
         )
         self.assertEqual(THEME.name, "0064-shaar-devtools-theme-157.patch")
         self.assertEqual(
             REGISTRATION.name, "0065-shaar-devtools-frontend-registration.patch"
         )
-        self.assertNotIn(str(THEME.relative_to(ROOT)), chromium_155_patches)
-        self.assertNotIn(str(REGISTRATION.relative_to(ROOT)), chromium_155_patches)
+        self.assertEqual(active_patches.count(str(THEME.relative_to(ROOT))), 1)
+        self.assertEqual(active_patches.count(str(REGISTRATION.relative_to(ROOT))), 1)
+        self.assertLess(active_patches.index(str(THEME.relative_to(ROOT))),
+                        active_patches.index(str(REGISTRATION.relative_to(ROOT))))
 
     def test_stage_hardlinks_the_panel_into_panels_shaar(self):
         stage = load_stage()

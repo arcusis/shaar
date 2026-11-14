@@ -57,14 +57,14 @@ diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink
 +  if (!GetExecutionContext() || !domWindow())
 +    return;
 +  EventTarget* visual_viewport = domWindow()->visualViewport();
-+  scripted_animation_controller_->DispatchEvents(base::BindRepeating(
++  scripted_animation_controller_->DispatchEvents(blink::BindRepeating(
 +      [](EventTarget* target, Event* event) {
 +        return event->target() == target &&
 +               (event->type() == event_type_names::kScroll ||
 +                event->type() == event_type_names::kScrollend ||
 +                event->type() == event_type_names::kResize);
 +      },
-+      visual_viewport));
++      WrapPersistent(visual_viewport)));
  }
  
  void Document::DispatchMediaQueryListEvents() {

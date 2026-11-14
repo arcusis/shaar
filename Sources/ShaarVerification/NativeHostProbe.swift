@@ -130,7 +130,6 @@ enum NativeHostViewportValidation {
       resizeEventCount: resizeEventCount, pageFocusEventCount: pageFocusEventCount,
       pageBlurEventCount: pageBlurEventCount, devicePixelRatio: devicePixelRatio)
   }
-  }
 
   static func sameCSSSize(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
     abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1

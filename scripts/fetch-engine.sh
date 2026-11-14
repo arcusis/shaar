@@ -37,6 +37,10 @@ if [[ ! -f "$archive" ]] || ! verify "$archive"; then
   mv "$archive.partial" "$archive"
 fi
 destination="$cache/${checksum:0:16}"
+if [[ -L "$destination" || ( -e "$destination" && ! -d "$destination" ) ]]; then
+  echo 'Engine cache destination must be a regular directory.' >&2
+  exit 1
+fi
 if [[ ! -f "$destination/.verified-$checksum" ]]; then
   archive_paths=$(tar -tf "$archive") || {
     echo 'Cannot inspect engine archive; refusing extraction.' >&2

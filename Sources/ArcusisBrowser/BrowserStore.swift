@@ -58,6 +58,7 @@ final class BrowserStore {
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
+
   var commandQuery = "" {
     didSet {
       if let keyword = commandProviderKeyword,
@@ -174,6 +175,11 @@ final class BrowserStore {
   @ObservationIgnored var onNewProfile: ((UUID) -> Void)?
   @ObservationIgnored var onSpaceRemovalImpact: ((UUID) -> SpaceRemovalImpact)?
   @ObservationIgnored private var presentedConsentID: String?
+
+  isolated deinit {
+    sidebarDragCleanupTask?.cancel()
+    tabDragCleanupTask?.cancel()
+  }
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile

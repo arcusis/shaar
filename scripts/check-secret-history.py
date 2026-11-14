@@ -16,6 +16,8 @@ from sensitive_files import policy_errors
 
 
 def scan_history(root, base: str, head: str, report) -> int:
+    if report.parent.is_symlink():
+        raise ValueError(f"secret scan report parent must not be a symlink: {report.parent}")
     if report.is_symlink():
         raise ValueError(f"secret scan report must not be a symlink: {report}")
     if report.exists() and not report.is_file():

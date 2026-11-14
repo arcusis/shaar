@@ -159,6 +159,22 @@ class HookTests(unittest.TestCase):
             scan.assert_not_called()
         self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
 
+    def test_history_scan_rejects_symlinked_report_parent_before_running_gitleaks(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        sentinel = outside / "report.json"
+        sentinel.write_text("preserve this", encoding="utf-8")
+        linked_parent = self.root / "linked-reports"
+        linked_parent.symlink_to(outside, target_is_directory=True)
+        report = linked_parent / "report.json"
+        with patch.object(HISTORY, "history_commits", return_value=[]), \
+                patch.object(HISTORY, "object_id", side_effect=lambda value: value), \
+                patch.object(HISTORY.subprocess, "run") as scan:
+            with self.assertRaisesRegex(ValueError, "secret scan report parent must not be a symlink"):
+                HISTORY.scan_history(self.root, "a" * 40, "b" * 40, report)
+            scan.assert_not_called()
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve this")
+
     def test_missing_ci_baseline_fails_closed(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True), \
                 patch.object(sys, "argv", ["check-secret-history.py"]), \

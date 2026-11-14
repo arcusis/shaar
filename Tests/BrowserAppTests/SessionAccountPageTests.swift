@@ -88,6 +88,12 @@ struct SessionAccountPageTests {
       SessionAccountPage.photoData(
         from: "data:image/png;base64," + String(repeating: "A", count: 350_000)) == nil)
     #expect(SessionAccountPage.photoScript(url: URL(string: "http://example.test/photo")!) == nil)
+    #expect(
+      SessionAccountPage.photoScript(
+        url: URL(string: "https://user:secret@example.test/photo")!) == nil)
+    #expect(
+      SessionAccountPage.photoScript(
+        url: URL(string: "blob:https://user:secret@example.test/photo")!) == nil)
   }
 
   @Test func photoSourcesRequireAccountEvidenceAndKeepBlobImagesOnTheirOrigin() throws {
@@ -102,6 +108,7 @@ struct SessionAccountPageTests {
     }
     for source in [
       "blob:https://other.example.test/fixture-photo", "blob:http://www.icloud.com/fixture-photo",
+      "blob:https://user:secret@www.icloud.com/fixture-photo",
       "http://images.example.test/avatar.png", "data:image/png;base64,AAAA", "relative-photo.png",
     ] {
       let body = try snapshot(url: page, email: "alex@example.test", photo: source)

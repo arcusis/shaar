@@ -7,6 +7,49 @@ import BrowserCore
 import ChromiumBridge
 import SwiftUI
 
+private final class DownloadDirectoryContinuation: @unchecked Sendable {
+  private enum State {
+    case waiting
+    case installed(CheckedContinuation<URL?, any Error>)
+    case finished(Result<URL?, any Error>)
+  }
+
+  private let lock = NSLock()
+  private var state = State.waiting
+
+  func install(_ continuation: CheckedContinuation<URL?, any Error>) {
+    lock.lock()
+    switch state {
+    case .waiting:
+      state = .installed(continuation)
+      lock.unlock()
+    case .installed:
+      lock.unlock()
+      preconditionFailure("A download directory continuation can only be installed once.")
+    case .finished(let result):
+      lock.unlock()
+      continuation.resume(with: result)
+    }
+  }
+
+  func resume(_ result: Result<URL?, any Error>) {
+    lock.lock()
+    let continuation: CheckedContinuation<URL?, any Error>?
+    switch state {
+    case .waiting:
+      state = .finished(result)
+      continuation = nil
+    case .installed(let installed):
+      state = .finished(result)
+      continuation = installed
+    case .finished:
+      continuation = nil
+    }
+    lock.unlock()
+    continuation?.resume(with: result)
+  }
+}
+
 enum BrowserMenuCommand: String, CaseIterable {
   case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
     closeWindow,
@@ -142,18 +185,29 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     -> ProfileDownloadDirectoryApplier
   {
     { profileID, directory in
-      try await withCheckedThrowingContinuation { continuation in
-        runtime.configureDownloadDirectory(directory, profileID: profileID.uuidString) {
-          acknowledged, error in
-          if let error {
-            continuation.resume(throwing: error)
-          } else if let acknowledged {
-            continuation.resume(returning: acknowledged)
-          } else {
-            continuation.resume(throwing: CocoaError(.fileWriteUnknown))
+      let gate = DownloadDirectoryContinuation()
+      let acknowledged = try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+          gate.install(continuation)
+          guard !Task.isCancelled else {
+            gate.resume(.failure(CancellationError()))
+            return
+          }
+          runtime.configureDownloadDirectory(directory, profileID: profileID.uuidString) {
+            acknowledged, error in
+            if let error {
+              gate.resume(.failure(error))
+            } else if let acknowledged {
+              gate.resume(.success(acknowledged))
+            } else {
+              gate.resume(.failure(CocoaError(.fileWriteUnknown)))
+            }
           }
         }
+      } onCancel: {
+        gate.resume(.failure(CancellationError()))
       }
+      return acknowledged
     }
   }
 

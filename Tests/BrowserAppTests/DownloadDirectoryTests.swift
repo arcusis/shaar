@@ -13,6 +13,23 @@ private final class DownloadDirectoryFailureSwitch {
   var enabled = true
 }
 
+@MainActor
+private final class PendingDownloadDirectoryRuntime: ARCShaarRuntime {
+  var completion: (@MainActor @Sendable (URL?, (any Error)?) -> Void)?
+
+  override func configureDownloadDirectory(
+    _ directory: URL?, profileID: String,
+    completion: @escaping @MainActor @Sendable (URL?, (any Error)?) -> Void
+  ) {
+    self.completion = completion
+  }
+}
+
+private actor DownloadDirectoryCompletionSignal {
+  private(set) var cancelled = false
+  func finish(cancelled: Bool) { self.cancelled = cancelled }
+}
+
 @Suite @MainActor
 struct DownloadDirectoryTests {
   @Test func defaultBackendDoesNotOfferFolderSelection() throws {
@@ -188,5 +205,30 @@ struct DownloadDirectoryTests {
     await #expect(throws: (any Error).self) {
       _ = try await apply(UUID(), URL(fileURLWithPath: "/tmp"))
     }
+  }
+
+  @Test func cancellingNativeDirectoryAcknowledgementDoesNotWaitForRuntimeReply() async throws {
+    let runtime = PendingDownloadDirectoryRuntime()
+    let apply = NativeBrowserHost.makeDownloadDirectoryApplier(runtime: runtime)
+    let signal = DownloadDirectoryCompletionSignal()
+    let task = Task {
+      do {
+        _ = try await apply(UUID(), URL(fileURLWithPath: "/tmp"))
+        await signal.finish(cancelled: false)
+      } catch is CancellationError {
+        await signal.finish(cancelled: true)
+      } catch {
+        await signal.finish(cancelled: false)
+      }
+    }
+    for _ in 0..<100 where runtime.completion == nil { await Task.yield() }
+    try #require(runtime.completion != nil)
+    task.cancel()
+    try await Task.sleep(for: .milliseconds(50))
+    let cancelledBeforeReply = await signal.cancelled
+    runtime.completion?(URL(fileURLWithPath: "/tmp"), nil)
+    await task.value
+
+    #expect(cancelledBeforeReply)
   }
 }

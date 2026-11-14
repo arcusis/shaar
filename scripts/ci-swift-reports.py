@@ -76,7 +76,12 @@ def write_reports(log: Path, directory: Path) -> None:
     suite = ET.Element("testsuite", name="XCTest", tests=str(len(cases)),
                        failures=str(failures), errors="0", skipped=str(skipped))
     suite.extend(cases)
-    ET.ElementTree(suite).write(directory / "xctest.xml", encoding="utf-8", xml_declaration=True)
+    report = directory / "xctest.xml"
+    if report.is_symlink():
+        raise ValueError(f"XCTest report path must not be a symlink: {report}")
+    if report.exists() and not report.is_file():
+        raise ValueError(f"XCTest report path is not a regular file: {report}")
+    ET.ElementTree(suite).write(report, encoding="utf-8", xml_declaration=True)
     # Some toolchains also emit XCTest XML here. The validated conversion owns
     # that provider's report, so retain one copy of each test rather than two.
     (directory / "swift.xml").unlink(missing_ok=True)

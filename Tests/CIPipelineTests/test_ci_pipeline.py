@@ -1123,6 +1123,20 @@ class SwiftReportTests(unittest.TestCase):
         self.assertEqual(cases[0].attrib["time"], "0.125")
         self.assertIn("authored diagnostic", cases[0].find("failure").text)
 
+    def test_xctest_report_rejects_symlink_without_overwriting_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript())
+            target = directory / "outside.xml"
+            target.write_text("preserve this", encoding="utf-8")
+            (directory / "xctest.xml").symlink_to(target)
+
+            with self.assertRaisesRegex(ValueError, "XCTest report path must not be a symlink"):
+                SWIFT_REPORTS.write_reports(log, directory)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve this")
+
     def test_truncated_unpaired_and_mismatched_xctest_logs_fail(self):
         malformed = (self.transcript().split("Test Case", 1)[0],
                      self.transcript().replace(" started.\n", "\n"),

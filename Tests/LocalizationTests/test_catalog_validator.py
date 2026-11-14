@@ -593,6 +593,13 @@ class CatalogValidatorTests(unittest.TestCase):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorAudit.swift").read_text(encoding="utf-8")
         self.assertIn("Self.failureMessage(for: error)", source)
 
+    def test_inspector_details_backend_failures_use_hebrew_recovery_copy(self):
+        key = "Inspector details could not be loaded. Try again."
+        catalog = json.loads((ROOT / "Sources/BrowserCore/Resources/InspectorDetails.xcstrings").read_text(encoding="utf-8"))["strings"]
+        self.assertEqual(catalog[key]["localizations"]["he"]["stringUnit"]["value"], "לא ניתן לטעון את פרטי כלי הפיתוח. כדאי לנסות שוב.")
+        source = (ROOT / "Sources/ArcusisBrowser/InspectorDetailsModel.swift").read_text(encoding="utf-8")
+        self.assertEqual(source.count("Self.failureMessage(for: error)"), 3)
+
     def test_source_reference_scanner_covers_ternary_keys_and_swift_escapes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

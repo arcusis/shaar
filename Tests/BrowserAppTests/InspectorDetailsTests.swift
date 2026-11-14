@@ -15,6 +15,15 @@ import Testing
     #expect(!InspectorComponentAccessibility.traits(isSelected: false).contains(.isSelected))
   }
 
+  @Test func backendFailuresUseLocalizedInspectorDetailsRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorDetailsModel.failureMessage(for: error)
+        == InspectorDetailsL10n.string("Inspector details could not be loaded. Try again."))
+    let known = InspectorFailure("This asset is no longer selected.")
+    #expect(InspectorDetailsModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
   @Test func componentSnapshotsValidateIdentityAndRenderFrameworkData() async throws {
     let inspector = try makeInspector(tab: .component)
     defer { inspector.close() }

@@ -20,6 +20,11 @@ struct InspectorDetailsL10nTests {
     #expect(InspectorDetailsL10n.display(rendererMessage, language: .hebrew) == rendererMessage)
   }
 
+  @Test func inspectorForwardChevronMirrorsInRightToLeftLayout() {
+    #expect(InspectorL10n.forwardChevron(isRightToLeft: false) == "chevron.right")
+    #expect(InspectorL10n.forwardChevron(isRightToLeft: true) == "chevron.left")
+  }
+
   @Test func ltrTextIsIsolatedFromSurroundingRightToLeftCopy() {
     let value = "https://example.test/path?q=שלום"
     #expect(InspectorDetailsL10n.ltr(value) == "\u{2066}\(value)\u{2069}")

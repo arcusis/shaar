@@ -229,7 +229,7 @@ final class BrowserSettingsState {
 
   @discardableResult
   func applyDownloadDirectory(_ directory: URL?, for profileID: UUID) async -> Bool {
-    guard downloadDirectorySettingsEnabled,
+    guard !Task.isCancelled, downloadDirectorySettingsEnabled,
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }),
       let applyDownloadDirectoryToEngine
     else { return false }
@@ -244,6 +244,12 @@ final class BrowserSettingsState {
     }
     do {
       let acknowledged = try await applyDownloadDirectoryToEngine(profileID, directory)
+      guard !Task.isCancelled else {
+        if downloadDirectoryRequests[profileID] == request {
+          downloadDirectoryRequests[profileID] = nil
+        }
+        return false
+      }
       guard downloadDirectoryRequests[profileID] == request else { return false }
       guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
         downloadDirectoryRequests[profileID] = nil
@@ -260,6 +266,11 @@ final class BrowserSettingsState {
       downloadDirectoryRevision &+= 1
       downloadDirectoryRequests[profileID] = nil
       return true
+    } catch is CancellationError {
+      if downloadDirectoryRequests[profileID] == request {
+        downloadDirectoryRequests[profileID] = nil
+      }
+      return false
     } catch {
       guard downloadDirectoryRequests[profileID] == request else { return false }
       downloadDirectoryErrors[profileID] = SettingsL10n.string(

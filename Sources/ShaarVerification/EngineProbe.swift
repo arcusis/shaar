@@ -16,6 +16,7 @@ enum EngineProbeMeasurementArguments {
   static let supportedCounts: Set<Int> = [1, 10, 30, 50, 100]
 
   static func tabCount(in arguments: [String]) -> Int? {
+    guard arguments.filter({ $0 == flag }).count == 1 else { return nil }
     guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
       return nil
     }

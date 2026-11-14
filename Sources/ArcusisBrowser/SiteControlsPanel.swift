@@ -222,6 +222,13 @@ struct SitePermissionRow: View {
   let saving: Bool
   let setAllowed: (Bool) -> Void
 
+  static func askStateValue(
+    for value: SitePermissionValue?, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String? {
+    guard value == .ask else { return nil }
+    return BrowserLocalization.string("Asks first", table: "Shell", language: language)
+  }
+
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: permission.symbol)
@@ -242,14 +249,25 @@ struct SitePermissionRow: View {
         .help(permission.help)
         .accessibilityLabel(permission.title)
         .accessibilityHint(permission.help)
-        .accessibilityValue(
-          Self.accessibilityValue(for: value) ?? "", isEnabled: value == .ask)
+        .modifier(SitePermissionAskStateValue(value: value))
     }
     .hoverRowBackground()
   }
 
   static func accessibilityValue(for value: SitePermissionValue?) -> String? {
     value == .ask ? SettingsL10n.string("Ask") : nil
+  }
+}
+
+private struct SitePermissionAskStateValue: ViewModifier {
+  let value: SitePermissionValue?
+
+  @ViewBuilder func body(content: Content) -> some View {
+    if let value = SitePermissionRow.askStateValue(for: value) {
+      content.accessibilityValue(Text(value))
+    } else {
+      content
+    }
   }
 }
 

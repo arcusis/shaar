@@ -32,8 +32,10 @@ public enum CleanLink {
     }
     components.user = nil
     components.password = nil
-    components.queryItems = kept?.isEmpty == true ? nil : kept
-    components.path = cleanedPath
+    if kept?.count != components.queryItems?.count {
+      components.queryItems = kept?.isEmpty == true ? nil : kept
+    }
+    if cleanedPath != components.path { components.path = cleanedPath }
     return components.url ?? url
   }
 

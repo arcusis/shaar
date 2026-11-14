@@ -234,8 +234,14 @@ enum ExtensionIconLoader {
     guard
       let folder = try? FileManager.default.contentsOfDirectory(
         at: root, includingPropertiesForKeys: nil
-      ).first(where: { $0.lastPathComponent.hasPrefix("\(version)_") }),
-      let data = try? Data(contentsOf: folder.appending(path: "manifest.json")),
+      ).first(where: { $0.lastPathComponent.hasPrefix("\(version)_") })
+    else { return nil }
+    let manifestURL = folder.appending(path: "manifest.json")
+    guard
+      let manifestValues = try? manifestURL.resourceValues(
+        forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+      manifestValues.isRegularFile == true, manifestValues.isSymbolicLink != true,
+      let data = try? Data(contentsOf: manifestURL),
       let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let relative = largestIcon(in: manifest)
     else { return nil }

@@ -37,6 +37,16 @@ private final class FakePanelEngine: ShaarDevToolsSubmitting, @unchecked Sendabl
   }
 }
 
+private struct BooleanSchemaNetworkRulesReplyEngine: ShaarDevToolsSubmitting {
+  func submit(
+    _ request: ShaarDevToolsRequest,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    completion(.success(Data(#"{"schemaVersion":true}"#.utf8)))
+    return 1
+  }
+}
+
 @Suite("Shaar DevTools panel")
 struct DevToolsPanelTests {
   private let regular = ShaarNavigationScope(profileID: "profile-a")
@@ -386,6 +396,25 @@ struct DevToolsPanelTests {
       ) { _ in }
     }
     #expect(fake.request == nil)
+  }
+
+  @Test func networkRulesRejectBooleanReplySchemaVersion() async throws {
+    let adapter = try #require(
+      ShaarDevToolsAdapter(implementation: .shaar, engine: BooleanSchemaNetworkRulesReplyEngine()))
+    await #expect(throws: ShaarEngineError.self) {
+      try await withCheckedThrowingContinuation {
+        (continuation: CheckedContinuation<Void, Error>) in
+        do {
+          _ = try adapter.setPanelNetworkRules(
+            [], leaseID: 42, scope: regular, windowID: "window-a", tabID: "tab-a"
+          ) { result in
+            continuation.resume(with: result.map { _ in () }.mapError { $0 as Error })
+          }
+        } catch {
+          continuation.resume(throwing: error)
+        }
+      }
+    }
   }
 
   @Test func phase2FixtureUsesFixedCommandAndScopedLease() throws {

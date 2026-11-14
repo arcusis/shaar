@@ -1307,16 +1307,6 @@
         }
       }
     },
-    "Could not clear history. Try again.": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "לא ניתן למחוק את ההיסטוריה. כדאי לנסות שוב."
-          }
-        }
-      }
-    },
     "Unknown": {
       "localizations": {
         "he": {

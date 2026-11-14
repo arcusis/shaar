@@ -11,6 +11,16 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum QuitExitProbeEvidence {
+  static func backgroundModeIsOff(_ state: [String: Any]) -> Bool {
+    guard let mode = state["background_mode"] as? [String: Any],
+      let enabled = mode["enabled"] as? NSNumber,
+      CFGetTypeID(enabled) == CFBooleanGetTypeID()
+    else { return false }
+    return !enabled.boolValue
+  }
+}
+
 /// Quits through the production host's Quit menu command with an MV3 extension installed. The
 /// parent fixture times main and helper process exit from the checkpoint written here; this
 /// probe records Chromium's keep-alive registry until the engine loop ends. With a pending

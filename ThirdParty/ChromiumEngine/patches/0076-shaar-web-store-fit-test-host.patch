@@ -1,7 +1,7 @@
 diff --git a/chrome/browser/shaar/extensions/shaar_extensions.cc b/chrome/browser/shaar/extensions/shaar_extensions.cc
 --- a/chrome/browser/shaar/extensions/shaar_extensions.cc
 +++ b/chrome/browser/shaar/extensions/shaar_extensions.cc
-@@ -209,6 +209,13 @@
+@@ -213,6 +213,13 @@
  bool ShouldListLocation(extensions::mojom::ManifestLocation location) {
    return !extensions::Manifest::IsComponentLocation(location);
  }
@@ -15,7 +15,7 @@ diff --git a/chrome/browser/shaar/extensions/shaar_extensions.cc b/chrome/browse
  }  // namespace shaar::extensions_host
  
  bool SharedHomeVersionSatisfied(std::string_view installed,
-@@ -327,10 +334,14 @@
+@@ -350,10 +357,14 @@
        return Fail(SHAAR_WRONG_PROFILE, "Web Store tab scope mismatch", error);
      const GURL& committed = contents->GetLastCommittedURL();
      const GURL& visible = contents->GetVisibleURL();

@@ -539,7 +539,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0076-shaar-web-store-fit-test-host.patch",
-      "sha256": "73abc9427b657390b9e4c97263cb3e4d20fef1c877cd789163aac16323406018"
+      "sha256": "97d51aece4a34d1e399f4e56ee159bcfb91347be2724930afcf42647fbe496ab"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0080-shaar-download-readiness.patch",
@@ -563,7 +563,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0141-blink-hidden-resize-event-dispatch.patch",
-      "sha256": "2d58c620cf64e57c1aca6ccc2ae18f037c468ae0092b40cf0b59b1a0a3bacabf"
+      "sha256": "6d4d804239fec33303b23285362526821026fce59651f415b65a9c5cf66ab3ea"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0143-blink-hidden-scroll-snap-event-dispatch.patch",
@@ -583,7 +583,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0121-shaar-print-menu-native-panel.patch",
-      "sha256": "3dbe2038779894fa2452a26e652cdf2691ca0997aedb1e123fa14ef0b7bfd422"
+      "sha256": "0468ee3eeb2fb1f427d95150507d2576bbaf8ccd347b94448717a22e88496402"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0122-shaar-print-selection-option.patch",
@@ -591,7 +591,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0085-shaar-javascript-dialogs.patch",
-      "sha256": "7b3d872131a33238308eda0bfccad9d1bcaf46e4423e24cf2cc6f6926648f191"
+      "sha256": "6b3badb4deae23b6c5561873864ff913c116036523bc798a584caed3d7f76fc9"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0090-shaar-registered-mailto-handler.patch",

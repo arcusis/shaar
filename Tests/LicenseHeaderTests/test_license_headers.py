@@ -65,6 +65,13 @@ class LicenseHeaderTests(unittest.TestCase):
         self.assertEqual(check_license_headers.files_missing_notice(self.root, [Path("linked.py")]),
                          [Path("linked.py")])
 
+    def test_invalid_utf8_tracked_source_is_reported_as_missing_notice(self):
+        (self.root / "broken.py").write_bytes(b"# invalid: \xff\n")
+        self.assertEqual(
+            check_license_headers.files_missing_notice(self.root, [Path("broken.py")]),
+            [Path("broken.py")],
+        )
+
     def test_skips_third_party_and_other_file_types(self):
         missing = self._missing({
             "ThirdParty/Vendor/vendor.swift": "import Foundation\n",

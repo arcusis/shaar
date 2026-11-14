@@ -198,6 +198,24 @@ class DevToolsFrontend157Tests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "Missing overlay"):
                 stage.stage(overlay, destination)
 
+    def test_stage_rejects_symlinked_destination(self):
+        stage = load_stage()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / "external"
+            external.mkdir()
+            sentinel = external / "keep.txt"
+            sentinel.write_text("leave untouched")
+            destination = root / "front_end" / "panels" / "shaar"
+            destination.parent.mkdir(parents=True)
+            destination.symlink_to(external, target_is_directory=True)
+
+            with self.assertRaisesRegex(SystemExit, "destination.*symlink"):
+                stage.stage(PANEL, destination)
+
+            self.assertEqual(list(external.iterdir()), [sentinel])
+            self.assertEqual(sentinel.read_text(), "leave untouched")
+
 
 if __name__ == "__main__":
     unittest.main()

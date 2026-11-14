@@ -29,6 +29,53 @@ with patch.dict(sys.modules, {"ds_store": DS_STORE_STUB, "mac_alias": MAC_ALIAS_
 
 
 class DependencyPinTests(unittest.TestCase):
+    @staticmethod
+    def assert_exact_package_pins(test_case, manifest, resolved):
+        declarations = re.findall(r"\.package\((.*?)\)", manifest, re.DOTALL)
+        external = []
+        for declaration in declarations:
+            if "url:" not in declaration:
+                continue
+            match = re.fullmatch(
+                r'\s*url:\s*"([^"]+)"\s*,\s*exact:\s*"([^"]+)"\s*',
+                declaration,
+            )
+            test_case.assertIsNotNone(
+                match, f"external SwiftPM dependency must use an exact version: {declaration}"
+            )
+            external.append((match.group(1), match.group(2)))
+
+        pins = resolved.get("pins")
+        test_case.assertIsInstance(pins, list)
+        for location, version in external:
+            matching = [pin for pin in pins if pin.get("location") == location]
+            test_case.assertEqual(len(matching), 1, f"missing unique lockfile pin for {location}")
+            state = matching[0].get("state", {})
+            test_case.assertEqual(state.get("version"), version, location)
+            test_case.assertRegex(state.get("revision", ""), r"^[0-9a-f]{40}$", location)
+            test_case.assertNotIn("branch", state, location)
+
+        for pin in pins:
+            state = pin.get("state", {})
+            test_case.assertTrue(state.get("version"), f"lockfile pin is not versioned: {pin}")
+            test_case.assertRegex(state.get("revision", ""), r"^[0-9a-f]{40}$", pin.get("identity"))
+            test_case.assertNotIn("branch", state, pin.get("identity"))
+
+    def test_every_external_swift_package_dependency_matches_an_exact_lockfile_pin(self):
+        self.assert_exact_package_pins(
+            self,
+            (REPO / "Package.swift").read_text(),
+            json.loads((REPO / "Package.resolved").read_text()),
+        )
+
+    def test_dependency_pin_guard_rejects_floating_manifest_requirements(self):
+        with self.assertRaisesRegex(AssertionError, "must use an exact version"):
+            self.assert_exact_package_pins(
+                self,
+                'dependencies: [.package(url: "https://example.test/Lib", from: "1.2.3")]',
+                {"pins": []},
+            )
+
     def test_dmg_layout_generator_rejects_symlink_output_without_touching_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

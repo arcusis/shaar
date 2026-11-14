@@ -616,6 +616,10 @@
       "sha256": "939dcacf56a62df2ce20c3a827db1f7c6ef10c73a8d73c738ae66fd05b723854"
     },
     {
+      "file": "ThirdParty/ChromiumEngine/patches/0122-shaar-print-selection-option.patch",
+      "sha256": "e8f0d31bfe15c563d81619d95d81e71a34dbde581857f075789a3b23e098aaed"
+    },
+    {
       "file": "ThirdParty/ChromiumEngine/patches/0085-shaar-javascript-dialogs.patch",
       "sha256": "e2ebd08d3ff8f62b413fb593c7ea2203a32fe4fb8fb17b4233b92b8f4035618f"
     },

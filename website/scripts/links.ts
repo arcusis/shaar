@@ -23,7 +23,7 @@ export function localTarget(root: string, url: URL): string | undefined {
   return options.find((option) => existsSync(option) && statSync(option).isFile());
 }
 
-function cssImportURLs(css: string): string[] {
+function cssAssetURLs(css: string): string[] {
   const urls: string[] = [];
   let position = 0;
   while (position < css.length) {
@@ -32,9 +32,10 @@ function cssImportURLs(css: string): string[] {
       position = end === -1 ? css.length : end + 2;
       continue;
     }
-    if (css[position] === "'" || css[position] === '"') {
-      const quote = css[position++];
-      while (position < css.length && css[position] !== quote) {
+    const character = css[position];
+    if (character === "'" || character === '"') {
+      position++;
+      while (position < css.length && css[position] !== character) {
         if (css[position] === "\\") position++;
         position++;
       }
@@ -64,6 +65,37 @@ function cssImportURLs(css: string): string[] {
         }
         urls.push(css.slice(start, argument));
         position = argument + 1;
+        continue;
+      }
+    }
+    const previous = css[position - 1] ?? "";
+    if (
+      css.slice(position, position + 3).toLowerCase() === "url" &&
+      !/[\w-]/.test(previous) &&
+      !/[\w-]/.test(css[position + 3] ?? "")
+    ) {
+      let argument = position + 3;
+      while (/\s/.test(css[argument] ?? "")) argument++;
+      if (css[argument] === "(") {
+        argument++;
+        while (/\s/.test(css[argument] ?? "")) argument++;
+        const quote = css[argument] === "'" || css[argument] === '"' ? css[argument] : "";
+        if (quote) argument++;
+        const start = argument;
+        if (quote) {
+          while (argument < css.length && css[argument] !== quote) {
+            if (css[argument] === "\\") argument++;
+            argument++;
+          }
+          urls.push(css.slice(start, argument));
+          if (css[argument] === quote) argument++;
+          while (/\s/.test(css[argument] ?? "")) argument++;
+          position = css[argument] === ")" ? argument + 1 : argument;
+        } else {
+          while (argument < css.length && css[argument] !== ")") argument++;
+          urls.push(css.slice(start, argument).trim());
+          position = argument + 1;
+        }
         continue;
       }
     }
@@ -171,13 +203,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {
-    const css = readFileSync(file, "utf8");
-    for (const match of css.matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
-      const url = new URL(match[1], siteOrigin);
-      if (url.origin !== siteOrigin || !localTarget(root, url))
-        errors.push(`${relative(root, file)}: missing/nonlocal CSS asset ${match[1]}`);
-    }
-    for (const value of cssImportURLs(css)) {
+    for (const value of cssAssetURLs(readFileSync(file, "utf8"))) {
       let url: URL;
       try {
         url = new URL(value, siteOrigin);

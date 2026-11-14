@@ -262,3 +262,17 @@ test("link checker reports malformed quoted CSS imports", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker ignores CSS URLs inside comments", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
+    writeFileSync(
+      join(root, "styles.css"),
+      `/* url("/removed-image.png") */ body::before { content: "url('/also-not-a-resource.png')"; }`,
+    );
+    assert.deepEqual(checkLinks(root).errors, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -185,6 +185,46 @@ struct ExtensionManagementTests {
     #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
   }
 
+  @Test @MainActor func iconLoaderRejectsIconSymlinksOutsideTheExtensionFolder() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/2.1_0")
+    try FileManager.default.createDirectory(
+      at: folder.appending(path: "icons"), withIntermediateDirectories: true)
+    let externalIcon = root.appending(path: "private.png")
+    try png(size: 32).write(to: externalIcon)
+    try FileManager.default.createSymbolicLink(
+      at: folder.appending(path: "icons/private.png"), withDestinationURL: externalIcon)
+    try Data(#"{"icons":{"32":"icons/private.png"}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: root) == nil)
+  }
+
+  @Test @MainActor func iconLoaderRejectsSymlinkedExtensionAndVersionFolders() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let extensions = root.appending(path: "Extensions", directoryHint: .isDirectory)
+    let externalFolder = root.appending(path: "Outside/\(validID)/2.1_0")
+    try FileManager.default.createDirectory(
+      at: externalFolder, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: extensions, withIntermediateDirectories: true)
+    try png(size: 16).write(to: externalFolder.appending(path: "icon.png"))
+    try Data(#"{"icons":{"16":"icon.png"}}"#.utf8)
+      .write(to: externalFolder.appending(path: "manifest.json"))
+
+    let extensionLink = extensions.appending(path: validID, directoryHint: .isDirectory)
+    try FileManager.default.createSymbolicLink(
+      at: extensionLink, withDestinationURL: externalFolder.deletingLastPathComponent())
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: extensions) == nil)
+
+    try FileManager.default.removeItem(at: extensionLink)
+    let versionLink = extensionLink.appending(path: "2.1_0", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: extensionLink, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: versionLink, withDestinationURL: externalFolder)
+    #expect(ExtensionIconLoader.icon(for: validID, version: "2.1", in: extensions) == nil)
+  }
+
   @Test func unpackedFolderRequiresAManifestV3Directory() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

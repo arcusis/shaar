@@ -231,13 +231,19 @@ enum ExtensionIconLoader {
     -> NSImage?
   {
     guard BrowserExtension.isValidID(extensionID) else { return nil }
+    let resolvedExtensionsDirectory = extensionsDirectory.resolvingSymlinksInPath()
+      .standardizedFileURL
     let root = extensionsDirectory.appending(path: extensionID, directoryHint: .isDirectory)
+    let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL
+    guard Self.isContained(resolvedRoot, in: resolvedExtensionsDirectory) else { return nil }
     guard
       let folder = try? FileManager.default.contentsOfDirectory(
         at: root, includingPropertiesForKeys: nil
       ).first(where: { $0.lastPathComponent.hasPrefix("\(version)_") })
     else { return nil }
-    let manifestURL = folder.appending(path: "manifest.json")
+    let resolvedFolder = folder.resolvingSymlinksInPath().standardizedFileURL
+    guard Self.isContained(resolvedFolder, in: resolvedRoot) else { return nil }
+    let manifestURL = resolvedFolder.appending(path: "manifest.json")
     guard
       let manifestValues = try? manifestURL.resourceValues(
         forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
@@ -246,11 +252,22 @@ enum ExtensionIconLoader {
       let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let relative = largestIcon(in: manifest)
     else { return nil }
-    let file = folder.appending(path: relative).standardizedFileURL.resolvingSymlinksInPath()
-    let resolvedFolder = folder.standardizedFileURL.resolvingSymlinksInPath()
+    let file = resolvedFolder.appending(path: relative).standardizedFileURL
     // Manifest paths are untrusted; never read outside the extension's own folder.
-    guard file.path.hasPrefix(resolvedFolder.path + "/") else { return nil }
-    return NSImage(contentsOf: file)
+    guard Self.isContained(file, in: resolvedFolder) else { return nil }
+    let resolvedFile = file.resolvingSymlinksInPath().standardizedFileURL
+    guard Self.isContained(resolvedFile, in: resolvedFolder),
+      let values = try? resolvedFile.resourceValues(forKeys: [.isRegularFileKey]),
+      values.isRegularFile == true
+    else { return nil }
+    return NSImage(contentsOf: resolvedFile)
+  }
+
+  private static func isContained(_ child: URL, in parent: URL) -> Bool {
+    let parentPath = parent.standardizedFileURL.path
+    let childPath = child.standardizedFileURL.path
+    let prefix = parentPath.hasSuffix("/") ? parentPath : parentPath + "/"
+    return childPath != parentPath && childPath.hasPrefix(prefix)
   }
 
   private static func largestIcon(in manifest: [String: Any]) -> String? {

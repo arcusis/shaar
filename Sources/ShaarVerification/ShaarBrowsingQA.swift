@@ -980,7 +980,7 @@ import Foundation
 
   static func playbackStarted(_ value: String?) -> Bool {
     guard let evidence = playbackEvidence(value),
-      let paused = evidence["paused"] as? Bool,
+      let paused = jsonBoolean(evidence["paused"]),
       let width = integer(evidence["width"]),
       let error = integer(evidence["error"])
     else { return false }
@@ -1162,7 +1162,7 @@ import Foundation
       error = nil
     }
     if let error, error != 0 { return true }
-    guard let paused = evidence["paused"] as? Bool,
+    guard let paused = jsonBoolean(evidence["paused"]),
       let width = integer(evidence["width"])
     else { return false }
     return !paused && width > 0
@@ -1173,6 +1173,13 @@ import Foundation
       CFGetTypeID(number) != CFBooleanGetTypeID()
     else { return nil }
     return number as? Int
+  }
+
+  private static func jsonBoolean(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    else { return nil }
+    return number.boolValue
   }
 
   private static func playbackEvidence(_ value: String?) -> [String: Any]? {

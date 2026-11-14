@@ -42,4 +42,11 @@ import Testing
     #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":3}"))
     #expect(ShaarBrowsingQA.playbackStarted("{\"paused\":false,\"width\":320,\"error\":0}"))
   }
+
+  @Test func playbackVerdictRejectsNumericPausedValues() {
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":0,\"width\":320,\"error\":0}"))
+    #expect(!ShaarBrowsingQA.playbackStarted("{\"paused\":1,\"width\":320,\"error\":0}"))
+    #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":0,\"width\":320}"))
+    #expect(!ShaarBrowsingQA.playbackSettled("{\"paused\":1,\"width\":320}"))
+  }
 }

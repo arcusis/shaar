@@ -82,6 +82,28 @@ import Testing
     }
   }
 
+  @Test func splitShellAuditRequiresTwoVisibleAttachedPagesInTheWindow() {
+    let valid: [String: Any] = [
+      "stage": "split", "containerCount": 2,
+      "attachedContainerCount": 2, "attachedPagesInWindowCount": 2,
+      "visiblePagesInWindowCount": 2, "layerBacked": [true, true],
+      "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
+    ]
+    #expect(PrivateMultiTabEvidence.splitShellAudit(valid))
+    for key in valid.keys {
+      var missing = valid
+      missing.removeValue(forKey: key)
+      #expect(!PrivateMultiTabEvidence.splitShellAudit(missing))
+    }
+    var detachedPane = valid
+    detachedPane["attachedPagesInWindowCount"] = 1
+    #expect(!PrivateMultiTabEvidence.splitShellAudit(detachedPane))
+    var hiddenPane = valid
+    hiddenPane["visiblePagesInWindowCount"] = 1
+    #expect(!PrivateMultiTabEvidence.splitShellAudit(hiddenPane))
+  }
+
   @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
     let valid: [String: Any] = [
       "stage": "first-blank", "nativeViewPresent": true,

@@ -118,6 +118,18 @@ class NotebookLinksTests(unittest.TestCase):
             "Target.md": "# Root target",
         })
         self.assertEqual(result.returncode, 0, result.stderr)
+    def test_non_directory_notebook_argument_gets_a_direct_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "notebook.md"
+            path.write_text("# Not a vault", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--notebook", str(path)],
+                cwd=directory, capture_output=True, text=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Notebook path is not a directory:", result.stderr)
+            self.assertNotIn("No _INDEX_*.md files found", result.stderr)
 
 
 if __name__ == "__main__":

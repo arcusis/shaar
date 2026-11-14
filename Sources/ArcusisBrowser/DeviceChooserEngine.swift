@@ -7,8 +7,14 @@ import Foundation
 extension BrowserEngine {
   func receiveDeviceChooser(_ payload: [String: Any]) {
     guard let id = payload["id"] as? String, let kind = payload["kind"] as? String else { return }
-    guard payload["windowID"] as? String == windowID, let store else {
+    guard payload["windowID"] as? String == windowID else {
       if kind == "deviceChooserRequested" {
+        events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
+      }
+      return
+    }
+    guard let store else {
+      if kind != "deviceChooserDismissed" {
         events.resolveDeviceChooser(id, windowID: windowID, optionID: nil)
       }
       return

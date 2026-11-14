@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class ChromiumBackendEventContractTests(unittest.TestCase):
     def test_event_is_validated_before_borrowed_fields_are_read(self):
         source = (ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm").read_text()
+        self.assertIn("BOOL ShaarEventHasValidSlices(", source)
         helper = source.split("BOOL ShaarEventHasValidSlices(", 1)[1].split("\n}", 1)[0]
         self.assertIn("event->size < sizeof(*event)", helper)
         for field in ("profile_id", "session_id", "window_id", "tab_id", "payload_json"):

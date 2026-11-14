@@ -101,10 +101,20 @@ def contains_cstring(path: Path, needle: str) -> bool:
             previous = window[-extra:]
 
 
+def receipt_output_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_symlink():
+        raise argparse.ArgumentTypeError(f"receipt output must not be a symlink: {path}")
+    if path.parent.is_symlink():
+        raise argparse.ArgumentTypeError(f"receipt output parent must not be a symlink: {path.parent}")
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
-    parser.add_argument("--receipt", type=Path, default=ROOT / "build/passkey-availability/receipt.json")
+    parser.add_argument("--receipt", type=receipt_output_path,
+                        default=ROOT / "build/passkey-availability/receipt.json")
     options = parser.parse_args()
     executable = options.app / "Contents/MacOS/ShaarVerification"
     framework = (

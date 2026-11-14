@@ -312,7 +312,11 @@ final class ProfilePrivacyModel {
     failure = nil
     message = nil
     defer { busy = false }
-    do { try await operation() } catch {
+    do {
+      try await operation()
+      guard !Task.isCancelled else { return }
+    } catch {
+      guard !Task.isCancelled else { return }
       if error is ProfilePermissionDataError {
         failure = error.localizedDescription
       } else {

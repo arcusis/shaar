@@ -224,6 +224,24 @@ struct ProfilePrivacyTests {
     #expect(current.sites.isEmpty && current.profileID == second)
   }
 
+  @Test func cancelledClearDoesNotPublishItsLateFailure() async {
+    let backend = ProfileSettingsStub()
+    let profile = UUID()
+    backend.delayedProfile = profile
+    let model = ProfilePrivacyModel(profileID: profile, backend: backend)
+    let clear = Task { await model.clear(siteData: false) }
+    while backend.loadContinuation == nil { await Task.yield() }
+
+    clear.cancel()
+    backend.failureAction = "cache"
+    backend.loadContinuation?.resume()
+    await clear.value
+
+    #expect(model.failure == nil)
+    #expect(model.message == nil)
+    #expect(!model.busy)
+  }
+
   @Test func engineFailureNeverReportsClearOrRevokeSuccess() async {
     let backend = ProfileSettingsStub()
     let id = UUID()

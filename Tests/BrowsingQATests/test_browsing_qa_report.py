@@ -154,6 +154,15 @@ class BrowsingQAReportTests(unittest.TestCase):
         notes = PROBE.row_notes({"rows": [{"status": ["fail"]}]}, "")
         self.assertIn("malformed scenario row status", notes.lower())
 
+    def test_visible_window_evidence_cannot_pass_the_scenario(self):
+        for visible in (False, 0, "false"):
+            with self.subTest(visible=visible):
+                report = {
+                    "passed": True, "rows": [{"status": "pass"}],
+                    "allWindowsHidden": visible,
+                }
+                self.assertEqual(PROBE.scenario_result(report, 0, False, []), "fail")
+
     def test_deliberate_renderer_kill_matches_pid_and_time(self):
         finished = datetime(2026, 11, 10, 12, 0, 30, tzinfo=timezone.utc)
         report = {"rows": [

@@ -111,6 +111,8 @@ def scenario_result(report: dict, exit_code: int | None, timed_out: bool, crashe
         return "fail"
     if "passed" not in report:
         return "fail"
+    if "allWindowsHidden" in report and report["allWindowsHidden"] is not True:
+        return "fail"
     rows = report.get("rows")
     if not isinstance(rows, list) or not rows:
         return "fail"

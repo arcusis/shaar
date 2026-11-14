@@ -234,6 +234,27 @@ struct SharedExtensionSettingsTests {
     #expect(model.error == nil)
   }
 
+  @Test @MainActor func cancelledReconcileDoesNotStartExtensionRequests() async throws {
+    let profileID = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try Data(
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+    ).write(to: file)
+    let transport = SettingsExtensionsTransport(profiles: [profileID: true])
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+
+    let reconcile = Task { @MainActor in await model.reconcile(profileID: profileID) }
+    reconcile.cancel()
+    await reconcile.value
+
+    let calls = await transport.calls
+    #expect(calls.isEmpty)
+  }
+
   @Test @MainActor func listFailureExplainsWhyExtensionsAreMissing() async throws {
     let profileID = UUID()
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")

@@ -67,6 +67,11 @@ enum FirstRunStep: Int, CaseIterable {
 }
 
 struct FirstRunSetupView: View {
+  static func progressAccessibilityLabel(for step: FirstRunStep) -> String {
+    SettingsL10n.format(
+      "Step %d of %d", .integer(step.rawValue + 1), .integer(FirstRunStep.allCases.count))
+  }
+
   let store: BrowserStore
   let location: FirstRunLocation
   let onFinish: () -> Void
@@ -150,7 +155,9 @@ struct FirstRunSetupView: View {
       }
     }
     .padding(.horizontal, 36).padding(.top, 30)
-    .accessibilityHidden(true)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(Self.progressAccessibilityLabel(for: step))
+    .accessibilityAddTraits(.updatesFrequently)
   }
 
   private static var brandIcon: NSImage {

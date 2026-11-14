@@ -66,6 +66,9 @@ struct InspectorDetailsView: View {
             InspectorDetailsL10n.format(
               "Inspect %1$@ data", arguments: [.string(branch.entry.name)]
             ))
+            .accessibilityAddTraits(
+              InspectorComponentRowAccessibility.traits(
+                isSelected: model.selectedComponent == branch.id))
         }
         if let limit = tree.limit {
           Text(InspectorDetailsL10n.string(limit)).font(.system(size: 10))
@@ -336,6 +339,12 @@ struct InspectorDetailsView: View {
       let children = branches(entries, parent: entry.id, depth: depth + 1)
       return Branch(entry: entry, children: children.isEmpty ? nil : children)
     }
+  }
+}
+
+enum InspectorComponentRowAccessibility {
+  static func traits(isSelected: Bool) -> AccessibilityTraits {
+    isSelected ? .isSelected : []
   }
 }
 

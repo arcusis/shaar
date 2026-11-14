@@ -21,6 +21,9 @@ enum VerificationHarnessArguments {
       arguments.indices.contains(index + 2),
       let frameworksURL
     else { return nil }
+    guard !arguments[index + 1].hasPrefix("--"), !arguments[index + 2].hasPrefix("--") else {
+      return nil
+    }
     let remainder = arguments.indices.contains(index + 3) ? arguments[index + 3] : nil
     return VerificationHarnessLaunch(
       framework: frameworksURL.appending(path: "Chromium Framework.framework"),

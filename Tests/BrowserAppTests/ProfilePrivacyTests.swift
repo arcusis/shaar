@@ -12,6 +12,12 @@ import Testing
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func sitePermissionsLoadingLabelHasHebrewTranslation() {
+    #expect(
+      BrowserLocalization.string("Loading site permissions…", table: "Settings", language: .hebrew)
+        == "טעינת הרשאות אתרים…")
+  }
+
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
     let runtime = ARCShaarRuntime()
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())

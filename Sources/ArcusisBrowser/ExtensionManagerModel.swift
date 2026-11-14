@@ -143,20 +143,18 @@ final class ExtensionManagerModel {
     developerModeRequestID = request
     let previousValue = developerMode
     developerMode = enabled
-    status = nil
     preferences?.setExtensionDeveloperMode(enabled, for: profileID)
     submitDeveloperMode(enabled) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request,
-        self.statusRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .updated:
-        self.status = nil
+        self.updateStatus(nil, for: request)
       case .unsupported:
         self.restoreDeveloperMode(previousValue)
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .prompted, .failed:
         self.restoreDeveloperMode(previousValue)
-        self.status = ExtensionInstallNotice.developerModeFailed
+        self.updateStatus(ExtensionInstallNotice.developerModeFailed, for: request)
       }
     }
   }
@@ -165,17 +163,16 @@ final class ExtensionManagerModel {
     let request = beginStatusRequest()
     developerModeRequestID = request
     submitDeveloperMode(true) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request,
-        self.statusRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .updated:
-        self.status = nil
+        self.updateStatus(nil, for: request)
       case .unsupported:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .prompted, .failed:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.developerModeFailed
+        self.updateStatus(ExtensionInstallNotice.developerModeFailed, for: request)
       }
     }
   }
@@ -184,14 +181,13 @@ final class ExtensionManagerModel {
     let request = beginStatusRequest()
     developerModeRequestID = request
     guard developerMode else {
-      status = SettingsL10n.string("Turn on Developer mode to load an unpacked extension.")
+      updateStatus(SettingsL10n.string("Turn on Developer mode to load an unpacked extension."), for: request)
       return
     }
     guard let path = ExtensionUnpackedFolder.directory(url) else {
-      status = SettingsL10n.string("Choose a folder that contains a Manifest V3 extension.")
+      updateStatus(SettingsL10n.string("Choose a folder that contains a Manifest V3 extension."), for: request)
       return
     }
-    status = nil
     var payload: [String: Any] = [
       "schemaVersion": 1, "action": "loadUnpacked", "path": path,
     ]
@@ -199,35 +195,35 @@ final class ExtensionManagerModel {
     submitManage(
       ["schemaVersion": 1, "action": "setDeveloperMode", "enabled": true], tabID: nil
     ) { [weak self] modeReply in
-      guard let self, self.developerModeRequestID == request,
-        self.statusRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch modeReply {
       case .updated:
         self.submitUnpackedLoad(payload, tabID: tabID, request: request)
       case .unsupported:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .prompted, .failed:
         self.restoreDeveloperMode(false)
-        self.status = ExtensionInstallNotice.installFailed
+        self.updateStatus(ExtensionInstallNotice.installFailed, for: request)
       }
     }
   }
 
-  private func submitUnpackedLoad(_ payload: [String: Any], tabID: UUID?, request: UUID) {
+  private func submitUnpackedLoad(
+    _ payload: [String: Any], tabID: UUID?, request: UUID
+  ) {
     submitManage(payload, tabID: tabID) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request,
-        self.statusRequestID == request else { return }
+      guard let self, self.developerModeRequestID == request else { return }
       switch reply {
       case .prompted:
-        self.status = nil
+        self.updateStatus(nil, for: request)
       case .updated:
-        self.status = nil
+        self.updateStatus(nil, for: request)
         self.refresh()
       case .unsupported:
-        self.status = ExtensionInstallNotice.needsNewerEngine
+        self.updateStatus(ExtensionInstallNotice.needsNewerEngine, for: request)
       case .failed:
-        self.status = ExtensionInstallNotice.installFailed
+        self.updateStatus(ExtensionInstallNotice.installFailed, for: request)
       }
     }
   }
@@ -241,10 +237,9 @@ final class ExtensionManagerModel {
     let request = beginStatusRequest()
     extensionAccessRequestID = request
     guard BrowserExtension.isValidID(id) else {
-      status = ExtensionInstallNotice.privateAccessRefused
+      updateStatus(ExtensionInstallNotice.privateAccessRefused, for: request)
       return
     }
-    status = nil
     submitManage(
       [
         "schemaVersion": 1, "action": "setIncognitoEnabled", "extensionId": id,
@@ -269,10 +264,9 @@ final class ExtensionManagerModel {
     let request = beginStatusRequest()
     extensionAccessRequestID = request
     guard BrowserExtension.isValidID(extensionID), ExtensionPageOrigin.accepts(origin) else {
-      status = ExtensionInstallNotice.siteAccessRefused
+      updateStatus(ExtensionInstallNotice.siteAccessRefused, for: request)
       return
     }
-    status = nil
     submitManage(
       [
         "schemaVersion": 1, "action": "setSiteAccess", "extensionId": extensionID,
@@ -304,7 +298,13 @@ final class ExtensionManagerModel {
   private func beginStatusRequest() -> UUID {
     let request = UUID()
     statusRequestID = request
+    status = nil
     return request
+  }
+
+  private func updateStatus(_ value: String?, for request: UUID) {
+    guard statusRequestID == request else { return }
+    status = value
   }
 
   private func mutate(_ operation: ExtensionManagementOperation) {

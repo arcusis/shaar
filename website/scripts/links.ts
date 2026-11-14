@@ -37,7 +37,7 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
     }
     if (document.querySelectorAll("h1").length !== 1) errors.push(`${path}: expected one h1`);
     for (const element of document.querySelectorAll(
-      "a[href], link[href], img[src], script[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src]",
+      "a[href], area[href], link[href], img[src], script[src], img[srcset], source[srcset], video[poster], video[src], audio[src], source[src]",
     )) {
       const references = [
         ...(element.hasAttribute("srcset")
@@ -106,6 +106,9 @@ export function checkLinks(root: string): { errors: string[]; external: string[]
         }
       }
       if (!associated) errors.push(`${path}: image references missing map ${usemap}`);
+    }
+    for (const area of document.querySelectorAll("area[href]")) {
+      if (!area.getAttribute("alt")?.trim()) errors.push(`${path}: image map area missing alt`);
     }
   }
   for (const file of listFiles(root).filter((path) => path.endsWith(".css"))) {

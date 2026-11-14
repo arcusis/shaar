@@ -132,3 +132,49 @@ test("link checker catches missing poster when video source exists", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("link checker validates image map destinations", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#places"><map name="places"><area href="/missing-place/" alt="Missing place"></map>',
+    );
+    writeFileSync(join(root, "map.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-place/"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker requires alternative text for image map links", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    mkdirSync(join(root, "place"));
+    writeFileSync(join(root, "place/index.html"), "<h1>Place</h1>");
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#places"><map name="places"><area href="/place/"></map>',
+    );
+    writeFileSync(join(root, "map.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: image map area missing alt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("link checker rejects empty alternative text on image map links", () => {
+  const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
+  try {
+    mkdirSync(join(root, "place"));
+    writeFileSync(join(root, "place/index.html"), "<h1>Place</h1>");
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#places"><map name="places"><area href="/place/" alt="   "></map>',
+    );
+    writeFileSync(join(root, "map.png"), "fixture");
+    assert.deepEqual(checkLinks(root).errors, ["index.html: image map area missing alt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

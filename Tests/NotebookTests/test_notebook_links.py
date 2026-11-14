@@ -60,6 +60,16 @@ class NotebookLinksTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Note not linked from any index: Note.md", result.stderr)
 
+    def test_escaped_wiki_opener_is_ignored_but_even_backslashes_are_not(self):
+        result = self.run_check({
+            "_INDEX_Main.md": r"\[[Escaped]]" + "\n" + r"\\[[Linked]]",
+            "Escaped.md": "# Escaped",
+            "Linked.md": "# Linked",
+        })
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Note not linked from any index: Escaped.md", result.stderr)
+        self.assertNotIn("Note not linked from any index: Linked.md", result.stderr)
+
     def test_wrong_case_or_missing_target_does_not_count(self):
         result = self.run_check({"_INDEX_Main.md": "[[note]]\n[[Missing]]", "Note.md": ""})
         self.assertEqual(result.returncode, 1)

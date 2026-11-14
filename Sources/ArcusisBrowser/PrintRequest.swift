@@ -77,7 +77,8 @@ struct PrintRequest: Identifiable, Equatable {
       origin.query == nil,
       origin.fragment == nil,
       origin.user == nil,
-      origin.password == nil
+      origin.password == nil,
+      Self.hasValidPort(origin)
     else { return false }
     return ["http", "https"].contains(origin.scheme?.lowercased() ?? "")
   }
@@ -91,6 +92,32 @@ struct PrintRequest: Identifiable, Equatable {
   private static func isPreservedFormat(_ scalar: Unicode.Scalar) -> Bool {
     let value = scalar.value
     return value == 0x200C || value == 0x200D || (0xE0000...0xE007F).contains(value)
+  }
+
+  private static func hasValidPort(_ origin: URL) -> Bool {
+    let absoluteString = origin.absoluteString
+    guard let authorityStart = absoluteString.range(of: "://")?.upperBound else { return false }
+    let authority = absoluteString[authorityStart...].prefix { $0 != "/" }
+    let portText: Substring
+    if authority.first == "[" {
+      guard let closingBracket = authority.firstIndex(of: "]") else { return false }
+      let suffix = authority[authority.index(after: closingBracket)...]
+      guard suffix.first == ":" else { return suffix.isEmpty && origin.port == nil }
+      portText = suffix.dropFirst()
+    } else {
+      guard let colon = authority.lastIndex(of: ":") else { return origin.port == nil }
+      portText = authority[authority.index(after: colon)...]
+    }
+
+    guard !portText.isEmpty, portText.allSatisfy({ $0 >= "0" && $0 <= "9" }) else {
+      return false
+    }
+    let significantDigits = portText.drop(while: { $0 == "0" })
+    guard significantDigits.count <= 5,
+      let port = Int(significantDigits.isEmpty ? "0" : String(significantDigits)),
+      (0...65_535).contains(port)
+    else { return false }
+    return origin.port == port
   }
 
   private static func boundedTitle(_ value: Any?) -> String? {

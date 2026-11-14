@@ -210,6 +210,12 @@ struct ShaarEngineABITests {
     #expect(throws: ShaarEngineError.invalidEvent("invalid payload JSON slice")) {
       try ShaarEventCopy.copy(invalidPayload)
     }
+
+    var negativeLength = engineEvent(sequence: 7)
+    negativeLength.payload_json = shaar_bytes(data: nil, size: -1)
+    #expect(throws: ShaarEngineError.invalidEvent("invalid payload JSON slice")) {
+      try ShaarEventCopy.copy(negativeLength)
+    }
   }
 
   @Test func frameworkLoadFailureHasItsOwnTypedError() {

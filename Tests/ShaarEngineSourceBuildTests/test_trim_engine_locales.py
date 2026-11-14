@@ -6,9 +6,10 @@
 
 import importlib.util
 from pathlib import Path
-from unittest.mock import patch
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +20,25 @@ SPEC.loader.exec_module(TRIM)
 
 
 class TrimEngineLocalesTests(unittest.TestCase):
+    def test_main_refuses_current_symlink_that_redirects_outside_framework(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage = root / "stage"
+            framework = stage / "Chromium Framework.framework"
+            (framework / "Versions").mkdir(parents=True)
+            external_resources = root / "outside" / "Resources"
+            for locale in ("en", "he", "fr"):
+                (external_resources / f"{locale}.lproj").mkdir(parents=True)
+            current = framework / "Versions/Current"
+            current.symlink_to(external_resources.parent, target_is_directory=True)
+
+            with (patch.object(TRIM, "STAGE", stage),
+                  patch.object(sys, "argv", ["trim-engine-locales.py", str(framework)]),
+                  self.assertRaisesRegex(SystemExit, "outside the framework")):
+                TRIM.main()
+
+            self.assertTrue((external_resources / "fr.lproj").is_dir())
+
     def test_removed_byte_count_excludes_symlink_target_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

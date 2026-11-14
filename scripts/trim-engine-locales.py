@@ -41,17 +41,26 @@ def trim_locales(resources: Path) -> dict:
     }
 
 
+def framework_resources(framework: Path) -> Path:
+    resources = framework / "Versions/Current/Resources"
+    try:
+        resolved = resources.resolve()
+    except (OSError, RuntimeError) as error:
+        raise SystemExit("Refusing to trim resources with an unsafe framework symlink") from error
+    if not resolved.is_relative_to(framework):
+        raise SystemExit("Refusing to trim resources outside the framework")
+    if not resources.is_dir():
+        raise SystemExit(f"Missing framework resources: {resources}")
+    return resources
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("Usage: trim-engine-locales.py STAGED_FRAMEWORK")
     framework = Path(sys.argv[1]).resolve()
     if not framework.is_relative_to(STAGE.resolve()):
         raise SystemExit("Refusing to trim outside the owned package stage")
-    resources = (framework / "Versions/Current/Resources").resolve()
-    if not resources.is_relative_to(framework):
-        raise SystemExit("Refusing to trim resources outside the framework")
-    if not resources.is_dir():
-        raise SystemExit(f"Missing framework resources: {resources}")
+    resources = framework_resources(framework)
     print(json.dumps(trim_locales(resources), sort_keys=True))
 
 

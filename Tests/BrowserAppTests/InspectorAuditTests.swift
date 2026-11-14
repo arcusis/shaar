@@ -98,6 +98,15 @@ private final class PendingInspectorSelectionRuntime: ARCChromiumRuntime {
     audit.cancel()
   }
 
+  @Test func backendFailuresUseLocalizedAuditRecoveryCopy() {
+    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    #expect(
+      InspectorAuditModel.failureMessage(for: error)
+        == InspectorL10n.string("Could not complete the page audit. Try again."))
+    let known = InspectorFailure("Audit results exceeded supported limits.")
+    #expect(InspectorAuditModel.failureMessage(for: known) == known.localizedDescription)
+  }
+
   @Test func boundedAuditReportsRejectStaleDocuments() throws {
     let inspector = makeInspector(tab: .accessibility)
     defer { inspector.close() }

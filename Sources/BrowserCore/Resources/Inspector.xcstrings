@@ -99,6 +99,7 @@
     "The page changed during the private capture. Try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The page changed during the private capture. Try again."}},"he":{"stringUnit":{"state":"translated","value":"העמוד השתנה במהלך הצילום. יש לנסות שוב."}}}},
     "The private element capture could not start.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The private element capture could not start."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להתחיל בצילום האלמנט תוך הסתרת שדות הטופס."}}}},
     "Undo clear (%1$lld)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Undo clear (%1$lld)"}},"he":{"stringUnit":{"state":"translated","value":"ביטול הניקוי (%1$lld)"}}}},
+    "Working…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Working…"}},"he":{"stringUnit":{"state":"translated","value":"העבודה מתבצעת…"}}}},
     "Inspector": {
       "localizations": {
         "en": {

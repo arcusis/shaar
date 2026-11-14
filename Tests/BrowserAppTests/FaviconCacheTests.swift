@@ -117,6 +117,35 @@ struct FaviconCacheTests {
     #expect(FaviconCache(directory: directory).icon(for: itemID, profileID: profileID) == nil)
   }
 
+  @Test func profileDirectorySymlinkIsNeitherReadFromNorWrittenThrough() throws {
+    let directory = temporaryDirectory()
+    let outside = directory.appending(path: "outside", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let cache = FaviconCache(directory: directory)
+    cache.store(FaviconFixture.icon(.red), for: itemID, profileID: profileID, host: "example.test")
+    let profileDirectory = directory.appending(
+      path: profileID.uuidString, directoryHint: .isDirectory)
+    try FileManager.default.moveItem(
+      at: profileDirectory, to: outside.appending(path: profileID.uuidString))
+    try FileManager.default.createSymbolicLink(
+      at: profileDirectory, withDestinationURL: outside.appending(path: profileID.uuidString))
+
+    let redirected = FaviconCache(directory: directory)
+    #expect(redirected.icon(for: itemID, profileID: profileID) == nil)
+    let otherItemID = UUID()
+    redirected.store(
+      FaviconFixture.icon(.blue), for: otherItemID, profileID: profileID, host: "example.test")
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: outside.appending(path: "\(profileID.uuidString)/\(otherItemID.uuidString).png")
+          .path))
+    #expect(
+      FileManager.default.fileExists(
+        atPath: outside.appending(path: "\(profileID.uuidString)/\(itemID.uuidString).png").path))
+  }
+
   @Test func workspaceKeepsPinnedAndFavoriteIconsOnly() throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }

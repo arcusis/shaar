@@ -96,7 +96,7 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     _ event: ShaarCopiedEvent, expectedScope: ShaarFindScope,
     expectedTabID: String, expectedRequestID: UInt64
   ) -> ShaarFindUpdate? {
-    guard event.kind == 7,
+    guard expectedRequestID > 0, event.kind == 7,
       String(decoding: event.profileID, as: UTF8.self) == expectedScope.profileID,
       String(decoding: event.sessionID, as: UTF8.self) == (expectedScope.sessionID ?? ""),
       String(decoding: event.tabID, as: UTF8.self) == expectedTabID,

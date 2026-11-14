@@ -5,6 +5,16 @@
 import Foundation
 
 enum SessionFolderValidation {
+  static func folderItemsMatch(
+    _ space: BrowserSpace, makeItems: () -> [PinnedSidebarItem]
+  ) -> Bool {
+    guard !space.folders.isEmpty else { return true }
+    return makeItems().count(where: {
+      if case .folder = $0 { return true }
+      return false
+    }) == space.folders.count
+  }
+
   static func membershipIsValid(folders: [BrowserFolder], tabs: [BrowserTab]) -> Bool {
     let pinStateByFolderID = Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0.isPinned) })
     return folders.allSatisfy { folder in
@@ -408,11 +418,10 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       }
       guard
         SessionFolderValidation.membershipIsValid(folders: space.folders, tabs: space.tabs),
-        (space.items(isPinned: true, includingCollapsed: true)
-          + space.items(isPinned: false, includingCollapsed: true)).filter({
-            if case .folder = $0 { return true }
-            return false
-          }).count == space.folders.count
+        SessionFolderValidation.folderItemsMatch(space, makeItems: {
+          space.items(isPinned: true, includingCollapsed: true)
+            + space.items(isPinned: false, includingCollapsed: true)
+        })
       else { throw SessionError.invalidState }
     }
   }

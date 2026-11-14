@@ -2,7 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import BrowserCore
+@testable import BrowserCore
+import CoreFoundation
 import Foundation
 import Testing
 
@@ -133,6 +134,38 @@ import Testing
       try BrowserHistoryEntry(profileID: profile, payload: value)
     }
   }
+}
+
+@Test func historyVisitMaximumAllocationBenchmark() {
+  let visitGroups = (0..<100).map { group in
+    (0..<5_000).map { visit in NSNumber(value: Double(group * 5_000 + visit)) }
+  }
+  var beforeSamples: [Duration] = []
+  var afterSamples: [Duration] = []
+  var beforeMaximum = 0.0
+  var afterMaximum = 0.0
+  for _ in 0..<3 {
+    let beforeStart = ContinuousClock.now
+    for visits in visitGroups {
+      let valid = visits.allSatisfy {
+        CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite
+          && $0.doubleValue >= 0
+          && $0.doubleValue <= Date.distantFuture.timeIntervalSince1970 * 1000
+      }
+      if valid { beforeMaximum += visits.map(\.doubleValue).max() ?? 0 }
+    }
+    beforeSamples.append(beforeStart.duration(to: .now))
+    let afterStart = ContinuousClock.now
+    for visits in visitGroups {
+      afterMaximum += BrowserHistoryEntry.validatedLatestVisit(in: visits) ?? 0
+    }
+    afterSamples.append(afterStart.duration(to: .now))
+  }
+  #expect(beforeMaximum == afterMaximum)
+  let before = beforeSamples.sorted()[beforeSamples.count / 2]
+  let after = afterSamples.sorted()[afterSamples.count / 2]
+  print("historyVisitMaximumAllocationBenchmark: before=\(before), after=\(after)")
+  #expect(after < before * 0.8)
 }
 
 @Test func whitespaceOnlyHistoryTitleFallsBackToHost() throws {

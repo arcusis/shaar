@@ -6,6 +6,7 @@
 
 import importlib.util
 from pathlib import Path
+from unittest.mock import patch
 import tempfile
 import unittest
 
@@ -65,6 +66,26 @@ class TrimEngineLocalesTests(unittest.TestCase):
             self.assertTrue((resources / "fr.lproj").is_symlink())
             self.assertTrue((resources / "en.lproj").is_dir())
             self.assertTrue(outside.is_dir())
+
+    def test_resources_symlink_cannot_redirect_trimming_outside_stage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage = root / "stage"
+            framework = stage / "Chromium.framework"
+            (framework / "Versions").mkdir(parents=True)
+            external_resources = root / "external/Resources"
+            external_resources.mkdir(parents=True)
+            for name in ("en.lproj", "he.lproj", "fr.lproj"):
+                (external_resources / name).mkdir()
+            (framework / "Versions/Current").symlink_to(
+                external_resources.parent, target_is_directory=True
+            )
+            with patch.object(TRIM, "STAGE", stage), patch(
+                "sys.argv", ["trim-engine-locales.py", str(framework)]
+            ):
+                with self.assertRaisesRegex(SystemExit, "outside the framework"):
+                    TRIM.main()
+            self.assertTrue((external_resources / "fr.lproj").is_dir())
 
 
 if __name__ == "__main__":

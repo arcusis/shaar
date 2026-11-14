@@ -7,6 +7,7 @@ import BrowserCore
 import SwiftUI
 
 struct ProfileExtensionsSection: View {
+  static let extensionRowHeadingTraits: AccessibilityTraits = .isHeader
   let model: ExtensionManagerModel?
   let sharedModel: SharedExtensionSettingsModel?
   let pageOrigin: () -> String?
@@ -129,6 +130,7 @@ private struct SharedExtensionSettingsSection: View {
         ForEach(model.rows) { row in
           VStack(alignment: .leading, spacing: 6) {
             Text(row.name).font(.headline)
+              .accessibilityAddTraits(ProfileExtensionsSection.extensionRowHeadingTraits)
             ForEach(ProfileExtensionsSection.sortedProfileIDs(for: row), id: \.self) { profileID in
               if let state = row.profiles[profileID] {
                 if let enabled = state.enabled {

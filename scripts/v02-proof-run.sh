@@ -6,7 +6,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 14,15,...]' >&2; exit 2; }
+usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 5,6,14,15,...]' >&2; exit 2; }
 archive_path=
 locale=en
 probe_filter=
@@ -35,7 +35,7 @@ if [[ -n $probe_filter ]]; then
   IFS=',' read -r -a requested_probes <<< "$probe_filter"
   case ",$probe_filter," in *,,*) usage ;; esac
   for probe in "${requested_probes[@]}"; do
-    case "$probe" in 14|15|16|17|19) ;; *) usage ;; esac
+    case "$probe" in 5|6|14|15|16|17|19) ;; *) usage ;; esac
   done
 fi
 probe_selected() { [[ ",$probe_filter," == *",$1,"* ]]; }
@@ -85,6 +85,8 @@ run_step() {
   local label=$1; shift
   local probe_id=
   case "$label" in
+    'Bookmarks/history and browser import') probe_id=5 ;;
+    'Chrome Web Store extension install') probe_id=6 ;;
     'External protocol handler consent') probe_id=14 ;;
     'Permission and protocol prompts') probe_id=15 ;;
     'Save prompts') probe_id=16 ;;
@@ -217,8 +219,8 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
     --receipt "$run_root/browsing-qa.json" --markdown "$run_root/browsing-qa.md"
   run_step 'Tab/window adoption' python3 scripts/test-tab-adoption-shipping.py \
     --app "$verification_app" --receipt "$run_root/tab-adoption.json"
-  run_step 'Bookmarks/history and browser import' run_engine_fixture
-  run_step 'Chrome Web Store extension install' run_engine_fixture --bitwarden
+  run_step 'Bookmarks/history and browser import' run_engine_fixture --library-only
+  run_step 'Chrome Web Store extension install' run_engine_fixture --bitwarden-only
   run_step 'Local MV3 extension install' run_engine_fixture --local-extension-install
   run_step 'Bluetooth and Serial chooser no-hang' run_device_chooser_check
   run_step 'Private window isolation' run_engine_fixture --private-window

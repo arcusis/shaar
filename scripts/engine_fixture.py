@@ -1016,6 +1016,10 @@ def argument_parser():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--bitwarden", action="store_true", help="Install Bitwarden from the real Chrome Web Store in a disposable profile")
+    mode.add_argument("--bitwarden-only", action="store_true",
+                      help="Run only the signed Chrome Web Store Bitwarden fixture")
+    mode.add_argument("--library-only", action="store_true",
+                      help="Run only bookmarks, history, and Chrome/Safari import fixtures")
     mode.add_argument("--bitwarden-onboarding-control", action="store_true",
                       help="Diagnostic only: wait two seconds on intro before Log in; cannot establish clean first-click acceptance")
     mode.add_argument("--abrupt-restart", action="store_true", help="SIGKILL the disposable probe after its fixture checkpoint, then verify recovery")
@@ -1056,14 +1060,18 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  private_multitab=False, basic_browsing=False,
                                  local_extension_install=False,
                                  reload_window=False,
-                                 dev_mode=False):
+                                 dev_mode=False, library_only=False, bitwarden_only=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
     if os.environ.get('SHAAR_V02_PROOF_LOCALE') == 'he':
         arguments.extend(('-AppleLanguages', '(he)'))
-    if include_bitwarden:
+    if include_bitwarden and not bitwarden_only:
         arguments.append("--bitwarden")
+    if library_only:
+        arguments.append("--probe-library-only")
+    if bitwarden_only:
+        arguments.append("--probe-bitwarden-only")
     if onboarding_control:
         arguments.append('--bitwarden-onboarding-control')
     if abrupt:
@@ -1880,9 +1888,11 @@ def main(argv=None):
                         or options.quit_exit or options.session_recovery or options.basic_browsing
                         or options.reload_window
                         or options.dev_mode or options.local_extension_install
+                        or options.library_only or options.bitwarden_only
                         or not options.probe_root):
         raise ValueError("Split probe phases require only the baseline or private-window mode and a probe root")
-    include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
+    include_bitwarden = (
+        options.bitwarden or options.bitwarden_onboarding_control or options.bitwarden_only)
     if options.bitwarden_onboarding_control:
         print('CONTROL ONLY: two-second intro-screen age; clean first-click acceptance is not evaluated', flush=True)
     abrupt = options.abrupt_restart or options.abrupt_control
@@ -1909,6 +1919,10 @@ def main(argv=None):
         print('DEV MODE: hidden local Next.js and Vite fixture pages; no desktop window', flush=True)
     if options.local_extension_install:
         print('LOCAL MV3 INSTALL: consented unpacked extension in a hidden disposable profile', flush=True)
+    if options.library_only:
+        print('LIBRARY ONLY: bookmarks, history, and Chrome/Safari import assertions', flush=True)
+    if options.bitwarden_only:
+        print('BITWARDEN ONLY: signed Chrome Web Store installation and persistence', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
     root = Path(options.probe_root) if split_phase else Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
@@ -1975,7 +1989,7 @@ def main(argv=None):
     try:
         phases = ((options.probe_phase,) if split_phase else
                   ("initial",) if options.basic_browsing or options.reload_window or options.dev_mode
-                  or options.local_extension_install
+                  or options.local_extension_install or options.library_only
                   else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
@@ -1995,7 +2009,8 @@ def main(argv=None):
                 private_multitab=options.private_multitab,
                 basic_browsing=options.basic_browsing, reload_window=options.reload_window,
                 local_extension_install=options.local_extension_install,
-                dev_mode=options.dev_mode)
+                dev_mode=options.dev_mode, library_only=options.library_only,
+                bitwarden_only=options.bitwarden_only)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 print(f"Probe PID: {process.pid}", flush=True)
@@ -2044,6 +2059,47 @@ def main(argv=None):
                 output.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
             if options.saved_tab_capacity:
                 validate_saved_tab_capacity_report(root, phase, report, code)
+            elif options.library_only:
+                evidence_path = root / f'{phase}-library.json'
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                except (OSError, ValueError) as error:
+                    raise RuntimeError(f'Library evidence is missing or invalid: {evidence_path}') from error
+                required = {
+                    'Chrome and Safari import fixtures preview their bookmarks and history',
+                    'Chrome import submits bookmarks and history',
+                    'Safari import submits bookmarks and history',
+                    'Chrome and Safari imported bookmarks and history persist after restart',
+                }
+                checks = evidence.get('checks') if isinstance(evidence, dict) else None
+                if (not isinstance(evidence, dict) or code != 0
+                        or report.get('probeMode') != 'library-only'
+                        or report.get('libraryOnly') is not True or report.get('passed') is not True
+                        or evidence.get('passed') is not True or not isinstance(checks, list)
+                        or not required.issubset(checks)):
+                    raise RuntimeError(
+                        f'Library import assertions failed: {evidence.get("error") if isinstance(evidence, dict) else evidence}')
+            elif options.bitwarden_only:
+                evidence_path = root / f'{phase}-bitwarden.json'
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                except (OSError, ValueError) as error:
+                    raise RuntimeError(f'Bitwarden evidence is missing or invalid: {evidence_path}') from error
+                checks = evidence.get('checks') if isinstance(evidence, dict) else None
+                required = {
+                    f'{phase} Bitwarden is registered as a non-component store extension',
+                    f'{phase} actual Bitwarden popup reaches its signed-out login form without entering credentials',
+                }
+                if phase == 'initial':
+                    required.add(
+                        'real Bitwarden store consent targets its disposable profile and source tab')
+                if (not isinstance(evidence, dict) or code != 0
+                        or report.get('probeMode') != 'bitwarden-only'
+                        or report.get('bitwardenOnly') is not True or report.get('passed') is not True
+                        or evidence.get('passed') is not True or evidence.get('phase') != phase
+                        or not isinstance(checks, list) or not required.issubset(checks)):
+                    raise RuntimeError(
+                        f'Bitwarden Web Store assertions failed: {evidence.get("error") if isinstance(evidence, dict) else evidence}')
             elif options.external_app_consent:
                 validate_external_app_consent_report(root, phase, report, code)
             elif quit_exit:

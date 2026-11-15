@@ -6,7 +6,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 5,6,14,15,...]' >&2; exit 2; }
+usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 5,6,9,14,15,...]' >&2; exit 2; }
 archive_path=
 locale=en
 probe_filter=
@@ -35,7 +35,7 @@ if [[ -n $probe_filter ]]; then
   IFS=',' read -r -a requested_probes <<< "$probe_filter"
   case ",$probe_filter," in *,,*) usage ;; esac
   for probe in "${requested_probes[@]}"; do
-    case "$probe" in 5|6|14|15|16|17|19) ;; *) usage ;; esac
+    case "$probe" in 5|6|9|14|15|16|17|19) ;; *) usage ;; esac
   done
 fi
 probe_selected() { [[ ",$probe_filter," == *",$1,"* ]]; }
@@ -87,7 +87,8 @@ run_step() {
   case "$label" in
     'Bookmarks/history and browser import') probe_id=5 ;;
     'Chrome Web Store extension install') probe_id=6 ;;
-    'External protocol handler consent') probe_id=14 ;;
+    'Local MV3 extension install'|'Hebrew local MV3 extensions') probe_id=9 ;;
+    'External protocol handler consent'|'Hebrew protocol handler') probe_id=14 ;;
     'Permission and protocol prompts') probe_id=15 ;;
     'Save prompts') probe_id=16 ;;
     'Platform parity for v0.2 web items') probe_id=17 ;;
@@ -95,6 +96,17 @@ run_step() {
   esac
   if [[ -n $probe_filter && -n $probe_id ]] && ! probe_selected "$probe_id"; then
     record "$label" SKIP 'not selected by --probes'
+    return 0
+  fi
+  local skip_english_counterpart=0
+  if [[ $locale == he && -n $probe_filter ]]; then
+    case $label in
+      'Local MV3 extension install') probe_selected 9 && skip_english_counterpart=1 ;;
+      'External protocol handler consent') probe_selected 14 && skip_english_counterpart=1 ;;
+    esac
+  fi
+  if [[ $skip_english_counterpart == 1 ]]; then
+    record "$label" SKIP 'Hebrew locale counterpart selected'
     return 0
   fi
   if [[ -n $probe_filter && -n $probe_id ]] && probe_selected "$probe_id"; then
@@ -221,7 +233,11 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
     --app "$verification_app" --receipt "$run_root/tab-adoption.json"
   run_step 'Bookmarks/history and browser import' run_engine_fixture --library-only
   run_step 'Chrome Web Store extension install' run_engine_fixture --bitwarden-only
-  run_step 'Local MV3 extension install' run_engine_fixture --local-extension-install
+  if [[ $locale == he && -n $probe_filter ]] && probe_selected 9; then
+    record 'Local MV3 extension install' SKIP 'Hebrew-only extension probe selected'
+  else
+    run_step 'Local MV3 extension install' run_engine_fixture --local-extension-install
+  fi
   run_step 'Bluetooth and Serial chooser no-hang' run_device_chooser_check
   run_step 'Private window isolation' run_engine_fixture --private-window
   run_step 'Private multi-tab isolation' run_engine_fixture --private-multitab
@@ -259,21 +275,27 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
     run_step 'Hebrew device pickers' env SHAAR_V02_PROOF_LOCALE=he \
       python3 scripts/test-device-choosers.py --app "$verification_app" \
       --screenshot-dir "$he_root/screenshots/device-pickers"
-    run_he_engine_fixture
-    cp "$he_root"/browsing-*.png "$he_root/screenshots/" 2>/dev/null || true
-    cp "$he_root"/save-prompt-*.png "$he_root/screenshots/" 2>/dev/null || true
-    cp "$he_root"/permission-prompts/*.png "$he_root/screenshots/" 2>/dev/null || true
-    record_named_screenshot 'Dialogs' "$he_root/screenshots/browsing-dialogs.png"
-    record_named_screenshot 'Basic auth' "$he_root/screenshots/browsing-edge.png"
-    record_screenshot_evidence 'Permission prompts' "$he_root/permission-prompts"
-    record_named_screenshot 'Password save prompt' "$he_root/screenshots/save-prompt-password.png"
-    record_named_screenshot 'Card save prompt' "$he_root/screenshots/save-prompt-card.png"
-    record_named_screenshot 'Address save prompt' "$he_root/screenshots/save-prompt-address.png"
-    record_screenshot_evidence 'Downloads' "$he_root/screenshots/downloads"
-    record_screenshot_evidence 'Chrome Web Store extension' "$he_root/screenshots/bitwarden"
-    record_screenshot_evidence 'Local MV3 extension' "$he_root/screenshots/local-extension-install"
-    record_screenshot_evidence 'Protocol handler' "$he_root/screenshots/external-app-consent"
-    record_screenshot_evidence 'Device pickers' "$he_root/screenshots/device-pickers"
+    if [[ -z $probe_filter ]]; then
+      run_he_engine_fixture
+      cp "$he_root"/browsing-*.png "$he_root/screenshots/" 2>/dev/null || true
+      cp "$he_root"/save-prompt-*.png "$he_root/screenshots/" 2>/dev/null || true
+      cp "$he_root"/permission-prompts/*.png "$he_root/screenshots/" 2>/dev/null || true
+      record_named_screenshot 'Dialogs' "$he_root/screenshots/browsing-dialogs.png"
+      record_named_screenshot 'Basic auth' "$he_root/screenshots/browsing-edge.png"
+      record_screenshot_evidence 'Permission prompts' "$he_root/permission-prompts"
+      record_named_screenshot 'Password save prompt' "$he_root/screenshots/save-prompt-password.png"
+      record_named_screenshot 'Card save prompt' "$he_root/screenshots/save-prompt-card.png"
+      record_named_screenshot 'Address save prompt' "$he_root/screenshots/save-prompt-address.png"
+      record_screenshot_evidence 'Downloads' "$he_root/screenshots/downloads"
+      record_screenshot_evidence 'Chrome Web Store extension' "$he_root/screenshots/bitwarden"
+      record_screenshot_evidence 'Device pickers' "$he_root/screenshots/device-pickers"
+    fi
+    if [[ -z $probe_filter ]] || probe_selected 9; then
+      record_screenshot_evidence 'Local MV3 extension' "$he_root/screenshots/local-extension-install"
+    fi
+    if [[ -z $probe_filter ]] || probe_selected 14; then
+      record_screenshot_evidence 'Protocol handler' "$he_root/screenshots/external-app-consent"
+    fi
   fi
   if [[ $widevine == 1 ]] || { [[ -n $probe_filter ]] && probe_selected 19; }; then
     run_step 'Widevine EME, ClearKey, Shaka playback' \

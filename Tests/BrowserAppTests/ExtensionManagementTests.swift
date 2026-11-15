@@ -434,6 +434,34 @@ struct ExtensionManagementTests {
     #expect(listed.incognitoEnabled != true)
   }
 
+  @Test @MainActor func developerModeCanBeAcknowledgedBeforeStartingAnUnpackedInstall() throws {
+    let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try Data(#"{"manifest_version":3,"name":"Probe"}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+    let profileID = UUID()
+    let preferences = BrowserPreferencesStore(
+      fileURL: FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json"))
+    let runtime = DelayedDeveloperModeRuntime()
+    let model = ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+    var developerModeReply: ExtensionManageReply?
+
+    model.setDeveloperMode(true) { developerModeReply = $0 }
+    #expect(developerModeReply == nil)
+    #expect(runtime.actions == ["setDeveloperMode"])
+    runtime.complete(0, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
+    #expect(developerModeReply == .updated)
+
+    model.loadUnpacked(at: folder, tabID: UUID())
+    #expect(runtime.actions == ["setDeveloperMode", "setDeveloperMode"])
+    runtime.complete(1, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
+    #expect(runtime.actions == ["setDeveloperMode", "setDeveloperMode", "loadUnpacked"])
+    runtime.complete(2, json: #"{"schemaVersion":1,"prompted":true}"#, code: 0)
+    #expect(model.status == nil)
+  }
+
   @Test @MainActor func staleDeveloperModeFailureDoesNotReplaceNewerSuccess() throws {
     let profileID = UUID()
     let preferencesFile = FileManager.default.temporaryDirectory.appending(
@@ -550,11 +578,13 @@ private final class ScriptedManageRuntime: ARCShaarRuntime {
 
 private final class DelayedDeveloperModeRuntime: ARCShaarRuntime {
   var replies: [(String?, Int) -> Void] = []
+  var actions: [String] = []
 
   override func submitExtensionManage(
     forProfileID profileID: String, tabID: String?, payload: [String: Any],
     completion: @escaping (String?, Int) -> Void
   ) {
+    actions.append(payload["action"] as? String ?? "")
     replies.append(completion)
   }
 
@@ -631,6 +661,14 @@ extension ExtensionManagementTests {
     #expect(
       ExtensionManagerModel.sortedExtensions([english, hebrew], language: .english).map(\.id)
         == [english.id, hebrew.id])
+  }
+
+  @Test func managedExtensionStripsBidiControlsFromEngineMetadata() throws {
+    let item = try JSONDecoder().decode(
+      ManagedExtension.self,
+      from: Data(
+        #"{"id":"abcdefghijklmnopabcdefghijklmnop","name":"\u200F\u202AShaar probe\u202C\u200F","version":"1.0","description":"Safe","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[]}"#.utf8))
+    #expect(item.name == "Shaar probe")
   }
 
   private func managed(id: String, enabled: Bool) -> ManagedExtension {

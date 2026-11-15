@@ -20,6 +20,43 @@ struct ManagedExtension: Identifiable, Equatable, Decodable {
   var siteAccess: String? = nil
   var incognitoEnabled: Bool? = nil
 
+  init(
+    id: String, name: String, version: String, description: String, enabled: Bool,
+    mayDisable: Bool, permissions: [String], hostPermissions: [String],
+    siteAccess: String? = nil, incognitoEnabled: Bool? = nil
+  ) {
+    self.id = id
+    self.name = BrowserExtensionText.sanitizedForDisplay(name)
+    self.version = version
+    self.description = BrowserExtensionText.sanitizedForDisplay(description)
+    self.enabled = enabled
+    self.mayDisable = mayDisable
+    self.permissions = permissions.map(BrowserExtensionText.sanitizedForDisplay)
+    self.hostPermissions = hostPermissions.map(BrowserExtensionText.sanitizedForDisplay)
+    self.siteAccess = siteAccess.map(BrowserExtensionText.sanitizedForDisplay)
+    self.incognitoEnabled = incognitoEnabled
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      id: try values.decode(String.self, forKey: .id),
+      name: try values.decode(String.self, forKey: .name),
+      version: try values.decode(String.self, forKey: .version),
+      description: try values.decode(String.self, forKey: .description),
+      enabled: try values.decode(Bool.self, forKey: .enabled),
+      mayDisable: try values.decode(Bool.self, forKey: .mayDisable),
+      permissions: try values.decode([String].self, forKey: .permissions),
+      hostPermissions: try values.decode([String].self, forKey: .hostPermissions),
+      siteAccess: try values.decodeIfPresent(String.self, forKey: .siteAccess),
+      incognitoEnabled: try values.decodeIfPresent(Bool.self, forKey: .incognitoEnabled))
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, name, version, description, enabled, mayDisable, permissions, hostPermissions,
+      siteAccess, incognitoEnabled
+  }
+
   func help(actionTitle: String?) -> String {
     guard let title = actionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
       !title.isEmpty, title != name

@@ -140,13 +140,26 @@ final class ExtensionManagerModel {
   }
 
   func setDeveloperMode(_ enabled: Bool) {
+    setDeveloperMode(enabled) { _ in }
+  }
+
+  func setDeveloperMode(
+    _ enabled: Bool, completion: @escaping @MainActor (ExtensionManageReply) -> Void
+  ) {
     let request = beginStatusRequest()
     developerModeRequestID = request
     let previousValue = developerMode
     developerMode = enabled
     preferences?.setExtensionDeveloperMode(enabled, for: profileID)
     submitDeveloperMode(enabled) { [weak self] reply in
-      guard let self, self.developerModeRequestID == request else { return }
+      guard let self else {
+        completion(reply)
+        return
+      }
+      guard self.developerModeRequestID == request else {
+        completion(reply)
+        return
+      }
       switch reply {
       case .updated:
         self.updateStatus(nil, for: request)
@@ -157,6 +170,7 @@ final class ExtensionManagerModel {
         self.restoreDeveloperMode(previousValue)
         self.updateStatus(ExtensionInstallNotice.developerModeFailed, for: request)
       }
+      completion(reply)
     }
   }
 

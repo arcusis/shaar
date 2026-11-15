@@ -42,4 +42,38 @@ import Testing
         request, profileID: profileID, tabID: tabID,
         sourceURL: URL(string: "http://127.0.0.1:8080/other")!))
   }
+
+  @Test func waitsForConsentBoundToTheSelectedSourceContext() throws {
+    let profileID = UUID()
+    let tabID = UUID()
+    let sourceURL = URL(string: "http://127.0.0.1:8080/account")!
+    let profile = BrowserProfile(id: profileID, name: "Probe")
+    let tab = BrowserTab(id: tabID, url: sourceURL)
+    let space = BrowserSpace(
+      profileID: profileID, name: "Probe", symbol: "square", tint: .lavender,
+      tabs: [tab], selectedTabID: tabID)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let browserExtension = try #require(
+      BrowserExtension(
+        id: "abcdefghijklmnopabcdefghijklmnop",
+        name: LocalExtensionInstallProbeEvidence.extensionName, version: "1.0"))
+    let stale = try #require(
+      ExtensionInstallRequest(
+        id: "stale", profileID: UUID(), tabID: tabID, sourceURL: sourceURL,
+        browserExtension: browserExtension, kind: .install, permissions: []))
+    let current = try #require(
+      ExtensionInstallRequest(
+        id: "current", profileID: profileID, tabID: tabID, sourceURL: sourceURL,
+        browserExtension: browserExtension, kind: .install, permissions: []))
+
+    #expect(
+      LocalExtensionInstallProbeEvidence.boundConsent(
+        in: [stale], profileID: profileID, tabID: tabID, sourceURL: sourceURL,
+        session: session) == nil)
+    #expect(
+      LocalExtensionInstallProbeEvidence.boundConsent(
+        in: [stale, current], profileID: profileID, tabID: tabID, sourceURL: sourceURL,
+        session: session) == current)
+  }
 }

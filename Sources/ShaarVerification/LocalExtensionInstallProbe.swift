@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Foundation
+import SwiftUI
 
 @testable import ArcusisBrowser
 
@@ -22,6 +23,16 @@ enum LocalExtensionInstallProbeEvidence {
     request.kind == .install && request.browserExtension.name == extensionName
       && request.profileID == profileID && request.tabID == tabID
       && request.sourceURL == sourceURL
+  }
+
+  static func boundConsent(
+    in requests: [ExtensionInstallRequest], profileID: UUID, tabID: UUID, sourceURL: URL,
+    session: BrowserSession
+  ) -> ExtensionInstallRequest? {
+    requests.first {
+      consentMatches($0, profileID: profileID, tabID: tabID, sourceURL: sourceURL)
+        && $0.matches(session)
+    }
   }
 }
 
@@ -75,29 +86,52 @@ final class LocalExtensionInstallProbe {
     let fixture = root.appending(path: "UnpackedMV3", directoryHint: .isDirectory)
     try createFixture(at: fixture)
 
-    manager.setDeveloperMode(true)
+    let developerModeReply: ExtensionManageReply = await withCheckedContinuation { continuation in
+      manager.setDeveloperMode(true) { continuation.resume(returning: $0) }
+    }
+    guard developerModeReply == .updated else {
+      throw LocalExtensionInstallProbeFailure(
+        "Local MV3 developer mode did not finish enabling: \(manager.status ?? "engine refused the request").")
+    }
     manager.loadUnpacked(at: fixture, tabID: tabID)
 
     var consent: ExtensionInstallRequest?
+    var observedConsent: ExtensionInstallRequest?
     for _ in 0..<160 {
-      consent = store.installationRequests.first {
+      let requests = store.installationRequests.filter {
         $0.browserExtension.name == LocalExtensionInstallProbeEvidence.extensionName
       }
+      observedConsent = requests.first
+      consent = LocalExtensionInstallProbeEvidence.boundConsent(
+        in: requests, profileID: profileID, tabID: tabID, sourceURL: sourceURL,
+        session: store.session)
       if consent != nil { break }
       if let status = manager.status {
         throw LocalExtensionInstallProbeFailure("Local MV3 request failed: \(status)")
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    guard let consent,
-      LocalExtensionInstallProbeEvidence.consentMatches(
-        consent, profileID: profileID, tabID: tabID, sourceURL: sourceURL),
-      consent.matches(store.session)
-    else {
+    guard let consent else {
+      manager.refresh()
+      let currentPage = store.session.selectedPage
+      let installed = manager.extensions.contains {
+        $0.name == LocalExtensionInstallProbeEvidence.extensionName
+      }
+      let mismatch = observedConsent.map {
+        "profile=\($0.profileID == profileID), tab=\($0.tabID == tabID), "
+          + "source=\($0.sourceURL == sourceURL), current=\($0.matches(store.session))"
+      } ?? "no request observed"
       throw LocalExtensionInstallProbeFailure(
-        "Local MV3 consent was not bound to its source tab and profile.")
+        "Local MV3 consent did not settle on its source tab and profile (\(mismatch); "
+          + "selectedTab=\(currentPage?.tab.id == tabID), "
+          + "selectedProfile=\(store.session.selectedSpace.profileID == profileID), "
+          + "selectedURL=\(currentPage?.tab.url == sourceURL), "
+          + "managerStatus=\(manager.status ?? "none"), "
+          + "installed=\(installed), "
+          + "pendingRequests=\(store.installationRequests.count)).")
     }
     checks.append("unpacked MV3 install requests consent for its owning profile and loopback tab")
+    try captureConsent(consent)
     store.resolveInstallation(consent.id, accepted: true)
 
     var installed: ManagedExtension?
@@ -165,6 +199,28 @@ final class LocalExtensionInstallProbe {
     try manifestData.write(to: folder.appending(path: "manifest.json"), options: .atomic)
     try "document.documentElement.dataset.shaarLocalExtension = 'local-mv3-v1';\n"
       .write(to: folder.appending(path: "content.js"), atomically: true, encoding: .utf8)
+  }
+
+  private func captureConsent(_ request: ExtensionInstallRequest) throws {
+    let size = NSSize(width: 516, height: 480)
+    let host = NSHostingView(
+      rootView: ExtensionConsent(store: store, request: request)
+        .frame(width: size.width, height: size.height))
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
+      defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
+    guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+      throw LocalExtensionInstallProbeFailure("Local MV3 consent screenshot render failed.")
+    }
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+      throw LocalExtensionInstallProbeFailure("Local MV3 consent screenshot encode failed.")
+    }
+    try png.write(to: root.appending(path: "local-mv3-consent.png"), options: .atomic)
+    window.close()
   }
 
   private func evaluate(_ tabID: UUID, _ script: String) async -> [String: Any]? {

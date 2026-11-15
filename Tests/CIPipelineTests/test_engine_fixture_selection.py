@@ -40,7 +40,7 @@ class EngineFixtureSelectionTests(unittest.TestCase):
     def test_proof_runner_accepts_import_store_and_permission_probe_ids(self):
         result = subprocess.run(
             ["bash", str(ROOT / "scripts/v02-proof-run.sh"), "/missing/archive.tar.xz",
-             "--probes", "5,6,15"], capture_output=True, text=True, check=False)
+             "--probes", "5,6,9,15"], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 2)
         self.assertIn("Engine archive must be a regular", result.stderr)
         self.assertNotIn("Usage:", result.stderr)

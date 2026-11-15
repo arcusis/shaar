@@ -78,6 +78,9 @@ bool TrustedInputProbeWindowAllowed(bool testing, bool owned_root,
                                     bool selected, bool never_shown,
                                     bool transparent_verification_host,
                                     const GURL& url);
+bool TrustedWebStoreClickAllowed(bool testing, bool owned_root,
+                                 bool selected, bool never_shown,
+                                 const GURL& url, std::string_view element_id);
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open);

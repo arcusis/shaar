@@ -484,14 +484,21 @@ class ProbeTrustedInput final
       Fail();
       return;
     }
-    const std::string script =
-        "(()=>{const e=document.getElementById('" + element_id_ +
-        "');if(!e)return null;" +
-        (text_.empty()
-             ? std::string()
-             : "if(e.tagName!=='INPUT'||e.disabled||e.readOnly)return null;") +
-        "const r=e.getBoundingClientRect();return "
-        "{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()";
+    const std::string script = element_id_ == "webstore-add-to-chrome"
+        ? "(()=>{if(location.origin!=='https://chromewebstore.google.com')return null;"
+          "const e=[...document.querySelectorAll('button')].find(b=>"
+          "b.innerText.trim().toLowerCase()==='add to chrome'&&!b.disabled&&"
+          "b.getAttribute('aria-disabled')!=='true');if(!e)return null;"
+          "const r=e.getBoundingClientRect();if(!r.width||!r.height)return null;"
+          "return {x:Math.round(r.left+r.width/2),"
+          "y:Math.round(r.top+r.height/2)};})()"
+        : "(()=>{const e=document.getElementById('" + element_id_ +
+          "');if(!e)return null;" +
+          (text_.empty()
+               ? std::string()
+               : "if(e.tagName!=='INPUT'||e.disabled||e.readOnly)return null;") +
+          "const r=e.getBoundingClientRect();return "
+          "{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()";
     frame->ExecuteJavaScriptForTests(
         base::UTF8ToUTF16(script),
         base::BindOnce(&ProbeTrustedInput::OnElementPoint,
@@ -1601,6 +1608,15 @@ bool TrustedInputProbeWindowAllowed(bool testing, bool owned_root,
                             never_shown || transparent_verification_host, url);
 }
 
+bool TrustedWebStoreClickAllowed(bool testing, bool owned_root,
+                                 bool selected, bool never_shown,
+                                 const GURL& url, std::string_view element_id) {
+  return testing && owned_root && selected && never_shown &&
+         element_id == "webstore-add-to-chrome" && url.SchemeIs("https") &&
+         url.host() == "chromewebstore.google.com" &&
+         url.EffectiveIntPort() == 443;
+}
+
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open) {
@@ -1718,14 +1734,6 @@ shaar_error_code HandleDevToolsOperation(
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
     const bool selected = context->browser_tabs->IsSelectedWebContents(
         engine, window, tab, contents);
-    if (!TrustedInputProbeWindowAllowed(
-            testing && std::strcmp(testing, "1") == 0,
-            shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
-            shaar::windows_tabs::HasNeverShownPageHost(window, contents),
-            shaar::windows_tabs::HasTransparentVerificationPageHost(window, contents),
-            contents->GetLastCommittedURL()) || !scope.profile ||
-        scope.private_session)
-      return Fail(error, SHAAR_POLICY_BLOCKED, "trusted input probe is unavailable");
     int x = 0;
     int y = 0;
     std::string element_id;
@@ -1741,6 +1749,21 @@ shaar_error_code HandleDevToolsOperation(
                   trusted_text ? "invalid trusted text input"
                                : (scroll ? "invalid trusted scroll element"
                                          : "invalid trusted click point"));
+    const bool testing_enabled = testing && std::strcmp(testing, "1") == 0;
+    const bool owned_root = shaar::lifecycle::HasOwnedProbeRoot(engine);
+    const bool never_shown =
+        shaar::windows_tabs::HasNeverShownPageHost(window, contents);
+    const bool fixture_allowed = TrustedInputProbeWindowAllowed(
+        testing_enabled, owned_root, selected, never_shown,
+        shaar::windows_tabs::HasTransparentVerificationPageHost(window, contents),
+        contents->GetLastCommittedURL());
+    const bool store_click_allowed = operation == SHAAR_OP_PROBE_TRUSTED_CLICK &&
+        TrustedWebStoreClickAllowed(testing_enabled, owned_root, selected,
+                                   never_shown, contents->GetLastCommittedURL(),
+                                   element_id);
+    if ((!fixture_allowed && !store_click_allowed) || !scope.profile ||
+        scope.private_session)
+      return Fail(error, SHAAR_POLICY_BLOCKED, "trusted input probe is unavailable");
     auto* view = contents->GetRenderWidgetHostView();
     if (!view || !view->GetRenderWidgetHost() ||
         (element_id.empty() &&

@@ -192,6 +192,24 @@ TEST(ShaarDevToolsTest, PopupProbeArgumentsStayBoundToOneHiddenPopup) {
       true, &id, &expression));
 }
 
+TEST(ShaarDevToolsTest, TrustedStoreClickRequiresExactOriginAndHiddenProbe) {
+  const GURL store("https://chromewebstore.google.com/detail/example");
+  constexpr std::string_view target = "webstore-add-to-chrome";
+  EXPECT_TRUE(TrustedWebStoreClickAllowed(true, true, true, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(false, true, true, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, false, true, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, false, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, true, false, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, true, true, store, "other"));
+  for (const char* url : {"http://chromewebstore.google.com/",
+                          "https://chromewebstore.google.com:8443/",
+                          "https://sub.chromewebstore.google.com/",
+                          "https://example.com/"}) {
+    EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, true, true,
+                                             GURL(url), target));
+  }
+}
+
 class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
  public:
   bool ResolveTarget(shaar_engine*, shaar_scope, shaar_window*, shaar_tab*,

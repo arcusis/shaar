@@ -15,9 +15,9 @@ enum ShaarSavePromptProbeScenario: Equatable {
   case neverPassword
 
   static let all: [ShaarSavePromptProbeScenario] = [
-    .save(.password), .dismiss(.password),
-    .save(.card), .dismiss(.card),
-    .save(.address), .dismiss(.address),
+    .dismiss(.password), .save(.password),
+    .dismiss(.card), .save(.card),
+    .dismiss(.address), .save(.address),
     .neverPassword,
   ]
 
@@ -62,6 +62,31 @@ final class ShaarSavePromptRenderSurface {
 
 /// Hidden verification check for Chromium save offers.
 @MainActor enum ShaarSavePromptProbe {
+  static func seedNormalProfileSavePreferences(
+    profileIDs: [UUID], dataRoot: URL, fileManager: FileManager = .default
+  ) throws -> [URL] {
+    try profileIDs.map { profileID in
+      let directory = dataRoot.appending(
+        path: "Profile \(profileID.uuidString.lowercased())", directoryHint: .isDirectory)
+      try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+      let preferencesURL = directory.appending(path: "Preferences")
+      var preferences = (try? JSONSerialization.jsonObject(with: Data(contentsOf: preferencesURL)))
+        as? [String: Any] ?? [:]
+      preferences["credentials_enable_service"] = true
+      var autofill = preferences["autofill"] as? [String: Any] ?? [:]
+      autofill["profile_enabled"] = true
+      autofill["credit_card_enabled"] = true
+      preferences["autofill"] = autofill
+      let data = try JSONSerialization.data(withJSONObject: preferences, options: [.sortedKeys])
+      try data.write(to: preferencesURL, options: .atomic)
+      return preferencesURL
+    }
+  }
+
+  static func cardExpiryYear(relativeTo date: Date) -> String {
+    String(Calendar.current.component(.year, from: date) + 4)
+  }
+
   private static var trustedTextDiagnostics: [[String: Any]] = []
 
   static func run(
@@ -78,6 +103,9 @@ final class ShaarSavePromptRenderSurface {
           url: root.appending(path: "workspace.json"),
           legacySessionURL: root.appending(path: "session.json")))
       let runtime = try ARCShaarRuntime(frameworkURL: frameworkURL)
+      let dataRoot = outputURL.deletingLastPathComponent().appending(path: "Chromium")
+      _ = try seedNormalProfileSavePreferences(
+        profileIDs: workspace.workspace.catalog.profiles.map(\.id), dataRoot: dataRoot)
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
         presentation: .hiddenProbe)
@@ -91,7 +119,6 @@ final class ShaarSavePromptRenderSurface {
         }
       }
       return withExtendedLifetime(host) {
-        let dataRoot = outputURL.deletingLastPathComponent().appending(path: "Chromium")
         let code = runtime.run(withDataDirectory: dataRoot, testing: true)
         host.detach()
         return code
@@ -267,12 +294,12 @@ final class ShaarSavePromptRenderSurface {
     case .card:
       fields = [("card-name", "Probe \(decision.rawValue)"),
         ("card-number", "4111111111111111"), ("card-exp-month", "12"),
-        ("card-exp-year", "2030")]
+        ("card-exp-year", Self.cardExpiryYear(relativeTo: .now))]
     case .address:
       fields = [("address-name", "Probe \(decision.rawValue)"),
         ("address-street", "1 \(decision.rawValue) Loopback Road"),
         ("address-city", "Mountain View"), ("address-region", "CA"),
-        ("address-postal", "94043"), ("address-country", "US"),
+        ("address-postal", "94043"), ("address-country", "United States"),
         ("address-email", "parity@example.com")]
     }
     let valuesEntered = opened
@@ -517,8 +544,25 @@ final class ShaarSavePromptRenderSurface {
     let appeared = await wait {
       context.store.savePrompt?.kind == kind && promptPanel()?.isVisible == true
     }
-    if appeared { try? await Task.sleep(for: .milliseconds(500)) }
+    if appeared { _ = movePromptPanelOffscreen() }
     return appeared ? context.store.savePrompt : nil
+  }
+
+  static func offscreenPanelFrame(
+    _ frame: NSRect, visibleScreenFrames: [NSRect]
+  ) -> NSRect {
+    var result = frame
+    let leftmostScreen = visibleScreenFrames.map(\.minX).min() ?? 0
+    result.origin.x = leftmostScreen - frame.width - 1
+    return result
+  }
+
+  private static func movePromptPanelOffscreen() -> Bool {
+    guard let panel = promptPanel(), panel.isVisible else { return false }
+    let screenFrames = NSScreen.screens.map(\.frame)
+    panel.setFrame(
+      offscreenPanelFrame(panel.frame, visibleScreenFrames: screenFrames), display: false)
+    return !screenFrames.contains { $0.intersects(panel.frame) }
   }
 
   private static func filledLogin(

@@ -2,6 +2,7 @@
 
 import http.client
 import importlib.util
+import json
 from pathlib import Path
 import sqlite3
 import threading
@@ -81,6 +82,96 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
         self.server.record_submission("http://127.0.0.1:8000/address")
         self.assertEqual(
             self.server.submission_counts(), {"/card": 2, "/address": 1})
+
+    def test_save_offer_scenarios_keep_the_selected_browser_context(self):
+        source = (ROOT / "Sources" / "ShaarVerification" / "ShaarSavePromptProbe.swift").read_text()
+        self.assertIn("for scenario in scenarios", source)
+        self.assertIn("let caseContext = try freshContext(host: host, from: context)", source)
+
+    def test_receipt_reports_save_preferences_from_uuid_profiles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "Chromium"
+            profile = data_root / "Profile c95c57fb-72b2-4a99-b242-745585bbc06b"
+            profile.mkdir(parents=True)
+            (profile / "Preferences").write_text(json.dumps({
+                "credentials_enable_service": True,
+                "autofill": {"profile_enabled": True, "credit_card_enabled": True},
+            }))
+
+            self.assertEqual(PROBE.profile_autofill_preferences(data_root), [{
+                "profile": "Profile c95c57fb-72b2-4a99-b242-745585bbc06b",
+                "credentialsEnableService": True,
+                "autofillProfileEnabled": True,
+                "autofillCreditCardEnabled": True,
+            }])
+
+    def test_password_store_diagnostic_matches_saved_credential_to_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "Chromium"
+            profile_id = "c95c57fb-72b2-4a99-b242-745585bbc06b"
+            database = data_root / f"Profile {profile_id}" / "Login Data"
+            database.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(database)
+            connection.execute(
+                """CREATE TABLE logins (
+                     username_value TEXT, origin_url TEXT,
+                     blacklisted_by_user INTEGER, password_value BLOB
+                   )""")
+            connection.execute(
+                """INSERT INTO logins VALUES (
+                     'parity-user', 'http://127.0.0.1:8000/', 0, X'010203'
+                   )""")
+            connection.commit()
+            connection.close()
+
+            evidence = PROBE.profile_password_evidence(
+                data_root, "parity-user", "http://127.0.0.1:8000/", profile_id)
+            self.assertEqual(len(evidence), 1)
+            self.assertTrue(evidence[0]["fixtureCredentialStored"])
+            self.assertTrue(evidence[0]["matchesSaveProfile"])
+            self.assertTrue(PROBE.saved_in_profile(evidence, profile_id))
+            self.assertNotIn("parity-secret", str(evidence))
+
+    def test_password_store_diagnostic_uses_save_row_after_dismiss_row(self):
+        profile_id = "c95c57fb-72b2-4a99-b242-745585bbc06b"
+        self.assertEqual(PROBE.password_save_profile_id([
+            {"name": "password-dismiss"},
+            {"name": "password", "saveProfileID": profile_id},
+        ]), profile_id)
+
+    def test_card_and_address_fixtures_include_valid_autocomplete_data(self):
+        swift = (ROOT / "Sources" / "ShaarVerification" / "ShaarSavePromptProbe.swift").read_text()
+        card_number = "4111111111111111"
+        digits = [int(digit) for digit in card_number]
+        doubled = [digit * 2 if index % 2 == 1 else digit
+                   for index, digit in enumerate(reversed(digits))]
+        luhn_total = sum(digit - 9 if digit > 9 else digit for digit in doubled)
+        self.assertEqual(luhn_total % 10, 0)
+        self.assertIn(f'("card-number", "{card_number}")', swift)
+        self.assertIn('("card-exp-month", "12")', swift)
+        self.assertIn('("card-exp-year", Self.cardExpiryYear(relativeTo: .now))', swift)
+        self.assertIn('"card-name", "Probe ', swift)
+        self.assertIn('"address-name", "Probe ', swift)
+        self.assertIn('"address-street", "1 ', swift)
+        self.assertIn('"address-city", "Mountain View"', swift)
+        self.assertIn('"address-postal", "94043"', swift)
+        self.assertIn('"address-country", "United States"', swift)
+        fixture = (ROOT / "scripts" / "test-shaar-save-prompt.py").read_text()
+        self.assertGreaterEqual(fixture.count('method="post" autocomplete="on"'), 4)
+        for autocomplete in (
+            "cc-name", "cc-number", "cc-exp-month", "cc-exp-year", "name",
+            "street-address", "address-level2", "address-level1", "postal-code",
+            "country-name",
+        ):
+            with self.subTest(autocomplete=autocomplete):
+                self.assertIn(f'autocomplete="{autocomplete}"', fixture)
+        for field_id in (
+            "card-name", "card-number", "card-exp-month", "card-exp-year",
+            "address-name", "address-street", "address-city", "address-postal",
+            "address-country",
+        ):
+            with self.subTest(field_id=field_id):
+                self.assertIn(f'<label for="{field_id}">', fixture)
 
     def test_receipt_keeps_only_known_trusted_input_failure_stages(self):
         output = (

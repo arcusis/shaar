@@ -213,6 +213,7 @@ import Testing
     #expect(ARCProbeTrustedClickElementAllowed("plain"))
     #expect(ARCProbeTrustedClickElementAllowed("username"))
     #expect(ARCProbeTrustedClickElementAllowed("performance-input"))
+    #expect(ARCProbeTrustedClickElementAllowed("username"))
     #expect(ARCProbeTrustedClickElementAllowed("arcusis-download-probe"))
     #expect(ARCProbeTrustedClickElementAllowed("window-client-download"))
     #expect(ARCProbeTrustedClickElementAllowed("external-consent-probe"))

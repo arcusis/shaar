@@ -22,4 +22,15 @@ struct SavePromptPlacementTests {
     #expect(visibleFrame.contains(NSRect(origin: upperRight, size: panelSize)))
     #expect(visibleFrame.contains(NSRect(origin: lowerLeft, size: panelSize)))
   }
+
+  @Test func hiddenVerificationPlacesPanelOffscreenBeforeShowingIt() {
+    let panel = NSPanel(
+      contentRect: NSRect(x: 0, y: 0, width: 360, height: 196),
+      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+
+    SavePromptPlacement.place(panel, relativeTo: nil, forceOffscreen: true)
+
+    #expect(panel.frame.origin == SavePromptPlacement.offscreen)
+    #expect(NSScreen.screens.allSatisfy { !$0.frame.intersects(panel.frame) })
+  }
 }

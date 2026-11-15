@@ -1329,6 +1329,7 @@ final class BrowserEngine {
     savePromptPresenter.sync(
       request: store.savePrompt,
       browserWindow: runtime.window(forID: windowID),
+      forceOffscreen: !presentsNativePanels,
       onDecision: { [weak store] promptID, decision in
         store?.resolveSavePrompt(promptID, decision: decision)
       })

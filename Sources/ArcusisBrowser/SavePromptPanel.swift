@@ -39,7 +39,11 @@ enum SavePromptPlacement {
       y: min(max(origin.y, visibleFrame.minY), maxY))
   }
 
-  static func place(_ panel: NSPanel, relativeTo window: NSWindow?) {
+  static func place(_ panel: NSPanel, relativeTo window: NSWindow?, forceOffscreen: Bool = false) {
+    if forceOffscreen {
+      panel.setFrameOrigin(offscreen)
+      return
+    }
     guard browserIsOnScreen(window), let window, let content = window.contentView else {
       panel.setFrameOrigin(offscreen)
       return
@@ -223,6 +227,7 @@ final class SavePromptPresenter {
 
   func sync(
     request: SavePromptRequest?, browserWindow: NSWindow?,
+    forceOffscreen: Bool = false,
     onDecision: @escaping (String, SavePromptRequest.Decision) -> Void
   ) {
     guard let request else {
@@ -234,7 +239,7 @@ final class SavePromptPresenter {
     if panel.shownRequestID != request.id {
       panel.show(request) { decision in onDecision(request.id, decision) }
     }
-    SavePromptPlacement.place(panel, relativeTo: browserWindow)
+    SavePromptPlacement.place(panel, relativeTo: browserWindow, forceOffscreen: forceOffscreen)
     if !panel.isVisible { panel.orderFront(nil) }
   }
 
@@ -258,6 +263,7 @@ struct SavePromptAnchor: NSViewRepresentable {
     presenter.sync(
       request: store.savePrompt,
       browserWindow: view.window,
+      forceOffscreen: store.engine?.presentsNativePanels == false,
       onDecision: { [weak store] id, decision in
         store?.resolveSavePrompt(id, decision: decision)
       })

@@ -1301,6 +1301,10 @@ BOOL ARCProbeNativeHoldAuditVisible(BOOL ownerCurrent, BOOL nativeHold) {
   return ownerCurrent && nativeHold;
 }
 
+BOOL ARCProbeShouldReleaseCanceledQuitHold(BOOL runtimeQuitting, BOOL ownerCurrent) {
+  return !runtimeQuitting && ownerCurrent;
+}
+
 static NSMutableDictionary *PrivateQuitHoldOwners(ARCShaarRuntime *runtime) {
   if (!runtime) return nil;
   NSMutableDictionary *owners = objc_getAssociatedObject(runtime, kPrivateQuitHoldOwnersKey);
@@ -2083,6 +2087,37 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
   NSMutableDictionary *owner = PrivateQuitHoldOwners(self)[tabID];
   NSString *rejection = PrivateQuitCancelRejection(self, tabID, owner);
   if (rejection) {
+    if ([rejection isEqualToString:@"not-quitting"] &&
+        ARCProbeShouldReleaseCanceledQuitHold(self.isQuitting,
+            owner && PrivateQuitHoldOwnerCurrent(self, tabID, owner))) {
+      if (![owner[@"nativeHold"] boolValue]) {
+        [self endPrivateQuitCDPHoldForTabID:tabID owner:owner completion:^(BOOL ended) {
+          if (PrivateQuitHoldOwners(self)[tabID] == owner)
+            [PrivateQuitHoldOwners(self) removeObjectForKey:tabID];
+          RecordPrivateQuitDialogResult(self, ended ? @"hold-released-after-cancellation" :
+              @"hold-cleaned-after-cancellation");
+          completion(NO);
+        }];
+        return;
+      }
+      QuitProbeSymbols symbols = {};
+      shaar_engine *engine = nullptr;
+      shaar_scope scope = {};
+      shaar_window *window = nullptr;
+      shaar_tab *tab = nullptr;
+      if (QuitProbeSymbolsAvailable(self, &symbols) &&
+          ProbeRegularTarget(self, tabID, &engine, &scope, &window, &tab)) {
+        shaar_error error = ARCPrivateShaarEmptyError();
+        BOOL released = symbols.release(engine, scope, window, tab, &error) == SHAAR_OK &&
+            PrivateQuitHoldOwnerCurrent(self, tabID, owner);
+        if (PrivateQuitHoldOwners(self)[tabID] == owner)
+          [PrivateQuitHoldOwners(self) removeObjectForKey:tabID];
+        RecordPrivateQuitDialogResult(self, released ? @"hold-released-after-cancellation" :
+            @"hold-cleaned-after-cancellation");
+        completion(NO);
+        return;
+      }
+    }
     RecordPrivateQuitDialogResult(self, [@"rejected-" stringByAppendingString:rejection]);
     completion(NO);
     return;

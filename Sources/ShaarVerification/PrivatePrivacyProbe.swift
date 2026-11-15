@@ -31,11 +31,14 @@ struct PrivatePrivacyProbe {
   let windowID: String
   let contextID: String
   let normalTabID: String
+  let snapshotDiskFiles: () -> [String: String]
+  let checkpointNormalControlFiles: (_ before: [String: String], _ after: [String: String]) -> Void
 
   func run() async throws -> Bool {
     var checks: [String: Bool] = [:]
     var observations: [String: Any] = [:]
     do {
+      let normalControlSnapshot = snapshotDiskFiles()
       let prefs = runtime.privatePrivacyPreferences(forContextID: contextID) ?? [:]
       observations["preferences"] = prefs
       let engineStatus = await runtime.privatePrivacyStatus(forContextID: contextID)
@@ -46,16 +49,17 @@ struct PrivatePrivacyProbe {
       observations["normalStorage"] = normal
       checks["normalStoragePositiveControl"] =
         PrivatePrivacyEvidence.storage(normal, allowed: true, includesIndexedDB: false)
+      let normalNetwork = try await evaluate(normalTabID, networkScript)
+      observations["normalNetwork"] = normalNetwork
+      checks["normalNetworkCookiePositiveControl"] =
+        normalNetwork["cookieReturned"] as? Bool == true
+      checkpointNormalControlFiles(normalControlSnapshot, snapshotDiskFiles())
       let blocked = try await evaluate(tabID, storageScript)
       observations["blockedStorage"] = blocked
       checks["privateFirstPartyCookieAndStorageBlocked"] =
         PrivatePrivacyEvidence.storage(blocked, allowed: false, includesIndexedDB: true)
-      let normalNetwork = try await evaluate(normalTabID, networkScript)
       let privateNetwork = try await evaluate(tabID, networkScript)
-      observations["normalNetwork"] = normalNetwork
       observations["privateNetwork"] = privateNetwork
-      checks["normalNetworkCookiePositiveControl"] =
-        normalNetwork["cookieReturned"] as? Bool == true
       checks["privateFirstPartyNetworkReachable"] = privateNetwork["error"] == nil
       checks["privateNetworkCookiesBlocked"] = privateNetwork["cookieReturned"] as? Bool == false
       checks["privateTrackerRequestsBlocked"] =

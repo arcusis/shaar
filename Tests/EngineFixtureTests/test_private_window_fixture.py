@@ -54,7 +54,9 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                         allWindowsDisplayOwnedWebContents=True,
                         visibleNativeViewportCount=1),
                     cleanup=dict(windowsRemaining=0, contextsRemaining=0, passed=True),
-                    privateDiskArtifactAudit=dict(passed=True, newFileCount=3, leakedFiles=[]),
+                    privateDiskArtifactAudit=dict(
+                        passed=True, newFileCount=3, leakedFiles=[],
+                        baselineStage='after-normal-positive-controls'),
                     scope=fixture.PRIVATE_WINDOW_SCOPE)
 
     def write_phase(self, phase, evidence=None):
@@ -120,6 +122,13 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         evidence = self.evidence('initial')
         evidence['privateDiskArtifactAudit'] = dict(
             passed=False, newFileCount=1, leakedFiles=['Cookies'])
+        (self.root / 'initial-private-window.json').write_text(json.dumps(evidence))
+        with self.assertRaisesRegex(RuntimeError, 'failed or mismatched checks/cleanup'):
+            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))
+
+    def test_private_disk_audit_requires_baseline_after_normal_controls(self):
+        evidence = self.evidence('initial')
+        evidence['privateDiskArtifactAudit'].pop('baselineStage')
         (self.root / 'initial-private-window.json').write_text(json.dumps(evidence))
         with self.assertRaisesRegex(RuntimeError, 'failed or mismatched checks/cleanup'):
             fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))

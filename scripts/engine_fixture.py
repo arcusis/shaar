@@ -1280,6 +1280,7 @@ def validate_private_window_report(root, phase, report):
             or type(disk_audit.get('newFileCount')) is not int
             or not isinstance(disk_audit.get('leakedFiles'), list)
             or disk_audit.get('leakedFiles')
+            or disk_audit.get('baselineStage') != 'after-normal-positive-controls'
             or evidence.get('scope') != PRIVATE_WINDOW_SCOPE):
         raise RuntimeError(f'{phase} private-window evidence has failed or mismatched checks/cleanup')
     return evidence

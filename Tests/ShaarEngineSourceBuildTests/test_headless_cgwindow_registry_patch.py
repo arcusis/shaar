@@ -14,9 +14,13 @@ MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 class HeadlessCGWindowRegistryPatchTests(unittest.TestCase):
     def test_patch_follows_build_tool_patch_and_has_matching_digest(self):
         entries = json.loads(MANIFEST.read_text())["patches"]
-        self.assertEqual(str(PATCH.relative_to(ROOT)), entries[-2]["file"])
-        self.assertEqual(79, len(entries))
-        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), entries[-2]["sha256"])
+        paths = [entry["file"] for entry in entries]
+        position = paths.index(str(PATCH.relative_to(ROOT)))
+        self.assertEqual(
+            "ThirdParty/ChromiumEngine/patches/0150-shaar-pinned-build-tools.patch",
+            paths[position - 1],
+        )
+        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), entries[position]["sha256"])
 
     def test_zero_and_reused_ids_have_regression_coverage(self):
         patch = PATCH.read_text()

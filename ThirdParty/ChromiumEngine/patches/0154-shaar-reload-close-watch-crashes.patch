@@ -1,0 +1,255 @@
+--- a/chrome/browser/shaar/navigation/shaar_navigation.cc
++++ b/chrome/browser/shaar/navigation/shaar_navigation.cc
+@@ -133,25 +133,35 @@
+ 
+ shaar_error_code Reload(content::NavigationController* controller,
+                         bool bypass_cache) {
+-  if (!controller) return SHAAR_NOT_FOUND;
++  if (!controller) {
++    return SHAAR_NOT_FOUND;
++  }
+   content::NavigationEntry* pending_entry = controller->GetPendingEntry();
+   if (pending_entry) {
+-    content::NavigationEntry* committed_entry = controller->GetLastCommittedEntry();
+-    const GURL target = ReloadTargetURL(
+-        pending_entry->GetURL(),
+-        committed_entry ? committed_entry->GetURL() : GURL());
+-    content::NavigationController::LoadURLParams params(target);
+-    params.transition_type = ui::PAGE_TRANSITION_RELOAD;
+-    params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
+-                                      : content::ReloadType::NORMAL;
+-    params.should_replace_current_entry = true;
+-    controller->LoadURLWithParams(params);
++    content::NavigationEntry* committed_entry =
++        controller->GetLastCommittedEntry();
++    const GURL target =
++        ReloadTargetURL(pending_entry->GetURL(),
++                        committed_entry ? committed_entry->GetURL() : GURL());
++    controller->LoadURLWithParams(
++        MakePendingReloadParams(target, bypass_cache));
+     return SHAAR_OK;
+   }
+   controller->Reload(bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                                   : content::ReloadType::NORMAL,
+                      true);
+   return SHAAR_OK;
++}
++
++content::NavigationController::LoadURLParams MakePendingReloadParams(
++    const GURL& target,
++    bool bypass_cache) {
++  content::NavigationController::LoadURLParams params(target);
++  params.transition_type = ui::PAGE_TRANSITION_RELOAD;
++  params.reload_type = bypass_cache ? content::ReloadType::BYPASSING_CACHE
++                                    : content::ReloadType::NORMAL;
++  // Chromium forbids a replacement and a reload on a committed entry.
++  return params;
+ }
+ 
+ GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url) {
+--- a/chrome/browser/shaar/navigation/shaar_navigation.h
++++ b/chrome/browser/shaar/navigation/shaar_navigation.h
+@@ -9,6 +9,7 @@
+ 
+ #include "chrome/browser/shaar/navigation/shaar_navigation_context.h"
+ #include "chrome/browser/shaar/public/shaar_engine.h"
++#include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "url/gurl.h"
+ 
+@@ -36,10 +37,14 @@
+ // exact profile/session/window/tab ownership. They return boundary errors
+ // synchronously; accepted actions are acknowledged by the owning dispatcher.
+ shaar_error_code Navigate(content::WebContents* contents,
+-                          const std::string& url, bool user_initiated);
++                          const std::string& url,
++                          bool user_initiated);
+ shaar_error_code Go(content::NavigationController* controller, bool forward);
+ shaar_error_code Reload(content::NavigationController* controller,
+                         bool bypass_cache);
++content::NavigationController::LoadURLParams MakePendingReloadParams(
++    const GURL& target,
++    bool bypass_cache);
+ // A reload requested while a navigation is pending restarts that destination
+ // instead of falling back to the last committed entry.
+ GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url);
+--- a/chrome/browser/shaar/navigation/shaar_navigation_unittest.cc
++++ b/chrome/browser/shaar/navigation/shaar_navigation_unittest.cc
+@@ -7,6 +7,7 @@
+ #include <string>
+ 
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "ui/base/page_transition_types.h"
+ 
+ namespace shaar::navigation {
+ namespace {
+@@ -122,11 +123,20 @@
+   EXPECT_FALSE(backend.did_bypass_cache);
+ }
+ 
+-TEST(ShaarNavigationHandlerTest, ReloadDuringNavigationKeepsPendingDestination) {
++TEST(ShaarNavigationHandlerTest,
++     ReloadDuringNavigationKeepsPendingDestination) {
+   const GURL committed("https://example.test/previous");
+   const GURL pending("https://example.test/slow");
+   EXPECT_EQ(ReloadTargetURL(pending, committed), pending);
+   EXPECT_EQ(ReloadTargetURL(GURL(), committed), committed);
++  const auto normal = MakePendingReloadParams(pending, false);
++  EXPECT_EQ(normal.url, pending);
++  EXPECT_EQ(normal.transition_type, ui::PAGE_TRANSITION_RELOAD);
++  EXPECT_EQ(normal.reload_type, content::ReloadType::NORMAL);
++  EXPECT_FALSE(normal.should_replace_current_entry);
++  const auto bypass = MakePendingReloadParams(pending, true);
++  EXPECT_EQ(bypass.reload_type, content::ReloadType::BYPASSING_CACHE);
++  EXPECT_FALSE(bypass.should_replace_current_entry);
+ }
+ 
+ TEST(ShaarNavigationHandlerTest, StopIsDispatchedAndNullBackendIsNotFound) {
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc
+@@ -3,10 +3,9 @@
+ // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ 
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+-#include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
+-#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
+ 
+ #include <algorithm>
++#include <cstdint>
+ #include <unordered_map>
+ #include <unordered_set>
+ #include <utility>
+@@ -16,6 +15,8 @@
+ #include "base/no_destructor.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
++#include "chrome/browser/shaar/devtools/shaar_devtools_viewports.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -33,16 +34,26 @@
+ namespace {
+ BrowserTabRegistryImpl g_registry;
+ 
+-std::unordered_map<Browser*, base::CallbackListSubscription>&
+-BrowserCloseWatches() {
+-  static base::NoDestructor<
+-      std::unordered_map<Browser*, base::CallbackListSubscription>>
++struct BrowserCloseWatch {
++  uint64_t id;
++  base::CallbackListSubscription subscription;
++};
++
++std::unordered_map<uintptr_t, BrowserCloseWatch>& BrowserCloseWatches() {
++  static base::NoDestructor<std::unordered_map<uintptr_t, BrowserCloseWatch>>
+       watches;
+   return *watches;
+ }
+-}
+-
+-BrowserTabRegistryImpl& Registry() { return g_registry; }
++
++uint64_t NextBrowserCloseWatchId() {
++  static uint64_t next_id = 0;
++  return ++next_id;
++}
++}  // namespace
++
++BrowserTabRegistryImpl& Registry() {
++  return g_registry;
++}
+ 
+ void BrowserTabRegistryImpl::BeginEngineQuit(shaar_engine* engine) {
+   if (engine) {
+@@ -142,23 +153,34 @@
+ }
+ 
+ void BrowserTabRegistryImpl::RetireClosingBrowser(Browser* browser) {
+-  if (!browser)
+-    return;
++  if (!browser) {
++    return;
++  }
+   const bool inserted = retired_browsers_.insert(browser).second;
+   if (inserted) {
+-    for (const auto& state : windows_)
++    for (const auto& state : windows_) {
+       UnbindBrowser(state.engine, state.handle, browser);
++    }
+   }
+   // Drop the subscription after Notify returns. Erasing it here would reset
+   // the callback list node while RegisterBrowserDidClose is still running.
+-  if (!BrowserCloseWatches().contains(browser))
+-    return;
++  const uintptr_t address = reinterpret_cast<uintptr_t>(browser);
++  const auto watch = BrowserCloseWatches().find(address);
++  if (watch == BrowserCloseWatches().end()) {
++    return;
++  }
++  const uint64_t watch_id = watch->second.id;
+   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE, base::BindOnce(
+-                     [](Browser* closing) {
+-                       BrowserCloseWatches().erase(closing);
++                     [](uintptr_t closing_address, uint64_t closing_watch_id) {
++                       auto& watches = BrowserCloseWatches();
++                       auto current = watches.find(closing_address);
++                       if (current != watches.end() &&
++                           current->second.id == closing_watch_id) {
++                         watches.erase(current);
++                       }
+                      },
+-                     browser));
++                     address, watch_id));
+ }
+ 
+ bool BrowserTabRegistryImpl::BrowserHasBoundTabs(Browser* browser) const {
+@@ -194,24 +216,35 @@
+ }
+ 
+ void BrowserTabRegistryImpl::WatchBrowserClose(Browser* browser) {
+-  if (!browser)
+-    return;
++  if (!browser) {
++    return;
++  }
+   MarkBrowserCreated(browser);
+-  if (BrowserCloseWatches().contains(browser))
+-    return;
++  const uintptr_t address = reinterpret_cast<uintptr_t>(browser);
++  if (BrowserCloseWatches().contains(address)) {
++    return;
++  }
++  base::WeakPtr<BrowserWindowInterface> weak_browser = browser->GetWeakPtr();
+   BrowserCloseWatches().emplace(
+-      browser, browser->RegisterBrowserDidClose(base::BindRepeating(
+-                   [](Browser* closing, BrowserWindowInterface*) {
+-                     Registry().RetireClosingBrowser(closing);
+-                   },
+-                   browser)));
++      address,
++      BrowserCloseWatch{NextBrowserCloseWatchId(),
++                        browser->RegisterBrowserDidClose(base::BindRepeating(
++                            [](base::WeakPtr<BrowserWindowInterface> closing,
++                               BrowserWindowInterface*) {
++                              if (closing) {
++                                Registry().RetireClosingBrowser(
++                                    static_cast<Browser*>(closing.get()));
++                              }
++                            },
++                            std::move(weak_browser)))});
+ }
+ 
+ void BrowserTabRegistryImpl::MarkBrowserCreated(Browser* browser) {
+-  if (!browser || !retired_browsers_.erase(browser))
+-    return;
++  if (!browser || !retired_browsers_.erase(browser)) {
++    return;
++  }
+   // Replace any watch left under this address when the allocator reused it.
+-  BrowserCloseWatches().erase(browser);
++  BrowserCloseWatches().erase(reinterpret_cast<uintptr_t>(browser));
+ }
+ 
+ bool BrowserTabRegistryImpl::BeginWindowClose(shaar_engine* engine,

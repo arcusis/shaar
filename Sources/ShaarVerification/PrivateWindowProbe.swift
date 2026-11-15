@@ -41,7 +41,10 @@ final class PrivateWindowProbe {
   private var privateWindows: [String] = []
   private var diskSnapshot: [String: String] = [:]
   private var diskAuditBaselineStage = "before-private-contexts"
-  private var privateDiskMarkers: Set<Data> = []
+  private let privateUUIDMarker = UUID().uuidString.lowercased()
+  private var normalProfileUUIDMatches: [String] = []
+  private var privateNavigationAudit: [String: Any] = [:]
+  private var privateNavigationTrace: [[String: Any]] = []
   private var privateDiskArtifactAudit: [String: Any] = [:]
   private var privateWindowContexts: [String: String] = [:]
   private var privateContexts: [String] = []
@@ -229,7 +232,6 @@ final class PrivateWindowProbe {
     let t1 = UUID().uuidString.uppercased()
     let t2 = UUID().uuidString.uppercased()
     diskSnapshot = chromiumProfileFiles()
-    privateDiskMarkers = PrivateDiskArtifactBaseline.privateOnlyMarkers(runID: runID)
     markStage("opening-private-windows")
     try open(w1, contextA, t1, fixture.appending(path: "private-window-\(marker)-a").absoluteString)
     privateWindows.append(w1)
@@ -245,6 +247,7 @@ final class PrivateWindowProbe {
     let privacy = try await PrivatePrivacyProbe(
       runtime: runtime, root: root, fixture: fixture, phase: phase,
       tabID: t1, windowID: w1, contextID: contextA, normalTabID: normalTab,
+      privateUUIDMarker: privateUUIDMarker,
       snapshotDiskFiles: { [weak self] in
         self?.chromiumProfileFiles() ?? [:]
       },
@@ -255,6 +258,7 @@ final class PrivateWindowProbe {
         self.diskSnapshot = PrivateDiskArtifactBaseline.checkpointNormalControlChanges(
           baseline: self.diskSnapshot, beforeControls: before, afterControls: after)
         self.diskAuditBaselineStage = "after-normal-positive-controls"
+        self.normalProfileUUIDMatches = self.filesContainingPrivateUUID()
       }
     ).run()
     markStage("checking-private-sharing")
@@ -331,7 +335,6 @@ final class PrivateWindowProbe {
       PrivateWindowOwnership.nativeFixtureIsOwned(
         runtime.privateProbeAudit(forContextID: contextA) as? [String: Any])
     let secret = UUID().uuidString.lowercased()
-    privateDiskMarkers.insert(Data(secret.utf8))
     try await setPrivate(t1, cookie: secret, storage: secret)
     try await waitUntil(t2) { $0["local"] as? String == secret }
     let shared = try await readPrivate(t2)
@@ -546,18 +549,40 @@ final class PrivateWindowProbe {
   private func auditPrivateDiskArtifacts() -> [String: Any] {
     let after = chromiumProfileFiles()
     let changedFiles = after.keys.filter { diskSnapshot[$0] != after[$0] }.sorted()
-    var leaked: [String] = []
-    for path in changedFiles {
-      guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
+    let privateUUIDMatches = filesContainingPrivateUUID()
+    let normalMatches = Set(normalProfileUUIDMatches)
+    let postCloseMatches = privateUUIDMatches.filter { !normalMatches.contains($0) }
+    return [
+      "passed": privateUUIDMatches.isEmpty, "newFileCount": changedFiles.count,
+      "privateUUIDMarker": privateUUIDMarker,
+      "normalProfileUUIDMatches": normalProfileUUIDMatches,
+      "privateUUIDMatches": privateUUIDMatches,
+      "postCloseUUIDMatches": postCloseMatches,
+      "baselineStage": diskAuditBaselineStage,
+    ]
+  }
+
+  private func filesContainingPrivateUUID() -> [String] {
+    let fileManager = FileManager.default
+    let marker = Data(privateUUIDMarker.utf8)
+    var matches: [String] = []
+    for directory in [root.appending(path: "Chromium"), root.appending(path: "Cache")]
+    where fileManager.fileExists(atPath: directory.path) {
+      guard
+        let enumerator = fileManager.enumerator(
+          at: directory, includingPropertiesForKeys: [.isRegularFileKey],
+          options: [.skipsPackageDescendants]
+        )
       else { continue }
-      if privateDiskMarkers.contains(where: { !$0.isEmpty && data.range(of: $0) != nil }) {
-        leaked.append(URL(fileURLWithPath: path).lastPathComponent)
+      for case let url as URL in enumerator {
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+          let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+          PrivateDiskArtifactBaseline.contains(marker: marker, in: data)
+        else { continue }
+        matches.append(String(url.path.dropFirst(root.path.count + 1)))
       }
     }
-    return [
-      "passed": leaked.isEmpty, "newFileCount": changedFiles.count,
-      "leakedFiles": leaked, "baselineStage": diskAuditBaselineStage,
-    ]
+    return matches.sorted()
   }
 
   private func begin(_ id: String, _ source: String) async throws -> Bool {
@@ -733,52 +758,104 @@ final class PrivateWindowProbe {
   private func exerciseNavigation(tab: String, window: String, context: String, marker: String)
     async throws -> Bool
   {
+    privateNavigationTrace = []
     let first = fixture.appending(path: "private-window-\(marker)-nav-a")
     let second = fixture.appending(path: "private-window-\(marker)-nav-b")
     guard
       runtime.navigatePrivateTabID(
         tab, windowID: window, contextID: context, url: first.absoluteString),
       try await waitForPrivatePath(tab, firstPath: first.path)
-    else { return false }
+    else { return await navigationFailed("first-navigation", tab: tab) }
+    await recordNavigationStep("first-navigation", tab: tab)
     guard
       runtime.navigatePrivateTabID(
         tab, windowID: window, contextID: context, url: second.absoluteString),
       try await waitForPrivatePath(tab, firstPath: second.path)
-    else { return false }
+    else { return await navigationFailed("second-navigation", tab: tab) }
+    await recordNavigationStep("second-navigation", tab: tab)
     guard let priorInstance = try await readPrivate(tab)["instance"] as? String,
       UUID(uuidString: priorInstance) != nil
-    else { return false }
+    else { return await navigationFailed("read-reload-instance", tab: tab) }
     guard runtime.reloadPrivateTabID(tab, windowID: window, contextID: context) else {
-      return false
+      return await navigationFailed("reload-request", tab: tab)
     }
     guard
       try await waitForPrivateReload(
         tab, path: second.path, priorInstance: priorInstance)
-    else { return false }
+    else { return await navigationFailed("reload-completion", tab: tab) }
+    await recordNavigationStep("reload-completion", tab: tab)
 
     let slow = fixture.appending(path: "private-window-\(marker)-slow")
     privateLoadingStates[tab] = false
-    guard runtime.navigatePrivateTabID(
-      tab, windowID: window, contextID: context, url: slow.absoluteString),
-      try await waitForPrivateLoading(tab, loading: true)
-    else { return false }
+    guard
+      runtime.navigatePrivateTabID(
+        tab, windowID: window, contextID: context, url: slow.absoluteString),
+      await waitForPrivateNavigationRequest(path: slow.path, count: 1)
+    else { return await navigationFailed("slow-request-start", tab: tab) }
+    await recordNavigationStep("slow-request-start", tab: tab)
     guard runtime.reloadPrivateTabID(tab, windowID: window, contextID: context),
       try await waitForPrivateRepeatedRequest(tab, path: slow.path)
-    else { return false }
+    else { return await navigationFailed("reload-while-loading", tab: tab) }
+    await recordNavigationStep("reload-while-loading", tab: tab)
 
     guard runtime.goBackPrivateTabID(tab, windowID: window, contextID: context),
       try await waitForPrivatePath(tab, firstPath: second.path)
-    else { return false }
+    else { return await navigationFailed("back-navigation", tab: tab) }
+    await recordNavigationStep("back-navigation", tab: tab)
     guard runtime.goForwardPrivateTabID(tab, windowID: window, contextID: context),
       try await waitForPrivatePath(tab, firstPath: slow.path)
-    else { return false }
+    else { return await navigationFailed("forward-navigation", tab: tab) }
+    await recordNavigationStep("forward-navigation", tab: tab)
+    privateNavigationAudit = [
+      "passed": true,
+      "completedSteps": [
+        "first-navigation", "second-navigation", "reload-completion",
+        "reload-while-loading", "back-navigation", "forward-navigation",
+      ],
+    ]
     return true
   }
 
-  private func waitForPrivateLoading(_ tab: String, loading: Bool) async throws -> Bool {
+  private func navigationFailed(_ step: String, tab: String) async -> Bool {
+    privateNavigationAudit = [
+      "passed": false,
+      "failedStep": step,
+      "document": (try? await readPrivate(tab)) ?? [:],
+      "pipeline": runtime.privateNavigationProbeAudit(forTabID: tab) ?? [:],
+      "loadingCallback": privateLoadingStates[tab] as Any? ?? NSNull(),
+      "trace": privateNavigationTrace,
+    ]
+    return false
+  }
+
+  private func recordNavigationStep(_ name: String, tab: String) async {
+    let document: [String: Any] = (try? await readPrivate(tab)) ?? ["unavailable": true]
+    privateNavigationTrace.append([
+      "step": name,
+      "document": document,
+      "pipeline": runtime.privateNavigationProbeAudit(forTabID: tab) ?? [:],
+    ])
+  }
+
+  private func waitForPrivateNavigationRequest(path: String, count minimumCount: Int)
+    async -> Bool
+  {
+    let countURL = fixture.appending(path: "private-navigation-count")
+    guard
+      var components = URLComponents(
+        url: countURL, resolvingAgainstBaseURL: false)
+    else { return false }
+    components.queryItems = [URLQueryItem(name: "path", value: path)]
+    guard let url = components.url else { return false }
     for _ in 0..<100 {
-      if privateLoadingStates[tab] == loading { return true }
-      try await Task.sleep(for: .milliseconds(100))
+      if let (data, _) = try? await URLSession.shared.data(from: url),
+        let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        response["path"] as? String == path,
+        (response["count"] as? Int ?? 0) >= minimumCount
+      {
+        return true
+      }
+      try? await Task.sleep(for: .milliseconds(50))
     }
     return false
   }
@@ -844,7 +921,7 @@ final class PrivateWindowProbe {
       runtime.evaluatePrivateProbeTabID(
         tab,
         script:
-          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:(()=>{try{return localStorage.getItem('private')}catch{return null}})(), session:(()=>{try{return sessionStorage.getItem('private')}catch{return null}})(), path:location.pathname, instance:window.arcusisInstance, privateRequest:document.documentElement.dataset.privateRequest||''})"
+          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:(()=>{try{return localStorage.getItem('private')}catch{return null}})(), session:(()=>{try{return sessionStorage.getItem('private')}catch{return null}})(), path:location.pathname, instance:window.arcusisInstance, privateRequest:document.documentElement.dataset.privateRequest||'', historyLength:history.length})"
       ) { continuation.resume(returning: $0) }
     }
     guard let json, let data = json.data(using: .utf8) else {
@@ -1034,12 +1111,13 @@ final class PrivateWindowProbe {
   static func evidencePassed(
     checks: [String: Bool], expectedFailures: [String: String]
   ) -> Bool {
-    !checkNames.isEmpty && checkNames.allSatisfy { name in
-      if checks[name] == true { return true }
-      return name == "productSecondPrivateTabRenders"
-        && checks[name] == false
-        && expectedFailures[name] == "Issue #417: second private tab may display a black page."
-    }
+    !checkNames.isEmpty
+      && checkNames.allSatisfy { name in
+        if checks[name] == true { return true }
+        return name == "productSecondPrivateTabRenders"
+          && checks[name] == false
+          && expectedFailures[name] == "Issue #417: second private tab may display a black page."
+      }
   }
 
   static func privateNavigationRequestWasRepeated(_ value: Any?) -> Bool {
@@ -1121,6 +1199,7 @@ final class PrivateWindowProbe {
       "productRendererCaptureOutcome": productRendererCaptureOutcome,
       "productSmokeDiagnostics": productSmokeDiagnostics,
       "privateDiskArtifactAudit": privateDiskArtifactAudit,
+      "privateNavigationAudit": privateNavigationAudit,
       "productLifecycleBlocker": productLifecycleBlocker ?? "",
       "cleanup": [
         "windowsRemaining": privateWindows.count, "contextsRemaining": privateContexts.count,
@@ -1140,14 +1219,8 @@ final class PrivateWindowProbe {
 }
 
 enum PrivateDiskArtifactBaseline {
-  static func privateOnlyMarkers(runID: String) -> Set<Data> {
-    // The normal positive controls also author privacyProbe, privacyJS, and privacyHttp.
-    // Those keys cannot establish a private-to-normal disk leak, especially when LevelDB
-    // flushes the normal writes after the metadata checkpoint.
-    [
-      Data("/private-window-\(runID.lowercased())-".utf8),
-      Data("/private-product-\(runID.lowercased())-".utf8),
-    ]
+  static func contains(marker: Data, in data: Data) -> Bool {
+    !marker.isEmpty && data.range(of: marker) != nil
   }
 
   static func checkpointNormalControlChanges(

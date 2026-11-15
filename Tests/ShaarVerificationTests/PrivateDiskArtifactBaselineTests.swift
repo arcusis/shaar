@@ -2,20 +2,21 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Foundation
 import Testing
 
 @testable import ShaarVerification
 
 @Suite struct PrivateDiskArtifactBaselineTests {
-  @Test func onlyPrivateMarkersAreAudited() {
-    let markers = PrivateDiskArtifactBaseline.privateOnlyMarkers(runID: "D9527BA1")
-    #expect(markers == [
-      Data("/private-window-d9527ba1-".utf8),
-      Data("/private-product-d9527ba1-".utf8),
-    ])
-    #expect(!markers.contains(Data("privacyProbe".utf8)))
-    #expect(!markers.contains(Data("privacyJS=1".utf8)))
-    #expect(!markers.contains(Data("privacyHttp=1".utf8)))
+  @Test func privateUUIDMarkerDoesNotMatchNormalPositiveControlSentinel() {
+    let privateUUID = "e3b0c442-98fc-4c14-a8d2-000000000001"
+
+    #expect(
+      !PrivateDiskArtifactBaseline.contains(
+        marker: Data(privateUUID.utf8), in: Data("privacyProbe".utf8)))
+    #expect(
+      PrivateDiskArtifactBaseline.contains(
+        marker: Data(privateUUID.utf8), in: Data("private-audit-uuid=\(privateUUID)".utf8)))
   }
 
   @Test func checkpointsOnlyFilesChangedByNormalPositiveControls() {

@@ -136,6 +136,16 @@ private struct ParitySnapshot {
   var scriptStalled = false
 }
 
+enum PlatformParityRenderSurfacePolicy {
+  static func presentsFrames(forPath path: String) -> Bool {
+    path == "/widevine-playback"
+  }
+
+  static func isInvisible(alphaValue: CGFloat, ignoresMouseEvents: Bool) -> Bool {
+    alphaValue == 0 && ignoresMouseEvents
+  }
+}
+
 @MainActor private final class PlatformParityRun {
   let host: NativeBrowserHost
   let runtime: ARCShaarRuntime
@@ -326,6 +336,25 @@ private struct ParitySnapshot {
     guard let context, let page = pageURL(check) else { return ParitySnapshot() }
     trimTabs(in: context)
     var snapshot = ParitySnapshot()
+    let renderWindow = PlatformParityRenderSurfacePolicy.presentsFrames(forPath: check.path)
+      ? context.window : nil
+    let priorRenderWindowState = renderWindow.map {
+      (alphaValue: $0.alphaValue, ignoresMouseEvents: $0.ignoresMouseEvents)
+    }
+    if let renderWindow {
+      SurfaceGuard.allowInvisibleRendering(in: renderWindow)
+      renderWindow.alphaValue = 0
+      renderWindow.ignoresMouseEvents = true
+      renderWindow.orderFront(nil)
+    }
+    defer {
+      if let renderWindow {
+        renderWindow.orderOut(nil)
+        renderWindow.alphaValue = priorRenderWindowState?.alphaValue ?? 1
+        renderWindow.ignoresMouseEvents = priorRenderWindowState?.ignoresMouseEvents ?? false
+        SurfaceGuard.disallowInvisibleRendering(in: renderWindow)
+      }
+    }
     snapshot.opened = await open(
       page, in: context, timeout: loadTimeout, tolerateErrorPage: check.tolerateErrorPage)
     snapshot.surfaceBaseline = SurfaceGuard.count
@@ -452,6 +481,7 @@ private struct ParitySnapshot {
   ) {
     let browserWindows = browserWindowClassNames
     for window in NSApp.windows where window.isVisible {
+      if SurfaceGuard.isInvisibleRenderingSurface(window) { continue }
       if !isBrowserOwnedWindow(window, browserWindows: browserWindows) {
         let name = "visible \(type(of: window))"
         if !snapshot.surfaces.contains(name) { snapshot.surfaces.append(name) }
@@ -1157,7 +1187,9 @@ private struct ParitySnapshot {
   }
 
   private func publish() {
-    let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
+    let hidden = NSApp.windows.allSatisfy {
+      !$0.isVisible || SurfaceGuard.isInvisibleRenderingSurface($0)
+    }
     write(
       [
         "completed": completed, "allWindowsHidden": hidden, "userAgent": userAgent,
@@ -1245,6 +1277,7 @@ private final class SurfaceRecord: @unchecked Sendable {
 
 private enum SurfaceGuard {
   private static let record = SurfaceRecord()
+  @MainActor private static var invisibleRenderingWindow: ObjectIdentifier?
 
   static var count: Int { record.count }
   static var installed: [String] { record.selectors }
@@ -1252,6 +1285,22 @@ private enum SurfaceGuard {
   static func names(after index: Int) -> [String] { record.names(after: index) }
 
   static func note(_ name: String) { record.note(name) }
+
+  @MainActor static func allowInvisibleRendering(in window: NSWindow) {
+    invisibleRenderingWindow = ObjectIdentifier(window)
+  }
+
+  @MainActor static func disallowInvisibleRendering(in window: NSWindow) {
+    if invisibleRenderingWindow == ObjectIdentifier(window) {
+      invisibleRenderingWindow = nil
+    }
+  }
+
+  @MainActor static func isInvisibleRenderingSurface(_ window: NSWindow) -> Bool {
+    invisibleRenderingWindow == ObjectIdentifier(window)
+      && PlatformParityRenderSurfacePolicy.isInvisible(
+        alphaValue: window.alphaValue, ignoresMouseEvents: window.ignoresMouseEvents)
+  }
 
   static func startWatchdog() {
     Thread.detachNewThread {
@@ -1272,6 +1321,7 @@ private enum SurfaceGuard {
       NSApp.abortModal()
     }
     for window in NSApp.windows where window.isVisible {
+      if isInvisibleRenderingSurface(window) { continue }
       note("visible \(type(of: window))")
       window.orderOut(nil)
     }
@@ -1320,6 +1370,14 @@ private enum SurfaceGuard {
 
 extension NSWindow {
   @objc(parity_orderFront:) fileprivate func parityOrderFront(_ sender: Any?) {
+    if SurfaceGuard.isInvisibleRenderingSurface(self) {
+      guard let implementation = class_getMethodImplementation(
+        NSWindow.self, #selector(NSWindow.parityOrderFront(_:))) else { return }
+      let original = unsafeBitCast(
+        implementation, to: (@convention(c) (AnyObject, Selector, Any?) -> Void).self)
+      original(self, #selector(NSWindow.parityOrderFront(_:)), sender)
+      return
+    }
     SurfaceGuard.note(String(describing: type(of: self)))
   }
 

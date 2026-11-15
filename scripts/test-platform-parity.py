@@ -404,13 +404,18 @@ class Handler(BaseHTTPRequestHandler):
                   if (keySystem !== 'com.widevine.alpha') throw new Error('Wrong DRM key system: ' + keySystem);
                   await video.play();
                   progress('video-play-requested');
+                  const playbackThreshold = 0.5;
                   const deadline = Date.now() + 20000;
-                  while (Date.now() < deadline && (video.paused || video.currentTime <= 0)) {
+                  while (Date.now() < deadline &&
+                         (video.paused || video.currentTime < playbackThreshold)) {
                     await new Promise(resolve => setTimeout(resolve, 200));
                   }
-                  finish({outcome:video.paused ? 'paused' : 'playing', keySystem,
+                  finish({outcome:video.currentTime >= playbackThreshold ? 'playing' : video.paused ? 'paused' : 'stalled', keySystem,
                     currentTimeMilliseconds:Math.round(video.currentTime * 1000),
-                    readyState:video.readyState});
+                    readyState:video.readyState, networkState:video.networkState,
+                    videoPaused:video.paused, videoError:video.error?.code || 0,
+                    decodedFrameCount:video.webkitDecodedFrameCount || 0,
+                    visibilityState:document.visibilityState});
                 } catch (error) { fail(error); }
               })();
             """), html, []

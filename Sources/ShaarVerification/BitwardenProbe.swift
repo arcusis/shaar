@@ -45,6 +45,7 @@ final class BitwardenProbe {
   private let fixture: URL
   private let phase: String
   private let onboardingControl: Bool
+  private let storePageOnly: Bool
   private let spaceName: String
   private let extensionID = "nngceckbapebfimnlniiiahkandclblb"
   private var checks: [String] = []
@@ -54,6 +55,7 @@ final class BitwardenProbe {
   init(
     runtime: ARCChromiumRuntime, engine: BrowserEngine, store: BrowserStore,
     root: URL, fixture: URL, phase: String, onboardingControl: Bool = false,
+    storePageOnly: Bool = false,
     spaceName: String = "Bitwarden store probe"
   ) {
     self.runtime = runtime
@@ -63,6 +65,7 @@ final class BitwardenProbe {
     self.fixture = fixture
     self.phase = phase
     self.onboardingControl = onboardingControl
+    self.storePageOnly = storePageOnly
     self.spaceName = spaceName
   }
 
@@ -106,6 +109,10 @@ final class BitwardenProbe {
             tab,
             """
             ({url:location.href, text:document.body?.innerText?.slice(0,20000),
+              userAgentBrands:navigator.userAgentData?.brands ?? null,
+              webstorePrivateType:typeof globalThis.chrome?.webstorePrivate,
+              storeBanner:document.body?.innerText?.includes('Switch to Chrome to install extensions and themes')
+                ? 'Switch to Chrome to install extensions and themes' : null,
               buttons:[...document.querySelectorAll('button,[role="button"]')].map(b=>
                 ({text:(b.innerText || b.getAttribute('aria-label') || '').trim(), disabled:b.disabled || b.getAttribute('aria-disabled')==='true'}))})
             """) ?? [:]
@@ -120,6 +127,10 @@ final class BitwardenProbe {
         runtime.captureProbeTabID(tab) { continuation.resume(returning: $0) }
       }
       try picture?.write(to: root.appending(path: "bitwarden-store.png"), options: .atomic)
+      if storePageOnly {
+        checks.append("real Web Store page state captured in a hidden window")
+        return checks
+      }
       guard buttonReady else {
         throw BitwardenProbeFailure(
           "Chrome Web Store did not offer an enabled Add to Chrome button. See bitwarden-store-page.json."

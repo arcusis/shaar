@@ -624,6 +624,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0154-shaar-reload-close-watch-crashes.patch",
       "sha256": "cd771553f7dd6d711a6fe28c8ed2450e35b302208190c6de31460bc4d12daa65"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0155-shaar-web-store-install.patch",
+      "sha256": "d8bcd8b2e4985ec017b211fab980849a689e8cd961dcc0065f968b3566623718"
     }
   ],
   "devtoolsFrontend157": {

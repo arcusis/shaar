@@ -72,6 +72,7 @@ final class EngineProbe {
   private let fixture: URL
   private let phase: String
   private let includeBitwarden: Bool
+  private let storePageOnlyMode: Bool
   private let bitwardenOnboardingControl: Bool
   private let awaitAbruptTermination: Bool
   private let savedTabCapacityMode: Bool
@@ -128,6 +129,7 @@ final class EngineProbe {
 
   private init(
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
+    storePageOnlyMode: Bool,
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
@@ -143,6 +145,7 @@ final class EngineProbe {
     self.fixture = fixture
     self.phase = phase
     self.includeBitwarden = includeBitwarden
+    self.storePageOnlyMode = storePageOnlyMode
     self.bitwardenOnboardingControl = bitwardenOnboardingControl
     self.awaitAbruptTermination = awaitAbruptTermination
     self.savedTabCapacityMode = savedTabCapacityMode
@@ -276,6 +279,7 @@ final class EngineProbe {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }
       let includeBitwarden = arguments.contains("--bitwarden")
+      let storePageOnlyMode = arguments.contains("--probe-store-page-only")
       let bitwardenOnboardingControl = arguments.contains("--bitwarden-onboarding-control")
       let awaitAbruptTermination = arguments.contains("--probe-await-abrupt-termination")
       let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
@@ -317,6 +321,7 @@ final class EngineProbe {
       let noLaunchGuard = arguments.contains("--shaar-test-external-protocol-no-launch")
       let conflictingFlags = [
         "--bitwarden", "--bitwarden-onboarding-control",
+        "--probe-store-page-only",
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
         "--probe-private-window", "--probe-session-recovery",
@@ -351,6 +356,9 @@ final class EngineProbe {
         !basicBrowsingMode
           || !conflictingFlags.filter({ $0 != "--probe-basic-browsing" }).contains(
             where: arguments.contains),
+        !storePageOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-store-page-only" }).contains(
+            where: arguments.contains),
         !localExtensionInstallMode
           || !conflictingFlags.filter({ $0 != "--probe-local-extension-install" }).contains(
             where: arguments.contains),
@@ -382,7 +390,8 @@ final class EngineProbe {
       else { throw ProbeFailure("Invalid engine probe mode flags.") }
       let probe = try EngineProbe(
         root: root, fixture: fixture, phase: phase, output: output,
-        includeBitwarden: includeBitwarden, bitwardenOnboardingControl: bitwardenOnboardingControl,
+        includeBitwarden: includeBitwarden, storePageOnlyMode: storePageOnlyMode,
+        bitwardenOnboardingControl: bitwardenOnboardingControl,
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
@@ -622,6 +631,19 @@ final class EngineProbe {
 
   private func exercise() async {
     do {
+      if storePageOnlyMode {
+        guard let browserEngine else { throw ProbeFailure("Store page engine is missing.") }
+        checks += try await BitwardenProbe(
+          runtime: runtime, engine: browserEngine, store: store,
+          root: root, fixture: fixture, phase: phase, storePageOnly: true
+        ).run()
+        try expect(
+          NSApp.windows.allSatisfy { !$0.isVisible },
+          "Web Store probe kept every window hidden")
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       if let recovery = sessionRecoveryProbe, let browserEngine {
         checks += try await recovery.run(runtime: runtime, engine: browserEngine)
         finish(error: nil)
@@ -1541,7 +1563,8 @@ final class EngineProbe {
       writeReport()
       return
     }
-    if basicBrowsingMode || localExtensionInstallMode || reloadWindowMode || devModeOnly
+    if basicBrowsingMode || storePageOnlyMode || localExtensionInstallMode || reloadWindowMode
+      || devModeOnly
       || mediaSessionOnlyMode
       || devtoolsRouteOnlyMode
     {
@@ -1582,7 +1605,8 @@ final class EngineProbe {
   }
 
   private var baseTimeoutSeconds: Double {
-    if basicBrowsingMode || localExtensionInstallMode || reloadWindowMode || devModeOnly
+    if basicBrowsingMode || storePageOnlyMode || localExtensionInstallMode || reloadWindowMode
+      || devModeOnly
       || mediaSessionOnlyMode
       || devtoolsRouteOnlyMode
     {
@@ -1596,6 +1620,7 @@ final class EngineProbe {
   }
 
   private var probeMode: String {
+    if storePageOnlyMode { return "web-store-page-only" }
     if basicBrowsingMode { return "basic-browsing" }
     if localExtensionInstallMode { return "local-extension-install-only" }
     if reloadWindowMode { return "reload-window" }
@@ -1612,6 +1637,10 @@ final class EngineProbe {
   }
 
   private var reportScope: String {
+    if storePageOnlyMode {
+      return
+        "Owned hidden window and disposable profile on the public Chrome Web Store. No install is attempted."
+    }
     if reloadWindowMode {
       return
         "Owned hidden windows, two authored loopback origins, and failed-page Reload. No desktop input or existing user profile is used."
@@ -1682,6 +1711,8 @@ final class EngineProbe {
       "savedTabCapacityProbe": savedTabCapacityMode,
       "savedTabCapacityRunID": capacityRunID,
       "bitwardenStoreProbe": includeBitwarden,
+      "webStorePageOnly": storePageOnlyMode,
+      "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },
       "bitwardenOnboardingControl": bitwardenOnboardingControl,
       "externalAppConsentOnly": externalAppConsentMode,
       "externalAppConsentProbe": externalAppConsentMode,

@@ -4,6 +4,7 @@ import http.client
 import importlib.util
 from pathlib import Path
 import threading
+import tempfile
 import unittest
 
 
@@ -43,6 +44,19 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
     def test_unrelated_referer_does_not_count_as_a_fixture_submission(self):
         self.server.record_submission("http://127.0.0.1:8000/other")
         self.assertEqual(self.server.submitted_forms(), [])
+
+    def test_prompt_screenshots_are_copied_out_of_the_temporary_probe_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "probe"
+            destination = root / "receipt"
+            source.mkdir()
+            (source / "save-prompt-password.png").write_bytes(b"png-data")
+
+            copied = PROBE.copy_prompt_screenshots(source, destination)
+
+            self.assertEqual(copied, {"password": str(destination / "save-prompt-password.png")})
+            self.assertEqual((destination / "save-prompt-password.png").read_bytes(), b"png-data")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ DIAGNOSTIC_STAGES = {
     "offer:serialize-failed", "offer:pending-limit", "offer:expiry-schedule-failed",
     "offer:event-emitted", "offer:event-rejected",
 }
+PROMPT_NAMES = ("password", "card", "address")
 
 
 class FixtureServer(ThreadingHTTPServer):
@@ -123,6 +124,19 @@ def crash_names():
     return names
 
 
+def copy_prompt_screenshots(source_dir, destination_dir):
+    copied = {}
+    for name in PROMPT_NAMES:
+        source = source_dir / f"save-prompt-{name}.png"
+        if not source.is_file() or source.is_symlink():
+            continue
+        destination = destination_dir / source.name
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        copied[name] = str(destination)
+    return copied
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
@@ -132,9 +146,16 @@ def main():
     if not executable.is_file():
         parser.error(f"Missing verification app: {executable}")
     before = crash_names()
-    with FixtureServer(("127.0.0.1", 0), Fixture) as server:
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
+    screenshots = {}
+    with FixtureServer(("127.0.0.1", 0), Fixture) as server, FixtureServer(
+        ("127.0.0.1", 0), Fixture
+    ) as never_server:
+        threads = [
+            threading.Thread(target=instance.serve_forever, daemon=True)
+            for instance in (server, never_server)
+        ]
+        for thread in threads:
+            thread.start()
         root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
         try:
             marker = root / ".arcusis-probe"
@@ -144,10 +165,13 @@ def main():
             home.mkdir()
             report_path = root / "report.json"
             page = f"http://127.0.0.1:{server.server_address[1]}"
+            never_page = f"http://127.0.0.1:{never_server.server_address[1]}"
             environment = os.environ.copy()
             environment.update(HOME=str(home), CFFIXED_USER_HOME=str(home),
                                SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
-            command = [str(executable), "--save-prompt-probe", str(report_path), page]
+            command = [
+                str(executable), "--save-prompt-probe", str(report_path), page, never_page,
+            ]
             if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he":
                 command.extend(["-AppleLanguages", "(he)"])
             result = subprocess.run(
@@ -163,19 +187,25 @@ def main():
                 if stage in DIAGNOSTIC_STAGES:
                     diagnostics.append(stage)
         finally:
+            screenshots = copy_prompt_screenshots(root, options.receipt.parent)
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
+        never_server.shutdown()
         deadline = time.monotonic() + 3
         while set(server.submitted_forms()) != EXPECTED_SUBMISSIONS and time.monotonic() < deadline:
             time.sleep(0.05)
-        submitted_forms = server.submitted_forms()
+        submitted_forms = sorted(
+            set(server.submitted_forms()) | set(never_server.submitted_forms()))
     crashes = sorted(crash_names() - before)
     receipt = {
         "verificationExecutable": str(executable), "exitCode": result.returncode,
         "allWindowsHidden": report.get("allWindowsHidden"),
         "windowsOnScreen": report.get("windowsOnScreen"),
+        "renderSurface": report.get("renderSurface"),
         "rows": report.get("rows", []), "submittedForms": submitted_forms,
-        "diagnosticStages": diagnostics, "crashReports": crashes,
+        "diagnosticStages": diagnostics,
+        "screenshots": screenshots,
+        "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True
         and set(submitted_forms) == EXPECTED_SUBMISSIONS and not crashes,
     }

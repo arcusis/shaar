@@ -190,6 +190,11 @@ struct PrivateParityTests {
     let profileID = try #require(store.session.profileID(forTabID: tab.id))
     let engine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    defer {
+      engine.suspensionTask?.cancel()
+      engine.memoryPressureSource?.cancel()
+      engine.memoryPressureSource = nil
+    }
     engine.seedFavicon(FaviconFixture.icon(.blue), for: tab.id)
     let shown = try #require(store.favicon(for: tab, profileID: profileID))
     #expect(FaviconFixture.matches(shown, .blue))

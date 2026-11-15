@@ -57,6 +57,27 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
     #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
   }
 
+  @Test func downloadsFooterOpensProfileDrawerInsteadOfSheetOffscreen() throws {
+    let store = BrowserStore(sessionFile: nil)
+    let sidebar = BrowserSidebar(store: store)
+    sidebar.openLibraryDrawerFromButton()
+
+    #expect(store.libraryDrawerSection == .downloads)
+    #expect(store.libraryDrawerProfileID == store.session.selectedSpace.profileID)
+    #expect(store.sheet == nil)
+
+    let size = NSSize(width: 1000, height: 700)
+    let image = try VisualCapture.pngOffscreen(
+      BrowserWindow(store: store).frame(width: size.width, height: size.height), size: size)
+    #expect(!image.isEmpty)
+
+    store.closeLibraryDrawer()
+    store.sheet = .downloads(profileID: store.session.selectedSpace.profileID)
+    sidebar.openLibraryDrawerFromButton()
+    #expect(store.libraryDrawerSection == nil)
+    #expect(store.sheet != nil)
+  }
+
   @Test func pinChangesUpdateAnExistingOffscreenWindow() async throws {
     let store = BrowserStore(sessionFile: nil)
     let content = BrowserWindow(store: store).transaction {

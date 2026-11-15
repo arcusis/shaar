@@ -81,6 +81,16 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertIn("for attempt in 0..<4", capture)
         self.assertIn("Task.sleep(for: .milliseconds(75))", capture)
 
+    def test_trusted_text_operation_is_registered_and_covered_by_engine_test(self):
+        adapter = (LAYER / "devtools/shaar_devtools_lifecycle_adapter.cc").read_text()
+        engine_tests = (LAYER / "devtools/shaar_devtools_unittest.cc").read_text()
+        self.assertIn(
+            "registry->Register(SHAAR_OP_PROBE_TRUSTED_TEXT,\n"
+            "                     SHAAR_OP_PROBE_TRUSTED_TEXT,",
+            adapter,
+        )
+        self.assertIn("registry.Find(SHAAR_OP_PROBE_TRUSTED_TEXT)", engine_tests)
+
 
 if __name__ == "__main__":
     unittest.main()

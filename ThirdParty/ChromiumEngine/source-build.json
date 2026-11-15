@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "4f003d45cce241ed450ce2527ea3b268d819566fad26474c9c6770a4d3978d01",
+    "sha256": "0649af28ec0578b36d75aaab540d99608f497c40f17d91e1608a0aee1108fb2a",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "e9c8b825803a7a8ee8459603876e65edbd6a9e88be88d127ce4f93f83fd521af",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -60,10 +60,10 @@
       "chrome/browser/shaar/devtools/shaar_agent_bridge.h": "5afbf3d57001d0c1dd3ab08068b9bbb18a3cecce326b7c0d25ba2852d5675600",
       "chrome/browser/shaar/devtools/shaar_devtools.cc": "ad2874d359bc4f76514b94e7152f29bb1296c3c8627200b5943fd74a748c3bd6",
       "chrome/browser/shaar/devtools/shaar_devtools.h": "b72fb47496d04437aac08f65d2c627d0ae2c608fb81f0efee02ab6e8071ac93b",
-      "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "63eccec832a9bb00669aa7bd610a86752c71a857eb2119f8a2fc9cff97641dfb",
+      "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "c99431d02096cd756706f65bfb087215a173c15fc122fe2b20a3b8ef132968d1",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "8bda65f814fa3c74f3880c134475ac0927aa29f1a665da52096ff0d5ab02fe24",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.h": "d926559cb85df4b6f8259275198b3faf1b2c2d77bff8ea3fdf6b065a59dbf9f2",
-      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "39234556626a96f2b864da9c0d2f96078144f5617ae53f857ed38c2faf0e5ed3",
+      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "ed0ecc64136673d8f3dba1655822b2630a4796b64ebe449cdd34b4116df8f975",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.cc": "962917acc421f701cf23590454637ee5a6a97c8a7927c9afaf38b36fd5003341",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.h": "cf85d27c8520d63b230bdce4ca850bc28250743d624d1aa19d64969f5d1a2e4c",
       "chrome/browser/shaar/downloads/shaar_downloads.cc": "cd79207b4e768b8af221caee99ebd638a1a5fc3fbd734c97614dcd268f18896d",

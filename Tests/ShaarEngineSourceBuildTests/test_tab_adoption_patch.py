@@ -43,7 +43,7 @@ class TabAdoptionPatchTests(unittest.TestCase):
         self.assertIn("AdoptPageWebContents", source)
         self.assertIn("user_gesture", source)
         layer = ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar"
-        self.assertIn("SHAAR_ENGINE_ABI_MINOR 17u", (layer / "public/shaar_engine.h").read_text())
+        self.assertIn("SHAAR_ENGINE_ABI_MINOR 18u", (layer / "public/shaar_engine.h").read_text())
         self.assertIn("shaar_tab_find", (layer / "windows_tabs/shaar_windows_tabs_lifecycle.cc").read_text())
         self.assertIn("_shaar_tab_find", (layer / "shaar_engine.exports").read_text())
         source = (layer / "windows_tabs/shaar_windows_tabs_lifecycle.cc").read_text()

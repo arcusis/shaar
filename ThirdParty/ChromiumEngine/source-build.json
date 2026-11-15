@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "24676ffc5b14b3edea7adefa6e3494dcda5bdfe113908174db946355dea6732d",
+    "sha256": "6d6eab5f4b182b66d55cd0d649de964c881f84a3c19240958decd5afb95582a4",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "e9c8b825803a7a8ee8459603876e65edbd6a9e88be88d127ce4f93f83fd521af",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -96,9 +96,9 @@
       "chrome/browser/shaar/history/shaar_history.h": "be7cf95eec6c7accc48a4cb28acb59577ceb6822407fddc4d665c3ee0532c579",
       "chrome/browser/shaar/history/shaar_history_lifecycle_adapter.cc": "a84c4e8775c8d68e96f7c60912d0aafffa810db257d41db31c5a17337944d084",
       "chrome/browser/shaar/history/shaar_history_unittest.cc": "05d22d884eacbd1b0a1d848608e75ff94c061173f2601aa30bc5e515383a3093",
-      "chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc": "04d36a8b1322de192ca5f2b3a9d988a83eb6866e0040f409dbfa3cc5c9325604",
+      "chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc": "737f50534523da34afd5a650d4102acc2c8bf37d0e7e5e11b9835172cf975550",
       "chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.h": "1e8381c0aa87d4508fb39a78e2c7da81a373a3b697533a58407b182531a05159",
-      "chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs_unittest.cc": "9d853b1e6ca8ceec59f9fcd5bd683de93684638088857019d7cbf09abe71edd6",
+      "chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs_unittest.cc": "5f0a352d28d958f203e2905b6200edda275b2e23179596258efe7fd4614d4664",
       "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "8072c78ba84a1029053a48c098bb87bf54bd3a6c9936773e862e247cc9aa6286",
       "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "32d26f2b2dcca774991835ca11a392a873b7a448063042eae612b31d84f0f22d",
       "chrome/browser/shaar/lifecycle/shaar_module_registry.cc": "a1245015013e6a9cbcb8e0c3d8dc927a4e3d0bc0b0fc16db3039abe61359ee29",

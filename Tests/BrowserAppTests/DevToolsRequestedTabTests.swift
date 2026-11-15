@@ -12,6 +12,14 @@ import Testing
 
 @Suite @MainActor
 struct DevToolsRequestedTabTests {
+  @Test func hiddenWindowMenuCommandsUseFocusedBrowserContext() throws {
+    let fixture = try DevToolsWindowFixture(keyWindow: { nil })
+    defer { fixture.cleanUp() }
+    let context = try #require(fixture.host.contexts.values.first)
+    #expect(fixture.host.activeContext === context)
+    #expect(fixture.host.canPerform(.zoomIn))
+  }
+
   @Test func nodeFrontendURLIsLimitedToBundledDevToolsPages() {
     var session = BrowserSession.fresh()
     let node = URL(string: "devtools://devtools/bundled/js_app.html?ws=localhost:9229/node")!
@@ -129,7 +137,7 @@ private final class DevToolsWindowFixture {
   let runtime = DevToolsWindowRuntime()
   let host: NativeBrowserHost
 
-  init() throws {
+  init(keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow }) throws {
     var session = BrowserSession.fresh()
     _ = session.open(URL(string: "https://localhost:3000")!)
     let file = WorkspaceFile(
@@ -138,7 +146,7 @@ private final class DevToolsWindowFixture {
     let workspace = try BrowserWorkspaceStore(file: file, initialSession: session)
     host = NativeBrowserHost(
       events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
-      presentation: .hiddenProbe, usesPrimaryWindow: false)
+      presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: keyWindow)
     try host.restore()
   }
 

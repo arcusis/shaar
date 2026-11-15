@@ -252,6 +252,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }) {
       return owned
     }
+    if presentation == .hiddenProbe && window == nil,
+      let focusedID = workspace.workspace.focusedWindowID,
+      let focused = contexts[focusedID], !focused.engine.isClosed,
+      events.runtime.window(forID: focused.nativeID) != nil
+    {
+      return focused
+    }
     return contexts.values.first {
       guard !$0.engine.isClosed, case .popup(let popup) = $0.engine.extensionPanel else {
         return false

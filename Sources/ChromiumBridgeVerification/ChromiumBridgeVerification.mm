@@ -82,6 +82,21 @@ BOOL ProbeCaptureAllowed(void) {
   return ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]);
 }
 
+BOOL ProbeTrustedInputSurfaceAllowed(NSView *view) {
+  NSWindow *pageWindow = view.window;
+  if (!pageWindow) return NO;
+  BOOL transparentVerificationWindow =
+      [NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.arcusis.browser.verification"] &&
+      pageWindow.isVisible && !pageWindow.isMiniaturized &&
+      pageWindow.alphaValue == 0 && pageWindow.ignoresMouseEvents;
+  if (pageWindow.isVisible && !transparentVerificationWindow) return NO;
+  for (NSWindow *window in NSApp.windows) {
+    if (window.isVisible && (!transparentVerificationWindow || window != pageWindow))
+      return NO;
+  }
+  return YES;
+}
+
 void HideOwnedProbePictureInPictureWindow(NSWindow *window) {
   if (!window || !ProbeCaptureAllowed()) return;
   window.alphaValue = 0;
@@ -1845,15 +1860,9 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     return;
   }
   NSView *view = [self viewForTabID:tabID];
-  if (!view.window || view.window.isVisible) {
+  if (!ProbeTrustedInputSurfaceAllowed(view)) {
     completion(NO);
     return;
-  }
-  for (NSWindow *window in NSApp.windows) {
-    if (window.isVisible) {
-      completion(NO);
-      return;
-    }
   }
   NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
   NSString *windowID = [self windowIDForTabID:tabID];
@@ -1883,15 +1892,9 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
     return;
   }
   NSView *view = [self viewForTabID:tabID];
-  if (!view.window || view.window.isVisible) {
+  if (!ProbeTrustedInputSurfaceAllowed(view)) {
     completion(NO);
     return;
-  }
-  for (NSWindow *window in NSApp.windows) {
-    if (window.isVisible) {
-      completion(NO);
-      return;
-    }
   }
   NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
   NSString *windowID = [self windowIDForTabID:tabID];

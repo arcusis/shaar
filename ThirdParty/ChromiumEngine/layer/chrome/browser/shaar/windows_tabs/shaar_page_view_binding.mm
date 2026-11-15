@@ -115,6 +115,21 @@ bool HasNeverShownPageHost(shaar_window* window,
          host->selected_view() == contents->GetNativeView().GetNativeNSView();
 }
 
+bool HasTransparentVerificationPageHost(shaar_window* window,
+                                        content::WebContents* contents) {
+  NSString* bundle_id = [[NSBundle mainBundle] bundleIdentifier];
+  if (![bundle_id isEqualToString:@"com.arcusis.browser.verification"])
+    return false;
+  PageViewHost* host = FindHost(window, false);
+  if (!host || !contents ||
+      host->selected_view() != contents->GetNativeView().GetNativeNSView())
+    return false;
+  NSWindow* page_window = host->window();
+  return page_window && page_window.isVisible && !page_window.isMiniaturized &&
+         page_window.alphaValue == 0 && page_window.ignoresMouseEvents &&
+         [host->selected_view() window] == page_window;
+}
+
 void ShowSelectedWebContents(content::WebContents* previous,
                              content::WebContents* selected) {
   if (previous && previous != selected)

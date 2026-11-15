@@ -17,6 +17,10 @@ namespace shaar::windows_tabs {
 
 // True only for an attached selected tab in an engine host never ordered onscreen.
 bool HasNeverShownPageHost(shaar_window* window, content::WebContents* contents);
+// Only the verification app may present a selected host on an invisible,
+// click-through window to provide compositor frames for trusted input probes.
+bool HasTransparentVerificationPageHost(shaar_window* window,
+                                        content::WebContents* contents);
 void ReleasePageHost(shaar_window* window);
 void ShowSelectedWebContents(content::WebContents* previous,
                              content::WebContents* selected);

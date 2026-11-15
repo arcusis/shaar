@@ -130,6 +130,18 @@ TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
   EXPECT_FALSE(ProbeWindowAllowed(true, false, true, true, fixture));
   EXPECT_FALSE(ProbeWindowAllowed(true, true, false, true, fixture));
   EXPECT_FALSE(ProbeWindowAllowed(true, true, true, false, fixture));
+  EXPECT_TRUE(TrustedInputProbeWindowAllowed(true, true, true, false, true,
+                                             fixture));
+  EXPECT_FALSE(TrustedInputProbeWindowAllowed(false, true, true, false, true,
+                                              fixture));
+  EXPECT_FALSE(TrustedInputProbeWindowAllowed(true, false, true, false, true,
+                                              fixture));
+  EXPECT_FALSE(TrustedInputProbeWindowAllowed(true, true, false, false, true,
+                                              fixture));
+  EXPECT_FALSE(TrustedInputProbeWindowAllowed(true, true, true, false, false,
+                                              fixture));
+  EXPECT_FALSE(TrustedInputProbeWindowAllowed(true, true, true, false, true,
+                                              GURL("https://example.com/")));
   EXPECT_FALSE(ProbeWindowAllowed(true, true, true, true,
                                  GURL("https://example.com/")));
 }

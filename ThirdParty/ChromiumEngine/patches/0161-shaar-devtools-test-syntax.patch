@@ -1,0 +1,32 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -593,6 +593,10 @@
+            R"({"schemaVersion":1,"capability":2,"command":65,"params":{"enabled":true,"extra":1}})",
+            R"({"schemaVersion":1,"capability":2,"command":66,"params":{"enabled":true}})"}) {
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 65, &output, &reason))
++        << args;
++  }
++}
++
+ TEST(ShaarDevToolsTest, RenderingOverlayCommandsAreDeveloperOnly) {
+   std::string output;
+   std::string reason;
+@@ -666,6 +670,8 @@
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &rejected, &rejectReason));
+     EXPECT_TRUE(rejected.empty());
+   }
++}
++
+ TEST(ShaarDevToolsTest, EmptyTimezoneAndLocaleClearTheOverride) {
+   std::string output;
+   std::string reason;
+@@ -1282,7 +1288,7 @@
+   CapturedReply next;
+   ASSERT_TRUE(StartProtocolRequest(
+       host, 7, &CaptureReply, &hold,
+-      R"({"id":7,"method":"Runtime.evaluate","params":{"expression":"new Promise(()=>{})","awaitPromise":true}})",
++      R"json({"id":7,"method":"Runtime.evaluate","params":{"expression":"new Promise(()=>{})","awaitPromise":true}})json",
+       "main-frame"));
+   ASSERT_TRUE(StartProtocolRequest(
+       host, 8, &CaptureReply, &next,

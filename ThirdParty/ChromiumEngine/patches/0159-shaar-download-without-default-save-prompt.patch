@@ -1,0 +1,15 @@
+diff --git a/chrome/browser/download/download_prefs.cc b/chrome/browser/download/download_prefs.cc
+--- a/chrome/browser/download/download_prefs.cc
++++ b/chrome/browser/download/download_prefs.cc
+@@ -352,8 +352,10 @@
+ // static
+ void DownloadPrefs::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
++  // Shaar supplies a profile download directory. A fresh profile must not
++  // block attachment and download= writes on an unattended Save dialog.
+   registry->RegisterBooleanPref(
+       prefs::kPromptForDownload,
+-      true,
++      false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterStringPref(prefs::kDownloadExtensionsToOpen, std::string());

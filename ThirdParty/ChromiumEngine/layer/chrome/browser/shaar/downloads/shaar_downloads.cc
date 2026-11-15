@@ -237,6 +237,10 @@ bool Downloads::Directory(const std::string& action,
     return false;
   }
   requested = normalized.StripTrailingSeparators();
+  const bool previous_prompt =
+      pref_service->GetBoolean(prefs::kPromptForDownload);
+  if (!SuppressDownloadSavePrompt(pref_service, error_code))
+    return false;
   const base::FilePath previous_download = prefs->DownloadPath();
   const base::FilePath previous_save = prefs->SaveFilePath();
   prefs->SetDownloadPath(requested);
@@ -244,10 +248,34 @@ bool Downloads::Directory(const std::string& action,
   if (effective != requested || prefs->SaveFilePath() != requested) {
     prefs->SetDownloadPath(previous_download);
     prefs->SetSaveFilePath(previous_save);
+    if (pref_service->IsUserModifiablePreference(prefs::kPromptForDownload))
+      pref_service->SetBoolean(prefs::kPromptForDownload, previous_prompt);
     *error_code = "SHAAR_IO_ERROR";
     return false;
   }
   *effective_path = PathString(effective);
+  return true;
+}
+
+bool Downloads::SuppressDownloadSavePrompt(PrefService* prefs,
+                                           std::string* error_code) {
+  if (!prefs || !error_code) {
+    if (error_code)
+      *error_code = "SHAAR_NOT_READY";
+    return false;
+  }
+  if (!prefs->IsUserModifiablePreference(prefs::kPromptForDownload)) {
+    if (prefs->GetBoolean(prefs::kPromptForDownload)) {
+      *error_code = "SHAAR_POLICY_BLOCKED";
+      return false;
+    }
+    return true;
+  }
+  prefs->SetBoolean(prefs::kPromptForDownload, false);
+  if (prefs->GetBoolean(prefs::kPromptForDownload)) {
+    *error_code = "SHAAR_POLICY_BLOCKED";
+    return false;
+  }
   return true;
 }
 

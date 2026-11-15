@@ -21,6 +21,8 @@
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
+class PrefService;
+
 namespace content {
 class BrowserContext;
 class DownloadManager;
@@ -60,6 +62,10 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
                  const std::string& requested_path,
                  std::string* effective_path,
                  std::string* error_code) const;
+  // Turns off Chromium's save-location prompt so an acknowledged directory
+  // is used directly. Ungoogled Chromium defaults that preference on.
+  static bool SuppressDownloadSavePrompt(PrefService* prefs,
+                                         std::string* error_code);
   bool Handle(shaar_operation operation,
               const std::string& arguments_json,
               std::string* payload_json,

@@ -73,10 +73,12 @@
    std::string payload;
 --- a/chrome/browser/shaar/BUILD.gn
 +++ b/chrome/browser/shaar/BUILD.gn
-@@ -279,7 +279,7 @@
+@@ -301,9 +301,9 @@
  test("shaar_downloads_unittests") {
    sources = [ "downloads/shaar_downloads_unittest.cc" ]
-   deps = [ ":engine", "//components/download/public/common:test_support",
+   deps = [ ":engine", "//chrome/common:constants",
+            "//components/download/public/common:test_support",
+            "//components/prefs:test_support",
 -           "//testing/gmock", "//testing/gtest" ]
 +           "//content/test:test_support", "//testing/gmock", "//testing/gtest" ]
  }

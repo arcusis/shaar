@@ -10,14 +10,21 @@ import Testing
   @Test func beforeUnloadPassRequiresTheCompleteArmedPromptCancellationReceipt() {
     #expect(
       ShaarBrowsingQA.beforeUnloadStatus(
-        armed: true, armedState: "1", prompted: true, cancelled: true,
+        armed: true, armedState: "1", prompted: true, dialogRequestQueued: true,
+        dialogSheetPresented: true, cancelled: true,
         sawVisibleDialog: false, dismissed: true) == "pass")
 
-    for missing in ["armed", "armedState", "prompted", "cancelled", "dismissed"] {
+    for missing in [
+      "armed", "armedState", "prompted", "dialogRequestQueued", "cancelled", "dismissed",
+      "dialogSheetPresented",
+    ] {
       #expect(
         ShaarBrowsingQA.beforeUnloadStatus(
           armed: missing != "armed", armedState: missing == "armedState" ? "0" : "1",
-          prompted: missing != "prompted", cancelled: missing != "cancelled",
+          prompted: missing != "prompted",
+          dialogRequestQueued: missing != "dialogRequestQueued",
+          dialogSheetPresented: missing != "dialogSheetPresented",
+          cancelled: missing != "cancelled",
           sawVisibleDialog: false, dismissed: missing != "dismissed") == "fail")
     }
   }
@@ -25,7 +32,8 @@ import Testing
   @Test func visibleDialogIsBlockedEvenWhenTheOtherEvidenceLooksSuccessful() {
     #expect(
       ShaarBrowsingQA.beforeUnloadStatus(
-        armed: true, armedState: "1", prompted: true, cancelled: true,
+        armed: true, armedState: "1", prompted: true, dialogRequestQueued: true,
+        dialogSheetPresented: true, cancelled: true,
         sawVisibleDialog: true, dismissed: true) == "blocked")
   }
 }

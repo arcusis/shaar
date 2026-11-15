@@ -225,6 +225,14 @@ TEST(ShaarDevToolsTest, TrustedStoreClickMapsVisibleCssPointToWidget) {
   EXPECT_FALSE(MapTrustedWebStorePoint(-1, 154, 984, 729, 984, 729, &x, &y));
 }
 
+TEST(ShaarDevToolsTest, TrustedStoreClickRetriesCoveredButtonOnly) {
+  EXPECT_TRUE(ShouldRetryCoveredWebStoreClick(true, true, 0));
+  EXPECT_TRUE(ShouldRetryCoveredWebStoreClick(true, true, 3));
+  EXPECT_FALSE(ShouldRetryCoveredWebStoreClick(true, true, 4));
+  EXPECT_FALSE(ShouldRetryCoveredWebStoreClick(true, false, 0));
+  EXPECT_FALSE(ShouldRetryCoveredWebStoreClick(false, true, 0));
+}
+
 class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
  public:
   bool ResolveTarget(shaar_engine*, shaar_scope, shaar_window*, shaar_tab*,

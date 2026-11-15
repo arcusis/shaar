@@ -33,6 +33,48 @@ import os
   func stop() { task?.cancel() }
 }
 
+@MainActor private enum HiddenDialogRenderSurface {
+  private struct WindowState {
+    let window: NSWindow
+    let alphaValue: CGFloat
+    let ignoresMouseEvents: Bool
+  }
+
+  private static var windows: [ObjectIdentifier: WindowState] = [:]
+
+  static func present(_ window: NSWindow) {
+    conceal(window)
+    window.orderFront(nil)
+  }
+
+  static func concealAttachedSheet(of window: NSWindow) {
+    if let sheet = window.attachedSheet { conceal(sheet) }
+  }
+
+  static func isInvisible(_ window: NSWindow) -> Bool {
+    guard let state = windows[ObjectIdentifier(window)] else { return false }
+    return state.window.alphaValue == 0 && state.window.ignoresMouseEvents
+  }
+
+  static func restore() {
+    for state in windows.values {
+      state.window.orderOut(nil)
+      state.window.alphaValue = state.alphaValue
+      state.window.ignoresMouseEvents = state.ignoresMouseEvents
+    }
+    windows.removeAll()
+  }
+
+  private static func conceal(_ window: NSWindow) {
+    windows[ObjectIdentifier(window)] = windows[ObjectIdentifier(window)]
+      ?? WindowState(
+        window: window, alphaValue: window.alphaValue,
+        ignoresMouseEvents: window.ignoresMouseEvents)
+    window.alphaValue = 0
+    window.ignoresMouseEvents = true
+  }
+}
+
 /// Hidden verification exercise for everyday browsing. The Python driver owns memory samples.
 @MainActor enum ShaarBrowsingQA {
   static func run(arguments: [String]) -> Int32 {
@@ -821,6 +863,9 @@ import os
     let armed = await click(runtime, tab: unloadID, element: "popup")
     let armedState = await evaluate(
       runtime, tab: unloadID, script: "document.documentElement.dataset.armed==='1'?1:0")
+    context.engine.presentsNativePanels = true
+    HiddenDialogRenderSurface.present(context.window)
+    defer { HiddenDialogRenderSurface.restore() }
     context.store.closeTab(unloadID)
     let decision = await beforeUnloadDecision(context, runtime: runtime, tab: unloadID)
     if context.store.session.page(forTabID: unloadID) != nil {
@@ -835,12 +880,18 @@ import os
       })
     let status = beforeUnloadStatus(
       armed: armed, armedState: armedState, prompted: decision.prompted,
-      cancelled: decision.cancelled, sawVisibleDialog: decision.sawVisibleDialog,
+      dialogRequestQueued: decision.dialogRequestQueued,
+      dialogSheetPresented: decision.dialogSheetPresented, cancelled: decision.cancelled,
+      sawVisibleDialog: decision.sawVisibleDialog,
       dismissed: dismissed)
     rows.append(
       row(
         "dialogs-beforeunload", status,
-        "Armed=\(armedState ?? "nil"), prompted=\(decision.prompted), cancelled=\(decision.cancelled), sawVisibleDialog=\(decision.sawVisibleDialog), dismissed=\(dismissed)."
+        "Armed=\(armedState ?? "nil"), prompted=\(decision.prompted), "
+        + "dialogRequestQueued=\(decision.dialogRequestQueued), "
+        + "dialogSheetPresented=\(decision.dialogSheetPresented), "
+          + "cancelled=\(decision.cancelled), "
+          + "sawVisibleDialog=\(decision.sawVisibleDialog), dismissed=\(dismissed)."
       ))
     return rows
   }
@@ -1097,7 +1148,9 @@ import os
   }
 
   private static func windowsHidden() -> Bool {
-    NSApp.modalWindow == nil && NSApp.windows.allSatisfy { !$0.isVisible }
+    let modalHidden = NSApp.modalWindow.map { HiddenDialogRenderSurface.isInvisible($0) } ?? true
+    return modalHidden
+      && NSApp.windows.allSatisfy { !$0.isVisible || HiddenDialogRenderSurface.isInvisible($0) }
   }
 
   private static func orderOutVisibleWindows() {
@@ -1322,28 +1375,51 @@ import os
 
   private static func beforeUnloadDecision(
     _ context: NativeBrowserContext, runtime: ARCShaarRuntime, tab: UUID
-  ) async -> (prompted: Bool, cancelled: Bool, sawVisibleDialog: Bool) {
+  ) async -> (
+    prompted: Bool, dialogRequestQueued: Bool, dialogSheetPresented: Bool, cancelled: Bool,
+    sawVisibleDialog: Bool
+  ) {
     var prompted = false
     for _ in 0..<40 {
-      if !windowsHidden() { return (prompted, false, true) }
-      if context.store.session.page(forTabID: tab) == nil { return (prompted, false, false) }
-      if prompted { return (true, true, false) }
+      HiddenDialogRenderSurface.concealAttachedSheet(of: context.window)
+      if !windowsHidden() { return (prompted, false, false, false, true) }
+      if context.store.session.page(forTabID: tab) == nil {
+        return (prompted, false, false, false, false)
+      }
       let flag = await evaluate(
         runtime, tab: tab, script: "document.documentElement.dataset.prompted==='1'?1:0")
       if flag == "1" { prompted = true }
+      if case .javascriptDialog(let request) = context.store.sheet,
+        request.kind == .beforeUnload, request.tabID == tab, prompted
+      {
+        for _ in 0..<20 where context.window.attachedSheet == nil {
+          try? await Task.sleep(for: .milliseconds(50))
+          HiddenDialogRenderSurface.concealAttachedSheet(of: context.window)
+        }
+        let sheetPresented = context.window.attachedSheet != nil
+        context.store.resolveJavaScriptDialog(request.id, accepted: false, input: nil)
+        try? await Task.sleep(for: .milliseconds(250))
+        let cancelled = context.store.sheet?.id != request.sheetID
+          && context.store.session.page(forTabID: tab) != nil
+        return (true, true, sheetPresented, cancelled, false)
+      }
       try? await Task.sleep(for: .milliseconds(100))
     }
-    if !windowsHidden() { return (prompted, false, true) }
-    if prompted, context.store.session.page(forTabID: tab) != nil { return (true, true, false) }
-    return (prompted, false, false)
+    HiddenDialogRenderSurface.concealAttachedSheet(of: context.window)
+    if !windowsHidden() { return (prompted, false, false, false, true) }
+    return (prompted, false, false, false, false)
   }
 
   static func beforeUnloadStatus(
-    armed: Bool, armedState: String?, prompted: Bool, cancelled: Bool, sawVisibleDialog: Bool,
-    dismissed: Bool
+    armed: Bool, armedState: String?, prompted: Bool, dialogRequestQueued: Bool,
+    dialogSheetPresented: Bool, cancelled: Bool, sawVisibleDialog: Bool, dismissed: Bool
   ) -> String {
     if sawVisibleDialog { return "blocked" }
-    if armed && armedState == "1" && prompted && cancelled && dismissed { return "pass" }
+    if armed && armedState == "1" && prompted && dialogRequestQueued && dialogSheetPresented
+      && cancelled && dismissed
+    {
+      return "pass"
+    }
     return "fail"
   }
 

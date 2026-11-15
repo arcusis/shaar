@@ -45,11 +45,13 @@ struct JavaScriptDialogRequest: Identifiable, Equatable {
 
   func matches(_ session: BrowserSession) -> Bool {
     guard session.selectedSpace.profileID == profileID,
-      let selectedPage = session.selectedPage, selectedPage.tab.id == tabID,
-      session.profileID(forTabID: tabID) == profileID
+      session.profileID(forTabID: tabID) == profileID,
+      let page = session.page(forTabID: tabID)
     else { return false }
-    // A beforeunload request belongs to the outgoing document. The session's URL
-    // can already be the destination by the time Chromium delivers the request.
-    return kind == .beforeUnload || selectedPage.tab.url == pageURL
+    // Chromium can change the selected tab while closing the page that owns a
+    // beforeunload request. Keep that request bound to its live owning page.
+    if kind == .beforeUnload { return true }
+    guard session.selectedPage?.tab.id == tabID else { return false }
+    return page.tab.url == pageURL
   }
 }

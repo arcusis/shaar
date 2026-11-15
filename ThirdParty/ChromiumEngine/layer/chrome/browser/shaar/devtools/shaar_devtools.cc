@@ -80,10 +80,13 @@ constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
 constexpr int kPanel = 3;
 constexpr base::TimeDelta kProbeCaptureTimeout = base::Seconds(12);
+constexpr base::TimeDelta kProbeCaptureLeaseWait = base::Seconds(2);
+constexpr base::TimeDelta kProbeCaptureLeaseRetry = base::Milliseconds(25);
 // Chromium drops mouse down while first-paint commit deferral is set.
 // That deferral lifts only when a main frame runs after 500ms.
 constexpr base::TimeDelta kProbeClickCommitDelay = base::Milliseconds(600);
 constexpr base::TimeDelta kProbeClickLeaseHold = base::Milliseconds(50);
+constexpr base::TimeDelta kStoreCalloutDismissDelay = base::Milliseconds(400);
 
 class RuntimeServices final : public DevToolsRuntimeServices {
 public:
@@ -373,13 +376,19 @@ bool ProbeClickInsideView(content::WebContents* contents, int x, int y) {
   return x < size.width() && y < size.height();
 }
 
-void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
+void DispatchTrustedMove(content::RenderWidgetHost* widget, int x, int y) {
   const gfx::PointF point(x, y);
   const base::TimeTicks now = base::TimeTicks::Now();
   widget->ForwardMouseEvent(blink::WebMouseEvent(
       blink::WebInputEvent::Type::kMouseMove, point, point,
       blink::WebPointerProperties::Button::kNoButton, 0,
       blink::WebInputEvent::kNoModifiers, now));
+}
+
+void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
+  const gfx::PointF point(x, y);
+  const base::TimeTicks now = base::TimeTicks::Now();
+  DispatchTrustedMove(widget, x, y);
   widget->ForwardMouseEvent(blink::WebMouseEvent(
       blink::WebInputEvent::Type::kMouseDown, point, point,
       blink::WebPointerProperties::Button::kLeft, 1,
@@ -425,9 +434,36 @@ class ProbeTrustedInput final
 
   void Start(content::WebContents* contents) {
     contents_ = contents->GetWeakPtr();
+    timer_.Start(FROM_HERE, kProbeCaptureLeaseWait,
+                 base::BindOnce(&ProbeTrustedInput::OnLeaseTimeout,
+                                base::WrapRefCounted(this)));
+    TryStartCapture();
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<ProbeTrustedInput>;
+  ~ProbeTrustedInput() = default;
+
+  void TryStartCapture() {
+    if (finished_)
+      return;
+    auto* contents = contents_.get();
+    if (!contents) {
+      Fail("target unavailable while waiting for capture lease");
+      return;
+    }
     capturer_ = StartHiddenProbeCapture(contents);
-    if (!capturer_ || !Activate()) {
-      Fail();
+    if (!capturer_) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&ProbeTrustedInput::TryStartCapture,
+                         base::WrapRefCounted(this)),
+          kProbeCaptureLeaseRetry);
+      return;
+    }
+    timer_.Stop();
+    if (!Activate()) {
+      Fail("target unavailable at start");
       return;
     }
     timer_.Start(FROM_HERE, kProbeCaptureTimeout,
@@ -439,10 +475,6 @@ class ProbeTrustedInput final
                        base::WrapRefCounted(this)),
         kProbeClickCommitDelay);
   }
-
- private:
-  friend class base::RefCountedThreadSafe<ProbeTrustedInput>;
-  ~ProbeTrustedInput() = default;
 
   content::RenderWidgetHostImpl* Activate() {
     auto* contents = contents_.get();
@@ -458,7 +490,7 @@ class ProbeTrustedInput final
       return;
     auto* widget = Activate();
     if (!widget) {
-      Fail();
+      Fail("target unavailable before snapshot");
       return;
     }
     widget->GetSnapshotFromBrowser(
@@ -467,21 +499,40 @@ class ProbeTrustedInput final
         /*from_surface=*/true);
   }
 
-  void OnFrame(const gfx::Image&) {
+  void OnFrame(const gfx::Image& image) {
     if (finished_)
       return;
+    if (image.IsEmpty()) {
+      Fail("forced snapshot was empty");
+      return;
+    }
     auto* contents = contents_.get();
-    if (!contents || !Activate()) {
-      Fail();
+    if (!contents) {
+      Fail("tab disappeared after snapshot");
+      return;
+    }
+    if (!Activate()) {
+      Fail("target unavailable after snapshot");
       return;
     }
     if (element_id_.empty()) {
       Dispatch(x_, y_);
       return;
     }
+    ResolveElementPoint();
+  }
+
+  void ResolveElementPoint() {
+    if (finished_)
+      return;
+    auto* contents = contents_.get();
+    if (!contents || !Activate()) {
+      Fail("store element remained covered");
+      return;
+    }
     auto* frame = contents->GetPrimaryMainFrame();
     if (!frame) {
-      Fail();
+      Fail("main frame unavailable after snapshot");
       return;
     }
     const std::string script = element_id_ == "webstore-add-to-chrome"
@@ -491,8 +542,17 @@ class ProbeTrustedInput final
           "b.getAttribute('aria-disabled')!=='true');if(!e)return null;"
           "e.scrollIntoView({block:'center',inline:'center',behavior:'instant'});"
           "const r=e.getBoundingClientRect();if(!r.width||!r.height)return null;"
-          "return {x:Math.round(r.left+r.width/2),"
-          "y:Math.round(r.top+r.height/2),"
+          "const x=Math.round(r.left+r.width/2),y=Math.round(r.top+r.height/2);"
+          "const t=document.elementFromPoint(x,y);"
+          "if(t?.tagName==='IFRAME'&&t.name==='callout'&&"
+          "t.getAttribute('src')==='about:blank'){"
+          "let s=document.getElementById('shaar-probe-store-callout');"
+          "if(!s){s=document.createElement('style');"
+          "s.id='shaar-probe-store-callout';"
+          "s.textContent='iframe[name=\"callout\"],"
+          "div:has(>iframe[name=\"callout\"]){pointer-events:none!important}';"
+          "document.head.appendChild(s)}}"
+          "return {x,y,covered:!e.contains(document.elementFromPoint(x,y)),"
           "viewportWidth:innerWidth,viewportHeight:innerHeight};})()"
         : "(()=>{const e=document.getElementById('" + element_id_ +
           "');if(!e)return null;" +
@@ -518,11 +578,33 @@ class ProbeTrustedInput final
         point ? point->FindInt("viewportWidth") : std::nullopt;
     const std::optional<int> viewport_height =
         point ? point->FindInt("viewportHeight") : std::nullopt;
+    const bool covered = point && point->FindBool("covered").value_or(false);
     auto* contents = contents_.get();
     auto* view = contents ? contents->GetRenderWidgetHostView() : nullptr;
     int widget_x = x.value_or(-1);
     int widget_y = y.value_or(-1);
     const bool store_target = element_id_ == "webstore-add-to-chrome";
+    if (store_target && covered) {
+      if (!ShouldRetryCoveredWebStoreClick(store_target, covered,
+                                          cover_retries_++)) {
+        Fail("store element remained covered after retries");
+        return;
+      }
+      auto* widget = Activate();
+      if (!widget) {
+        Fail("store target unavailable while clearing callout");
+        return;
+      }
+      // The Store publisher callout can cover the button after the paint
+      // wait. Its page script sets a 300 ms hide delay.
+      DispatchTrustedMove(widget, 1, 1);
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&ProbeTrustedInput::ResolveElementPoint,
+                         base::WrapRefCounted(this)),
+          kStoreCalloutDismissDelay);
+      return;
+    }
     bool valid_point = false;
     if (view && x && y) {
       if (store_target && viewport_width && viewport_height) {
@@ -536,8 +618,12 @@ class ProbeTrustedInput final
                       *y < view->GetViewBounds().height();
       }
     }
-    if (!valid_point || !Activate()) {
-      Fail();
+    if (!valid_point) {
+      Fail("element point unavailable or outside view");
+      return;
+    }
+    if (!Activate()) {
+      Fail("target unavailable at element point");
       return;
     }
     Dispatch(widget_x, widget_y);
@@ -546,7 +632,7 @@ class ProbeTrustedInput final
   void Dispatch(int x, int y) {
     auto* widget = Activate();
     if (!widget) {
-      Fail();
+      Fail("target unavailable before dispatch");
       return;
     }
     if (scroll_)
@@ -569,7 +655,7 @@ class ProbeTrustedInput final
       return;
     auto* widget = Activate();
     if (!widget) {
-      Fail();
+      Fail("target unavailable before text commit");
       return;
     }
     widget->ImeCommitText(base::UTF8ToUTF16(text_), {}, gfx::Range::InvalidRange(), 0);
@@ -587,15 +673,18 @@ class ProbeTrustedInput final
         kProbeClickLeaseHold);
   }
 
-  void OnTimeout() { Fail(); }
+  void OnTimeout() { Fail("capture timed out"); }
 
-  void Fail() {
+  void OnLeaseTimeout() { Fail("capture lease wait timed out"); }
+
+  void Fail(const char* stage) {
     if (finished_)
       return;
     finished_ = true;
     timer_.Stop();
     capturer_.RunAndReset();
-    Reply(reply_, SHAAR_NOT_READY, {}, "trusted input could not be sent");
+    Reply(reply_, SHAAR_NOT_READY, {},
+          std::string("trusted input failed at ") + stage);
   }
 
   void ReleaseLease() { capturer_.RunAndReset(); }
@@ -610,6 +699,7 @@ class ProbeTrustedInput final
   base::ScopedClosureRunner capturer_;
   base::OneShotTimer timer_;
   bool finished_ = false;
+  unsigned cover_retries_ = 0;
 };
 
 shaar_error_code Fail(shaar_error* error, shaar_error_code code,
@@ -1654,6 +1744,11 @@ bool MapTrustedWebStorePoint(int css_x, int css_y,
   *widget_x = static_cast<int>(mapped_x);
   *widget_y = static_cast<int>(mapped_y);
   return true;
+}
+
+bool ShouldRetryCoveredWebStoreClick(bool store_target, bool covered,
+                                    unsigned retries) {
+  return store_target && covered && retries < 4;
 }
 
 void EmitFrontendStateEvent(shaar_engine* engine,

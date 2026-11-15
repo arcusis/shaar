@@ -30,6 +30,16 @@ class WebStoreInstallPatchTests(unittest.TestCase):
         self.assertIn('+  crx_installer_->set_expected_id(approval->extension_id);', patch)
         self.assertIn('+  crx_installer_->InstallCrx(download.GetFullPath());', patch)
 
+    def test_store_install_routes_consent_to_shaar_only_on_the_store_origin(self):
+        patch = PATCH.read_text()
+        self.assertIn('ExtensionInstallPrompt::GetDefaultShowDialogCallback()', patch)
+        self.assertIn('HasSwitch("shaar-embedder")', patch)
+        self.assertIn('ShaarShowInstallPrompt', patch)
+        self.assertIn('url::Origin::Create(contents->GetLastCommittedURL())', patch)
+        self.assertIn('GURL("https://chromewebstore.google.com/")', patch)
+        self.assertIn('ShowExtensionInstallDialogImpl(', patch)
+        self.assertNotIn('DeveloperPrivateLoadUnpackedFunction', patch)
+
     def test_patch_is_pinned_once_with_its_digest(self):
         entries = json.loads(MANIFEST.read_text())["patches"]
         matching = [entry for entry in entries if entry["file"] == str(PATCH.relative_to(ROOT))]

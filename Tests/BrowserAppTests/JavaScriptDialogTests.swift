@@ -68,6 +68,17 @@ struct JavaScriptDialogTests {
     #expect(decision?.1 == true)
   }
 
+  @Test func beforeUnloadDialogStillMatchesWhenClosingChangesTheSelectedTab() throws {
+    let store = openedStore()
+    let request = try request(store, kind: .beforeUnload)
+    store.perform(.open(URL(string: "https://destination.example/next")!))
+
+    #expect(store.session.selectedPage?.tab.id != request.tabID)
+    #expect(request.matches(store.session))
+    #expect(store.requestJavaScriptDialog(request))
+    #expect(store.sheet?.id == request.sheetID)
+  }
+
   @Test func rejectsMalformedDialogPayload() throws {
     let store = openedStore()
     let request = try request(store)

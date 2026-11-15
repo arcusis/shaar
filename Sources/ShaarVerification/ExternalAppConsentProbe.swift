@@ -35,6 +35,24 @@ final class ExternalAppConsentProbe {
     var complete = false
   }
 
+  struct LaunchAudit {
+    let count: Int
+    let matchingCount: Int
+    let allUnremembered: Bool
+  }
+
+  static func evaluatePostQuitAudits(
+    quitDenied: Bool, engineClosed: Bool, primaryWindowClosed: Bool, pendingRequests: Int,
+    audits: [LaunchAudit]
+  ) -> (engineQuitDenied: Bool, allUnremembered: Bool, launchCount: Int) {
+    let auditsValid = audits.count == 2 && audits.allSatisfy { $0.count == 2 }
+    return (
+      quitDenied && engineClosed && primaryWindowClosed && pendingRequests == 0 && auditsValid,
+      audits.count == 2 && audits.allSatisfy(\.allUnremembered),
+      audits.map(\.count).max() ?? 0
+    )
+  }
+
   static func isComplete(_ evidence: Evidence) -> Bool {
     evidence.checks.allSatisfy { $0 }
       && evidence.approvedRequests == 2
@@ -68,6 +86,7 @@ final class ExternalAppConsentProbe {
   private var secondaryHost: NSHostingView<BrowserWindow>?
   private var leavePendingForQuit = false
   private var quitRequestID: String?
+  private var launchAuditsBeforeQuit: [String: LaunchAudit] = [:]
 
   init(engine: BrowserEngine, store: BrowserStore, root: URL, fixture: URL, phase: String) throws {
     self.engine = engine
@@ -90,6 +109,16 @@ final class ExternalAppConsentProbe {
 
   func prepareForQuit() {
     leavePendingForQuit = true
+    // The bridge only exposes the native launch audit while the engine is alive.
+    // Preserve it before EngineProbe shuts the runtime down and audits cleanup.
+    launchAuditsBeforeQuit = Dictionary(
+      uniqueKeysWithValues: evidence.targetByApproval.compactMap { target in
+        audit(target).map {
+          (target, LaunchAudit(
+            count: $0.count, matchingCount: $0.matchingCount,
+            allUnremembered: $0.allUnremembered))
+        }
+      })
   }
 
   var currentEvidence: Evidence { evidence }
@@ -108,14 +137,13 @@ final class ExternalAppConsentProbe {
       "routerClientCount": routerCount, "pendingRequests": pending,
       "passed": engineClosed && primaryWindowClosed && routerCount == 0 && pending == 0,
     ]
-    let audits = evidence.targetByApproval.compactMap { audit($0) }
-    evidence.launchCount =
-      audits.map { $0.count }.max()
-      ?? audit("webcal://audit.invalid.example/calendar.ics")?.count ?? 0
-    evidence.checks[13] =
-      quitDenied && engineClosed && primaryWindowClosed && pending == 0
-      && audits.count == 2 && audits.allSatisfy { $0.count == 2 }
-    evidence.checks[14] = audits.count == 2 && audits.allSatisfy(\.allUnremembered)
+    let audits = evidence.targetByApproval.compactMap { launchAuditsBeforeQuit[$0] }
+    let quitAudits = Self.evaluatePostQuitAudits(
+      quitDenied: quitDenied, engineClosed: engineClosed,
+      primaryWindowClosed: primaryWindowClosed, pendingRequests: pending, audits: audits)
+    evidence.launchCount = quitAudits.launchCount
+    evidence.checks[13] = quitAudits.engineQuitDenied
+    evidence.checks[14] = quitAudits.allUnremembered
     evidence.complete = Self.isComplete(evidence)
     return evidence
   }

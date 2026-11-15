@@ -56,4 +56,25 @@ import Testing
     extraDenials.deniedRequests = 7
     #expect(ExternalAppConsentProbe.isComplete(extraDenials))
   }
+
+  @Test func postQuitChecksUseLaunchAuditsCapturedBeforeRuntimeShutdown() {
+    let audits = [
+      ExternalAppConsentProbe.LaunchAudit(
+        count: 2, matchingCount: 1, allUnremembered: true),
+      ExternalAppConsentProbe.LaunchAudit(
+        count: 2, matchingCount: 1, allUnremembered: true),
+    ]
+    let result = ExternalAppConsentProbe.evaluatePostQuitAudits(
+      quitDenied: true, engineClosed: true, primaryWindowClosed: true,
+      pendingRequests: 0, audits: audits)
+    #expect(result.engineQuitDenied)
+    #expect(result.allUnremembered)
+    #expect(result.launchCount == 2)
+
+    let missingAudit = ExternalAppConsentProbe.evaluatePostQuitAudits(
+      quitDenied: true, engineClosed: true, primaryWindowClosed: true,
+      pendingRequests: 0, audits: [])
+    #expect(!missingAudit.engineQuitDenied)
+    #expect(!missingAudit.allUnremembered)
+  }
 }

@@ -525,11 +525,11 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0115-shaar-card-save-prompt-supersede.patch",
-      "sha256": "9926607af1cc05561f093fe20c127744591733dae18116cc341a64b0778fb717"
+      "sha256": "d45d02cd36018592a82040fd01d11a84e3fb2ec103c5fce7c7e87cb63ebd922d"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0116-shaar-password-save-prompt-snapshot.patch",
-      "sha256": "60320cdc00758eea6eaa50ed12279dcc108c0f7f38c2f92b81366ba3b01e676e"
+      "sha256": "7ed5bd179b7086adf48f7cfd03f5281f265edb51bc506830445e91b3fe548260"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0070-shaar-website-permission-prompt.patch",

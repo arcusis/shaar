@@ -34,6 +34,7 @@ extern "C" shaar_error_code shaar_tab_find(
 typedef shaar_error_code (*ShaarShareReplyFunction)(const char *request_id, int shared);
 // Patch 0073. Older engine builds do not export this; a null pointer skips the reply.
 typedef shaar_error_code (*ShaarPrintReplyFunction)(const char *request_id, int accepted);
+typedef shaar_error_code (*ShaarExternalAppReplyFunction)(const char *request_id, int accepted);
 
 namespace {
 
@@ -236,6 +237,8 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarHTTPAuthRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarShareRequests;
   ShaarShareReplyFunction _shaarShareReply;
+  NSMutableDictionary<NSString *, NSString *> *_shaarExternalAppRequests;
+  ShaarExternalAppReplyFunction _shaarExternalAppReply;
   NSMutableDictionary<NSString *, NSDictionary *> *_shaarInstallRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarPrintRequests;
   NSMutableDictionary<NSString *, NSString *> *_shaarJavaScriptDialogRequests;
@@ -511,6 +514,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarDeviceChooserRequests = [NSMutableDictionary dictionary];
   _shaarHTTPAuthRequests = [NSMutableDictionary dictionary];
   _shaarShareRequests = [NSMutableDictionary dictionary];
+  _shaarExternalAppRequests = [NSMutableDictionary dictionary];
   _shaarPrintRequests = [NSMutableDictionary dictionary];
   _shaarJavaScriptDialogRequests = [NSMutableDictionary dictionary];
   _shaarSavePrompts = [NSMutableDictionary dictionary];
@@ -537,6 +541,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   _shaarShareReply = reinterpret_cast<ShaarShareReplyFunction>(
       dlsym(_shaarLibrary, "shaar_share_reply"));
   _shaarWebShareAvailable = _symbols.abi_minor() >= 15 && _shaarShareReply != nullptr;
+  _shaarExternalAppReply = reinterpret_cast<ShaarExternalAppReplyFunction>(
+      dlsym(_shaarLibrary, "shaar_external_app_reply"));
   _shaarPrintReply = reinterpret_cast<ShaarPrintReplyFunction>(
       dlsym(_shaarLibrary, "shaar_print_reply"));
   _shaarPrintAvailable = _symbols.abi_minor() >= 16 && _shaarPrintReply != nullptr;
@@ -610,6 +616,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_shaarMediaRequests removeAllObjects];
   [_shaarDeviceChooserRequests removeAllObjects];
   [_shaarShareRequests removeAllObjects];
+  [_shaarExternalAppRequests removeAllObjects];
   [_shaarInstallRequests removeAllObjects];
   [_shaarJavaScriptDialogRequests removeAllObjects];
   [_shaarSavePrompts removeAllObjects];
@@ -811,6 +818,48 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self receiveWebShareRequest:event payload:payload tabID:tabID profileID:profileID];
     return;
   }
+  if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
+      [kind isEqualToString:@"externalAppRequested"] && _shaarExternalAppReply) {
+    NSString *requestID = payload[@"id"];
+    NSString *windowID = String(event->window_id);
+    NSString *pageURL = payload[@"pageURL"];
+    NSString *scheme = payload[@"scheme"];
+    NSString *app = payload[@"app"];
+    id origin = payload[@"origin"];
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] ||
+        ![requestID hasPrefix:@"x"] || requestID.length < 2 || requestID.length > 11 ||
+        _shaarExternalAppRequests[requestID] ||
+        ![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+        ![_shaarTabWindows[tabID] isEqualToString:windowID] ||
+        ![pageURL isKindOfClass:NSString.class] || pageURL.length > 4096 ||
+        ![scheme isKindOfClass:NSString.class] || scheme.length > 64 ||
+        ![app isKindOfClass:NSString.class] || app.length > 256 ||
+        !([origin isKindOfClass:NSString.class] || origin == NSNull.null)) {
+      if ([requestID isKindOfClass:NSString.class] && requestID.UTF8String)
+        _shaarExternalAppReply(requestID.UTF8String, 0);
+      return;
+    }
+    _shaarExternalAppRequests[requestID] = tabID;
+    NSDictionary *request = @{
+      @"id": requestID, @"profileID": profileID, @"tabID": tabID,
+      @"windowID": windowID, @"pageURL": pageURL,
+      @"scheme": scheme, @"origin": origin, @"app": app,
+    };
+    if (self.onExternalAppRequest) self.onExternalAppRequest(request);
+    else [self resolveExternalAppRequestID:requestID accepted:NO];
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_PERMISSION && !event->session_id.size &&
+      [kind isEqualToString:@"externalAppDismissed"] && _shaarExternalAppReply) {
+    NSString *requestID = payload[@"id"];
+    if (![payload[@"schemaVersion"] isEqual:@1] ||
+        ![requestID isKindOfClass:NSString.class] ||
+        ![_shaarExternalAppRequests[requestID] isEqualToString:tabID]) return;
+    [_shaarExternalAppRequests removeObjectForKey:requestID];
+    if (self.onExternalAppDismissed) self.onExternalAppDismissed(requestID);
+    return;
+  }
   if (event->kind == SHAAR_EVENT_EXTENSION &&
       [kind isEqualToString:@"installRequested"] && !event->session_id.size) {
     [self receiveExtensionInstallEvent:event payload:payload profileID:profileID tabID:tabID];
@@ -910,6 +959,8 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
       [self resolveDeviceChooserRequestID:requestID optionID:nil];
     for (NSString *requestID in [_shaarShareRequests allKeysForObject:tabID])
       [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+    for (NSString *requestID in [_shaarExternalAppRequests allKeysForObject:tabID])
+      [self resolveExternalAppRequestID:requestID accepted:NO];
     [self cancelExtensionInstallRequestsForTabID:tabID];
     for (NSString *requestID in [_shaarPrintRequests allKeysForObject:tabID])
       [self resolvePrintRequestID:requestID accepted:NO];
@@ -1198,6 +1249,11 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     NSString *tabID = _shaarShareRequests[requestID];
     if ([_shaarTabWindows[tabID] isEqualToString:windowID])
       [self resolveWebShareRequestID:requestID outcome:@"cancelled"];
+  }
+  for (NSString *requestID in [_shaarExternalAppRequests.allKeys copy]) {
+    NSString *tabID = _shaarExternalAppRequests[requestID];
+    if ([_shaarTabWindows[tabID] isEqualToString:windowID])
+      [self resolveExternalAppRequestID:requestID accepted:NO];
   }
   for (NSString *tabID in [_shaarTabWindows.allKeys copy]) {
     if (![_shaarTabWindows[tabID] isEqualToString:windowID]) continue;
@@ -1685,7 +1741,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted {
-  // No Shaar external-app request ABI exists yet.
+  if (!_shaarExternalAppReply || ![_shaarExternalAppRequests[requestID] isKindOfClass:NSString.class])
+    return;
+  [_shaarExternalAppRequests removeObjectForKey:requestID];
+  if (requestID.UTF8String) _shaarExternalAppReply(requestID.UTF8String, accepted ? 1 : 0);
 }
 
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID

@@ -49,12 +49,13 @@
  GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url) {
 --- a/chrome/browser/shaar/navigation/shaar_navigation.h
 +++ b/chrome/browser/shaar/navigation/shaar_navigation.h
-@@ -9,6 +9,7 @@
+@@ -9,7 +9,8 @@
  
  #include "chrome/browser/shaar/navigation/shaar_navigation_context.h"
  #include "chrome/browser/shaar/public/shaar_engine.h"
 +#include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/web_contents_observer.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
  #include "url/gurl.h"
  
 @@ -36,10 +37,14 @@

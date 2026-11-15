@@ -789,7 +789,21 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (BOOL)inspectProbeElementInTabID:(NSString *)tabID { return NO; }
 - (BOOL)probeInspectFound { return NO; }
 - (NSDictionary *)probeInspectAudit { return nil; }
-- (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url { return nil; }
+- (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url {
+  if (!ProbeCaptureAllowed() || ![url isKindOfClass:NSString.class]) return nil;
+  auto launches = reinterpret_cast<const char* (*)()>(
+      dlsym(RTLD_DEFAULT, "shaar_external_app_probe_launches_json"));
+  if (!launches) return nil;
+  const char *json = launches();
+  if (!json || std::strlen(json) > 65536) return nil;
+  NSData *data = [NSData dataWithBytes:json length:std::strlen(json)];
+  id entries = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger index = [arguments indexOfObject:@"--probe-data-dir"];
+  if (index == NSNotFound || index + 1 >= arguments.count) return nil;
+  NSURL *root = [NSURL fileURLWithPath:arguments[index + 1]];
+  return ARCProbeExternalAppLaunchAuditForTesting(url, entries, root, YES);
+}
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
   if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) {
     completion(nil);

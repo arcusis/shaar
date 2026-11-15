@@ -12,6 +12,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+#include "base/values.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/testing_pref_service.h"
+
 namespace shaar {
 namespace {
 
@@ -126,6 +130,46 @@ TEST(ShaarDownloadsControlTest, PauseAndCancelAreIdempotent) {
   EXPECT_TRUE(Downloads::ControlItem(&item, "cancel", &error));
   EXPECT_FALSE(Downloads::ControlItem(&item, "keep", &error));
   EXPECT_EQ(error, "SHAAR_INVALID_ARGUMENT");
+}
+
+void RegisterPromptPref(TestingPrefServiceSimple* prefs, bool prompt_by_default) {
+  prefs->registry()->RegisterBooleanPref(prefs::kPromptForDownload, prompt_by_default);
+}
+
+TEST(ShaarDownloadsDirectoryTest, ClearsUngoogledSavePromptDefault) {
+  TestingPrefServiceSimple prefs;
+  RegisterPromptPref(&prefs, true);
+  std::string error;
+  EXPECT_TRUE(prefs.GetBoolean(prefs::kPromptForDownload));
+
+  EXPECT_TRUE(Downloads::SuppressDownloadSavePrompt(&prefs, &error));
+  EXPECT_FALSE(prefs.GetBoolean(prefs::kPromptForDownload));
+
+  EXPECT_TRUE(Downloads::SuppressDownloadSavePrompt(&prefs, &error));
+  EXPECT_FALSE(prefs.GetBoolean(prefs::kPromptForDownload));
+}
+
+TEST(ShaarDownloadsDirectoryTest, LeavesManagedSavePromptToPolicy) {
+  TestingPrefServiceSimple prompting;
+  RegisterPromptPref(&prompting, false);
+  prompting.SetManagedPref(prefs::kPromptForDownload, base::Value(true));
+  std::string error;
+  EXPECT_FALSE(Downloads::SuppressDownloadSavePrompt(&prompting, &error));
+  EXPECT_EQ(error, "SHAAR_POLICY_BLOCKED");
+  EXPECT_TRUE(prompting.GetBoolean(prefs::kPromptForDownload));
+
+  TestingPrefServiceSimple silent;
+  RegisterPromptPref(&silent, true);
+  silent.SetManagedPref(prefs::kPromptForDownload, base::Value(false));
+  EXPECT_TRUE(Downloads::SuppressDownloadSavePrompt(&silent, &error));
+  EXPECT_FALSE(silent.GetBoolean(prefs::kPromptForDownload));
+}
+
+TEST(ShaarDownloadsDirectoryTest, RejectsMissingPromptPreferences) {
+  std::string error = "unchanged";
+  EXPECT_FALSE(Downloads::SuppressDownloadSavePrompt(nullptr, &error));
+  EXPECT_EQ(error, "SHAAR_NOT_READY");
+  EXPECT_FALSE(Downloads::SuppressDownloadSavePrompt(nullptr, nullptr));
 }
 
 }  // namespace

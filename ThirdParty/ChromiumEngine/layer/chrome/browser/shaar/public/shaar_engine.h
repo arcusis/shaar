@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 17u
+#define SHAAR_ENGINE_ABI_MINOR 18u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -608,6 +608,12 @@ SHAAR_EXPORT shaar_error_code shaar_print_reply(const char *request_id,
                                                  int accepted);
 SHAAR_EXPORT shaar_error_code shaar_share_reply(const char *request_id,
                                                   int shared);
+/* ABI minor 18: consume a single external-app consent decision. */
+SHAAR_EXPORT shaar_error_code shaar_external_app_reply(const char *request_id,
+                                                        int accepted);
+/* Verification only. Returns null outside an owned SHAAR_ENGINE_TESTING probe.
+ * JSON is borrowed until the next call on this thread. */
+SHAAR_EXPORT const char *shaar_external_app_probe_launches_json(void);
 
 #ifdef __cplusplus
 }

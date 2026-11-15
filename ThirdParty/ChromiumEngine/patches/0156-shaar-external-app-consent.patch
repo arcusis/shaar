@@ -1,0 +1,28 @@
+diff --git a/chrome/browser/external_protocol/external_protocol_handler.cc b/chrome/browser/external_protocol/external_protocol_handler.cc
+index d826d1c5bc..45ca0d6bf6 100644
+--- a/chrome/browser/external_protocol/external_protocol_handler.cc
++++ b/chrome/browser/external_protocol/external_protocol_handler.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/external_protocol/features.h"
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/shaar/external_app/shaar_external_app.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/pref_service.h"
+@@ -247,6 +248,15 @@ void OnDefaultSchemeClientWorkerFinished(
+     return;
+   }
+ 
++  // Shaar presents its own one-shot consent sheet before Chromium's Views
++  // modal-manager check, which does not own Shaar-hosted tabs.
++  if (shaar::external_app::Request(
++          escaped_url,
++          web_contents ? web_contents->GetOutermostWebContents() : nullptr,
++          initiating_origin, program_name)) {
++    return;
++  }
++
+   // If we get here, either we are not the default or we cannot work out
+   // what the default is, so we proceed.
+   if (prompt_user) {

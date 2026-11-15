@@ -9,6 +9,19 @@ import Foundation
 
 @testable import ArcusisBrowser
 
+enum ShaarSavePromptProbeScenario: Equatable {
+  case save(SavePromptRequest.Kind)
+  case dismiss(SavePromptRequest.Kind)
+  case neverPassword
+
+  static let all: [ShaarSavePromptProbeScenario] = [
+    .save(.password), .dismiss(.password),
+    .save(.card), .dismiss(.card),
+    .save(.address), .dismiss(.address),
+    .neverPassword,
+  ]
+}
+
 @MainActor
 final class ShaarSavePromptRenderSurface {
   private let window: NSWindow
@@ -94,19 +107,24 @@ final class ShaarSavePromptRenderSurface {
       hideWindows()
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       let onScreen = windowsOnScreen()
-      let surfacePresentedSafely = rows.count == 4
+      let surfacePresentedSafely = rows.count == ShaarSavePromptProbeScenario.all.count
         && rows.allSatisfy { $0["renderSurfacePresentedSafely"] as? Bool == true }
-      let surfaceOrderedOut = rows.count == 4
+      let surfaceOrderedOut = rows.count == ShaarSavePromptProbeScenario.all.count
         && rows.allSatisfy { $0["renderSurfaceOrderedOut"] as? Bool == true }
+      let renderFramesCaptured = rows.count == ShaarSavePromptProbeScenario.all.count
+        && rows.allSatisfy { $0["renderFrameCaptured"] as? Bool == true }
       let passed =
-        rows.count == 4 && rows.allSatisfy { $0["passed"] as? Bool == true }
-        && surfacePresentedSafely && surfaceOrderedOut && hidden && !onScreen
+        rows.count == ShaarSavePromptProbeScenario.all.count
+        && rows.allSatisfy { $0["passed"] as? Bool == true }
+        && surfacePresentedSafely && surfaceOrderedOut && renderFramesCaptured
+        && hidden && !onScreen
       write(
         [
           "passed": passed, "rows": rows, "allWindowsHidden": hidden,
           "windowsOnScreen": onScreen,
           "renderSurface": [
             "presentedSafely": surfacePresentedSafely, "orderedOut": surfaceOrderedOut,
+            "framesCaptured": renderFramesCaptured,
           ],
         ],
         to: outputURL)
@@ -115,21 +133,29 @@ final class ShaarSavePromptRenderSurface {
     do {
       try host.restore()
       guard let context = host.contexts.values.first else { throw Failure("No hidden window") }
-      rows.append(
-        await password(context: context, runtime: runtime, base: base, outputURL: outputURL))
-      let cardContext = try freshContext(host: host, from: context)
-      rows.append(
-        await offer(
-          name: "card", kind: .card, path: "/card", decision: .save,
-          context: cardContext, runtime: runtime, base: base, outputURL: outputURL))
-      let addressContext = try freshContext(host: host, from: context)
-      rows.append(
-        await offer(
-          name: "address", kind: .address, path: "/address", decision: .dismiss,
-          context: addressContext, runtime: runtime, base: base, outputURL: outputURL))
-      let neverContext = try freshContext(host: host, from: context)
-      rows.append(
-        await neverPassword(context: neverContext, runtime: runtime, base: neverBase))
+      for scenario in ShaarSavePromptProbeScenario.all {
+        let caseContext = try freshContext(host: host, from: context)
+        switch scenario {
+        case .save(.password):
+          rows.append(
+            await password(
+              context: caseContext, runtime: runtime, base: base, outputURL: outputURL))
+        case .save(let kind):
+          rows.append(
+            await offer(
+              kind: kind, decision: .save, context: caseContext, runtime: runtime,
+              base: base, outputURL: outputURL))
+        case .dismiss(let kind):
+          rows.append(
+            await offer(
+              kind: kind, decision: .dismiss, context: caseContext, runtime: runtime,
+              base: neverBase, outputURL: outputURL))
+        case .neverPassword:
+          rows.append(
+            await neverPassword(context: caseContext, runtime: runtime, base: neverBase,
+              outputURL: outputURL))
+        }
+      }
     } catch {
       rows.append(["name": "setup", "passed": false, "detail": error.localizedDescription])
     }
@@ -151,6 +177,12 @@ final class ShaarSavePromptRenderSurface {
     let renderSurface = opened ? ShaarSavePromptRenderSurface(window: context.window) : nil
     let surfacePresentedSafely =
       renderSurface?.isPresentingFramesWithoutInputOrFocus == true
+    let renderFrameCaptured: Bool
+    if surfacePresentedSafely {
+      renderFrameCaptured = await captureFrame(context: context, runtime: runtime)
+    } else {
+      renderFrameCaptured = false
+    }
     let valuesEntered = opened
       ? await trustedText(
         [("username", "parity-user"), ("password", "parity-secret")],
@@ -158,7 +190,7 @@ final class ShaarSavePromptRenderSurface {
       : false
     let clicked = valuesEntered ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = clicked ? await waitForPrompt(in: context, kind: .password) : nil
-    let screenshot = prompt != nil && capturePrompt(name: "password", outputURL: outputURL)
+    let screenshot = prompt != nil && capturePrompt(name: "password-save", outputURL: outputURL)
     let offscreen = promptPanelIsVisibleOffscreenAndNonKey()
     let saved = prompt != nil && click(ShaarSavePromptPanel.saveIdentifier)
     let cleared = await wait {
@@ -169,7 +201,8 @@ final class ShaarSavePromptRenderSurface {
     hideWindows()
     let passed =
       opened && valuesEntered && clicked && prompt != nil && offscreen && saved && cleared
-      && filled.0 && filled.1 && screenshot && surfacePresentedSafely && surfaceOrderedOut
+      && filled.0 && filled.1 && screenshot && surfacePresentedSafely
+      && renderFrameCaptured && surfaceOrderedOut
     return [
       "name": "password", "passed": passed, "opened": opened,
       "valuesEntered": valuesEntered,
@@ -177,27 +210,45 @@ final class ShaarSavePromptRenderSurface {
       "prompt": prompt != nil, "offscreen": offscreen, "saved": saved, "cleared": cleared,
       "filledUsername": filled.0, "filledPassword": filled.1, "screenshot": screenshot,
       "renderSurfacePresentedSafely": surfacePresentedSafely,
+      "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
     ]
   }
 
   private static func offer(
-    name: String, kind: SavePromptRequest.Kind, path: String,
-    decision: SavePromptRequest.Decision, context: NativeBrowserContext,
+    kind: SavePromptRequest.Kind, decision: SavePromptRequest.Decision,
+    context: NativeBrowserContext,
     runtime: ARCShaarRuntime, base: URL, outputURL: URL
   ) async -> [String: Any] {
+    let name = "\(kind.rawValue)-\(decision.rawValue)"
+    let path = "/\(kind.rawValue)"
     let opened = await open(base.appending(path: path), context: context)
     hideWindows()
     let renderSurface = opened ? ShaarSavePromptRenderSurface(window: context.window) : nil
     let surfacePresentedSafely =
       renderSurface?.isPresentingFramesWithoutInputOrFocus == true
-    let fields: [(String, String)] = name == "card"
-      ? [("card-name", "Parity Probe"), ("card-number", "4111111111111111"),
-         ("card-exp-month", "12"), ("card-exp-year", "2030")]
-      : [("address-name", "Parity Probe"), ("address-street", "1 Loopback Road"),
-         ("address-city", "Mountain View"), ("address-region", "CA"),
-         ("address-postal", "94043"), ("address-country", "US"),
-         ("address-email", "parity@example.com")]
+    let renderFrameCaptured: Bool
+    if surfacePresentedSafely {
+      renderFrameCaptured = await captureFrame(context: context, runtime: runtime)
+    } else {
+      renderFrameCaptured = false
+    }
+    let fields: [(String, String)]
+    switch kind {
+    case .password:
+      let prefix = decision == .save ? "parity" : "dismiss"
+      fields = [("username", "\(prefix)-user"), ("password", "\(prefix)-secret")]
+    case .card:
+      fields = [("card-name", "Probe \(decision.rawValue)"),
+        ("card-number", "4111111111111111"), ("card-exp-month", "12"),
+        ("card-exp-year", "2030")]
+    case .address:
+      fields = [("address-name", "Probe \(decision.rawValue)"),
+        ("address-street", "1 \(decision.rawValue) Loopback Road"),
+        ("address-city", "Mountain View"), ("address-region", "CA"),
+        ("address-postal", "94043"), ("address-country", "US"),
+        ("address-email", "parity@example.com")]
+    }
     let valuesEntered = opened
       ? await trustedText(fields, context: context, runtime: runtime) : false
     let clicked = valuesEntered
@@ -205,6 +256,9 @@ final class ShaarSavePromptRenderSurface {
     let prompt = clicked ? await waitForPrompt(in: context, kind: kind) : nil
     let screenshot = prompt?.kind == kind && capturePrompt(name: name, outputURL: outputURL)
     let offscreen = promptPanelIsVisibleOffscreenAndNonKey()
+    let neverButton = SavePromptButtons.find(
+      promptPanel()?.contentView, identifier: ShaarSavePromptPanel.neverIdentifier)
+    let neverAvailabilityMatchesKind = kind == .password ? neverButton != nil : neverButton == nil
     let identifier: String
     switch decision {
     case .save: identifier = ShaarSavePromptPanel.saveIdentifier
@@ -219,7 +273,8 @@ final class ShaarSavePromptRenderSurface {
     hideWindows()
     let passed =
       opened && valuesEntered && clicked && prompt?.kind == kind && offscreen && actionSent && cleared
-      && screenshot && surfacePresentedSafely && surfaceOrderedOut
+      && screenshot && neverAvailabilityMatchesKind && surfacePresentedSafely && renderFrameCaptured
+      && surfaceOrderedOut
     return [
       "name": name, "passed": passed, "opened": opened,
       "valuesEntered": valuesEntered,
@@ -227,14 +282,16 @@ final class ShaarSavePromptRenderSurface {
       "prompt": prompt?.kind.rawValue ?? "", "offscreen": offscreen,
       "decision": decision.rawValue, "decisionSent": actionSent,
       "saved": actionSent && decision == .save,
+      "neverAvailabilityMatchesKind": neverAvailabilityMatchesKind,
       "cleared": cleared, "screenshot": screenshot,
       "renderSurfacePresentedSafely": surfacePresentedSafely,
+      "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
     ]
   }
 
   private static func neverPassword(
-    context: NativeBrowserContext, runtime: ARCShaarRuntime, base: URL
+    context: NativeBrowserContext, runtime: ARCShaarRuntime, base: URL, outputURL: URL
   ) async -> [String: Any] {
     let page = base.appending(path: "password")
     let opened = await open(page, context: context)
@@ -242,6 +299,12 @@ final class ShaarSavePromptRenderSurface {
     let firstSurface = opened ? ShaarSavePromptRenderSurface(window: context.window) : nil
     let firstSurfacePresentedSafely =
       firstSurface?.isPresentingFramesWithoutInputOrFocus == true
+    let firstFrameCaptured: Bool
+    if firstSurfacePresentedSafely {
+      firstFrameCaptured = await captureFrame(context: context, runtime: runtime)
+    } else {
+      firstFrameCaptured = false
+    }
     let valuesEntered = opened
       ? await trustedText(
         [("username", "never-user"), ("password", "never-secret")],
@@ -250,6 +313,10 @@ final class ShaarSavePromptRenderSurface {
     let clicked = valuesEntered ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = clicked ? await waitForPrompt(in: context, kind: .password) : nil
     let visibleOffscreen = prompt != nil && promptPanelIsVisibleOffscreenAndNonKey()
+    let screenshot = prompt != nil && capturePrompt(name: "password-never", outputURL: outputURL)
+    let neverButtonAvailable =
+      SavePromptButtons.find(
+        promptPanel()?.contentView, identifier: ShaarSavePromptPanel.neverIdentifier) != nil
     let neverClicked = prompt != nil && click(ShaarSavePromptPanel.neverIdentifier)
     let cleared = await wait {
       context.store.savePrompt == nil && promptPanel()?.isVisible != true
@@ -261,6 +328,12 @@ final class ShaarSavePromptRenderSurface {
     let secondSurface = reopened ? ShaarSavePromptRenderSurface(window: context.window) : nil
     let secondSurfacePresentedSafely =
       secondSurface?.isPresentingFramesWithoutInputOrFocus == true
+    let secondFrameCaptured: Bool
+    if secondSurfacePresentedSafely {
+      secondFrameCaptured = await captureFrame(context: context, runtime: runtime)
+    } else {
+      secondFrameCaptured = false
+    }
     let resubmittedValuesEntered = reopened
       ? await trustedText(
         [("username", "never-user"), ("password", "never-secret")],
@@ -273,19 +346,23 @@ final class ShaarSavePromptRenderSurface {
     let secondSurfaceOrderedOut = secondSurface?.orderOutAndRestore() ?? false
     hideWindows()
     let surfacePresentedSafely = firstSurfacePresentedSafely && secondSurfacePresentedSafely
+    let renderFrameCaptured = firstFrameCaptured && secondFrameCaptured
     let surfaceOrderedOut = firstSurfaceOrderedOut && secondSurfaceOrderedOut
     return [
       "name": "password-never", "passed": opened && valuesEntered && clicked
         && visibleOffscreen && neverClicked && cleared && reopened
         && resubmittedValuesEntered && resubmitted && suppressed
-        && surfacePresentedSafely && surfaceOrderedOut,
+        && screenshot && neverButtonAvailable && surfacePresentedSafely
+        && renderFrameCaptured && surfaceOrderedOut,
       "opened": opened, "valuesEntered": valuesEntered,
       "clicked": clicked, "prompt": prompt != nil,
       "visibleOffscreen": visibleOffscreen, "never": neverClicked,
+      "screenshot": screenshot, "neverButtonAvailable": neverButtonAvailable,
       "cleared": cleared, "reopened": reopened,
       "resubmittedValuesEntered": resubmittedValuesEntered,
       "resubmitted": resubmitted, "suppressed": suppressed,
       "renderSurfacePresentedSafely": surfacePresentedSafely,
+      "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
     ]
   }
@@ -302,6 +379,17 @@ final class ShaarSavePromptRenderSurface {
       try? await Task.sleep(for: .milliseconds(100))
     }
     return context.store.savePrompt == nil && promptPanel()?.isVisible != true
+  }
+
+  private static func captureFrame(
+    context: NativeBrowserContext, runtime: ARCShaarRuntime
+  ) async -> Bool {
+    guard let tab = context.engine.siteControlTarget?.tabID else { return false }
+    return await withCheckedContinuation { continuation in
+      runtime.captureProbeTabID(tab.uuidString) {
+        continuation.resume(returning: $0?.isEmpty == false)
+      }
+    }
   }
 
   private static func open(_ url: URL, context: NativeBrowserContext) async -> Bool {

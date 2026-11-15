@@ -33,24 +33,31 @@ DIAGNOSTIC_STAGES = {
     "offer:serialize-failed", "offer:pending-limit", "offer:expiry-schedule-failed",
     "offer:event-emitted", "offer:event-rejected",
 }
-PROMPT_NAMES = ("password", "card", "address")
+PROMPT_NAMES = (
+    "password-save", "password-dismiss", "password-never",
+    "card-save", "card-dismiss", "address-save", "address-dismiss",
+)
 
 
 class FixtureServer(ThreadingHTTPServer):
     def __init__(self, address, handler):
         super().__init__(address, handler)
-        self.submissions = set()
+        self.submissions = {}
         self.submission_lock = threading.Lock()
 
     def record_submission(self, referer):
         path = urlsplit(referer or "").path
         if path in EXPECTED_SUBMISSIONS:
             with self.submission_lock:
-                self.submissions.add(path)
+                self.submissions[path] = self.submissions.get(path, 0) + 1
 
     def submitted_forms(self):
         with self.submission_lock:
             return sorted(self.submissions)
+
+    def submission_counts(self):
+        with self.submission_lock:
+            return dict(self.submissions)
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -137,10 +144,20 @@ def copy_prompt_screenshots(source_dir, destination_dir):
     return copied
 
 
+def screenshot_directory(receipt, locale):
+    if locale not in {"en", "he"}:
+        raise ValueError(f"Unsupported screenshot locale: {locale}")
+    return receipt.parent / "screenshots" / locale
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
     parser.add_argument("--receipt", type=Path, default=ROOT / "build/save-prompt/receipt.json")
+    parser.add_argument(
+        "--locale", choices=("en", "he"),
+        default=os.environ.get("SHAAR_V02_PROOF_LOCALE", "en"),
+    )
     options = parser.parse_args()
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
@@ -172,8 +189,10 @@ def main():
             command = [
                 str(executable), "--save-prompt-probe", str(report_path), page, never_page,
             ]
-            if os.environ.get("SHAAR_V02_PROOF_LOCALE") == "he":
+            if options.locale == "he":
                 command.extend(["-AppleLanguages", "(he)"])
+            else:
+                command.extend(["-AppleLanguages", "(en)"])
             result = subprocess.run(
                 command,
                 env=environment, capture_output=True, text=True, timeout=180, check=False,
@@ -187,7 +206,9 @@ def main():
                 if stage in DIAGNOSTIC_STAGES:
                     diagnostics.append(stage)
         finally:
-            screenshots = copy_prompt_screenshots(root, options.receipt.parent)
+            screenshots = copy_prompt_screenshots(
+                root, screenshot_directory(options.receipt, options.locale)
+            )
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
         never_server.shutdown()
@@ -196,18 +217,27 @@ def main():
             time.sleep(0.05)
         submitted_forms = sorted(
             set(server.submitted_forms()) | set(never_server.submitted_forms()))
+        submission_counts = {}
+        for instance in (server, never_server):
+            for path, count in instance.submission_counts().items():
+                submission_counts[path] = submission_counts.get(path, 0) + count
     crashes = sorted(crash_names() - before)
     receipt = {
         "verificationExecutable": str(executable), "exitCode": result.returncode,
+        "locale": options.locale,
         "allWindowsHidden": report.get("allWindowsHidden"),
         "windowsOnScreen": report.get("windowsOnScreen"),
         "renderSurface": report.get("renderSurface"),
         "rows": report.get("rows", []), "submittedForms": submitted_forms,
+        "submissionCounts": submission_counts,
         "diagnosticStages": diagnostics,
         "screenshots": screenshots,
         "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True
-        and set(submitted_forms) == EXPECTED_SUBMISSIONS and not crashes,
+        and set(submitted_forms) == EXPECTED_SUBMISSIONS
+        and submission_counts == {"/password": 4, "/card": 2, "/address": 2}
+        and set(screenshots) == set(PROMPT_NAMES)
+        and not crashes,
     }
     options.receipt.parent.mkdir(parents=True, exist_ok=True)
     options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")

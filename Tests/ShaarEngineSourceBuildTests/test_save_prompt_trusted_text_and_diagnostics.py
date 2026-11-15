@@ -117,7 +117,7 @@ class SavePromptTrustedTextTests(unittest.TestCase):
             "element point unavailable or outside view",
             "target unavailable at element point",
             "target unavailable before dispatch",
-            "target unavailable before text commit", "capture timed out",
+            "focused frame widget unavailable before text commit", "capture timed out",
         ):
             with self.subTest(stage=stage):
                 self.assertIn(f'Fail("{stage}")', source)
@@ -128,8 +128,8 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         source = (LAYER / "devtools/shaar_devtools.cc").read_text()
         commit = source[source.index("  void CommitText()"):
                         source.index("  void CompleteSuccess()", source.index("  void CommitText()"))]
-        self.assertIn("widget->Focus();", commit)
-        self.assertIn("widget->GetWidgetInputHandler()->ImeCommitText(", commit)
+        self.assertIn("focused_widget->Focus();", commit)
+        self.assertIn("focused_widget->GetWidgetInputHandler()->ImeCommitText(", commit)
         self.assertIn("ProbeTrustedInput::OnTextCommitted", commit)
         self.assertIn("void OnTextCommitted()", commit)
         self.assertNotIn("CompleteSuccess();", commit.split("void OnTextCommitted()", 1)[0])
@@ -142,6 +142,18 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertIn("valueLength: field instanceof HTMLInputElement ? field.value.length : null", probe)
         self.assertIn("activeElementIsInput: active instanceof HTMLInputElement", probe)
         self.assertNotIn("value:field.value", probe)
+    def test_text_commit_targets_the_focused_frame_widget(self):
+        source = (LAYER / "devtools/shaar_devtools.cc").read_text()
+        commit = source[source.index("  void CommitText()"):
+                        source.index("  void CompleteSuccess()", source.index("  void CommitText()"))]
+        self.assertIn("contents->GetFocusedFrame()", commit)
+        self.assertIn("focused_frame->GetRenderWidgetHost()", commit)
+        self.assertIn('Fail("focused frame widget unavailable before text commit")', commit)
+        self.assertIn("focused_widget->input_router()->MakeActive()", commit)
+        self.assertIn("focused_widget->GetWidgetInputHandler()->SetFocus(", commit)
+        self.assertIn("blink::mojom::FocusState::kFocused", commit)
+        self.assertIn("focused_widget->GetWidgetInputHandler()->ImeCommitText(", commit)
+        self.assertNotIn("auto* widget = Activate();", commit)
 
 
 if __name__ == "__main__":

@@ -98,11 +98,21 @@ public struct ExternalAppRequest: Identifiable, Equatable, Sendable {
 
   private static func normalizedApplicationName(_ name: String?) -> String?? {
     guard let name else { return .some(nil) }
-    guard !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+    let displayName = String(name.unicodeScalars.filter { !isBidiFormattingControl($0) })
+    guard !displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
     else { return nil }
-    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard trimmed.utf8.count <= 256 else { return nil }
     return .some(trimmed.isEmpty ? nil : trimmed)
+  }
+
+  private static func isBidiFormattingControl(_ scalar: Unicode.Scalar) -> Bool {
+    switch scalar.value {
+    case 0x061C, 0x200E, 0x200F, 0x202A...0x202E, 0x2066...0x2069:
+      return true
+    default:
+      return false
+    }
   }
 
   private static func isValidWindowID(_ id: String) -> Bool {

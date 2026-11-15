@@ -177,7 +177,8 @@ final class ReloadWindowProbe {
       host.contexts.values.flatMap { $0.store.session.spaces.flatMap(\.tabs) }.map(\.id)
     ).subtracting(prior)
     try expect(
-      Self.hasSingleDestinationTab(createdTabs, destination: destination),
+      Self.hasExpectedDestinationTabCount(
+        name: name, createdTabs: createdTabs, source: source, destination: destination),
       "\(name) creates exactly one destination tab")
     if elementID != "plain" {
       let clicked = try require(await document(source, runtime: runtime), "No source document")
@@ -359,7 +360,13 @@ final class ReloadWindowProbe {
     var errorDescription: String? { message }
   }
 
-  static func hasSingleDestinationTab(_ createdIDs: Set<UUID>, destination: UUID) -> Bool {
-    createdIDs.count == 1 && createdIDs.contains(destination)
+  static func hasExpectedDestinationTabCount(
+    name: String, createdTabs: Set<UUID>, source: UUID, destination: UUID
+  ) -> Bool {
+    if name == "plain" {
+      // A normal anchor navigates its source tab; opening a second tab here would be a bug.
+      return createdTabs.isEmpty && destination == source
+    }
+    return createdTabs.count == 1 && createdTabs.contains(destination)
   }
 }

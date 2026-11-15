@@ -159,7 +159,9 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         source = (LAYER / "devtools/shaar_devtools.cc").read_text()
         commit = source[source.index("  void CommitText()"):
                         source.index("  void CompleteSuccess()", source.index("  void CommitText()"))]
-        self.assertIn("widget->Focus();", commit)
+        self.assertIn(
+            "widget->GetWidgetInputHandler()->SetFocus(\n"
+            "        blink::mojom::FocusState::kFocused);", commit)
         self.assertIn("widget->GetWidgetInputHandler()->ImeCommitText(", commit)
         self.assertIn("ProbeTrustedInput::OnTextCommitted", commit)
         self.assertIn("void OnTextCommitted()", commit)

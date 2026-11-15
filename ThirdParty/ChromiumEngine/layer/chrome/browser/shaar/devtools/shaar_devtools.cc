@@ -658,7 +658,11 @@ class ProbeTrustedInput final
       Fail("target unavailable before text commit");
       return;
     }
-    widget->Focus();
+    // The hidden verification surface is deliberately non-key. Explicitly set
+    // renderer widget focus before IME commit so the renderer accepts text
+    // without asking AppKit to activate or key the window.
+    widget->GetWidgetInputHandler()->SetFocus(
+        blink::mojom::FocusState::kFocused);
     widget->GetWidgetInputHandler()->ImeCommitText(
         base::UTF8ToUTF16(text_), std::vector<ui::ImeTextSpan>(),
         gfx::Range::InvalidRange(), 0, blink::DOMNodeIdType(),

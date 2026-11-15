@@ -629,7 +629,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0155-shaar-web-store-install.patch",
-      "sha256": "d8bcd8b2e4985ec017b211fab980849a689e8cd961dcc0065f968b3566623718"
+      "sha256": "7da46a3b4005e9f6a7087e676cd5cfe495510e291e0fc0b76d1cac4e33fcc08b"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0156-shaar-external-app-consent.patch",

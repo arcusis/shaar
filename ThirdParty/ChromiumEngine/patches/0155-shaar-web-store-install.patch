@@ -116,3 +116,62 @@ diff --git a/extensions/browser/webstore_installer.cc b/extensions/browser/webst
  }
  
  void WebstoreInstaller::ReportFailure(const std::string& error,
+diff --git a/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc b/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
+--- a/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
++++ b/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
+@@ -8,6 +8,7 @@
+ #include <string>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/i18n/message_formatter.h"
+ #include "base/memory/raw_ptr.h"
+@@ -58,6 +59,8 @@
+ #include "ui/views/metadata/view_factory.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/widget/widget_delegate.h"
+ #include "ui/views/window/dialog_delegate.h"
++#include "url/gurl.h"
++#include "url/origin.h"
+ 
+ using content::OpenURLParams;
+@@ -756,8 +759,38 @@
+ BEGIN_METADATA(ExtensionInstallDialogView)
+ END_METADATA
+ 
++namespace shaar::extensions_host {
++void ShaarShowInstallPrompt(
++    std::unique_ptr<ExtensionInstallPromptShowParams> show_params,
++    ExtensionInstallPrompt::DoneCallback done_callback,
++    std::unique_ptr<extensions::InstallPromptData> prompt)
++    __attribute__((weak_import));
++}  // namespace shaar::extensions_host
++
+ // static
+ ExtensionInstallPrompt::ShowDialogCallback
+ ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder") &&
++      shaar::extensions_host::ShaarShowInstallPrompt) {
++    return base::BindRepeating(
++        [](std::unique_ptr<ExtensionInstallPromptShowParams> show_params,
++           ExtensionInstallPrompt::DoneCallback done_callback,
++           std::unique_ptr<extensions::InstallPromptData> prompt) {
++          content::WebContents* contents =
++              show_params ? show_params->GetParentWebContents() : nullptr;
++          if (contents &&
++              url::Origin::Create(contents->GetLastCommittedURL()) ==
++                  url::Origin::Create(
++                      GURL("https://chromewebstore.google.com/"))) {
++            shaar::extensions_host::ShaarShowInstallPrompt(
++                std::move(show_params), std::move(done_callback),
++                std::move(prompt));
++            return;
++          }
++          ShowExtensionInstallDialogImpl(
++              std::move(show_params), std::move(done_callback),
++              std::move(prompt));
++        });
++  }
+   return base::BindRepeating(&ShowExtensionInstallDialogImpl);
+ }

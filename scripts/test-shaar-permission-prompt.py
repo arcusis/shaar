@@ -5,11 +5,9 @@
 
 """Hidden website permission probe for Shaar Verification.app.
 
-Camera and microphone must still show the existing sheet. Geolocation,
-notifications, MIDI, and protocol-handler registration are the same loopback
-pages used by the platform parity probe. Exit 0 when all four prompts appear
-from the engine. Exit 2 when the run completed and those prompts are still
-absent. A protocol result does not count without a protocolHandler request.
+Camera and microphone must show Shaar's sheet, allow a combined getUserMedia
+request, and deny the same request from a distinct origin. Geolocation,
+notifications, MIDI, and protocol-handler registration use loopback pages.
 Launch through shaar-heavy.
 """
 
@@ -40,8 +38,7 @@ function fail(error) {
   });
 }
 """
-PAGES = {
-    "media": """
+MEDIA_REQUEST = """
       document.getElementById('plain').onclick = () => {
         navigator.mediaDevices.getUserMedia({audio:true, video:true}).then(stream => {
           const audio = stream.getAudioTracks().length;
@@ -50,7 +47,10 @@ PAGES = {
           finish({outcome:'resolved', audio, video});
         }).catch(fail);
       };
-    """,
+    """
+PAGES = {
+    "media-allow": MEDIA_REQUEST,
+    "media-deny": MEDIA_REQUEST,
     "geolocation": """
       document.getElementById('plain').onclick = () => {
         navigator.geolocation.getCurrentPosition(
@@ -225,7 +225,10 @@ def main():
                 "exitCode": process.returncode,
                 "passed": payload.get("passed"),
                 "mediaPrompted": payload.get("mediaPrompted"),
+                "mediaAllowPrompted": payload.get("mediaAllowPrompted"),
+                "mediaDenyPrompted": payload.get("mediaDenyPrompted"),
                 "mediaTracks": payload.get("mediaTracks"),
+                "mediaDenied": payload.get("mediaDenied"),
                 "allWindowsHidden": payload.get("allWindowsHidden"),
                 "prompts": sorted(prompted),
                 "missingPrompts": sorted(missing_prompts),
@@ -233,7 +236,10 @@ def main():
                 "missingRememberedPermissions": sorted(missing_remembered),
                 "verdictFailed": (
                     payload.get("passed") is not True or missing_prompts != set()
-                    or missing_remembered != set()),
+                    or missing_remembered != set()
+                    or payload.get("mediaPrompted") is not True
+                    or payload.get("mediaTracks") is not True
+                    or payload.get("mediaDenied") is not True),
                 "newCrashes": new_crashes,
                 "error": payload.get("error", ""),
             }
@@ -241,6 +247,7 @@ def main():
             completed = (
                 process.returncode in (0, 1) and not new_crashes
                 and payload.get("mediaPrompted") and payload.get("mediaTracks")
+                and payload.get("mediaDenied")
                 and payload.get("allWindowsHidden")
                 and not payload.get("unexpectedSurfaces")
                 and not payload.get("error") and payload.get("passed") is True

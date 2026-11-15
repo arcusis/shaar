@@ -8,81 +8,75 @@ import Testing
 
 @MainActor
 @Suite struct WebsitePermissionPromptProbeTests {
+  private let prompts = [
+    "media-allow", "media-deny", "geolocation", "notifications", "midi", "protocol",
+  ]
+
   @Test func missingProbeArgumentsFailBeforeLaunch() {
     #expect(WebsitePermissionPromptProbe.run(arguments: ["--probe-website-permission"]) == 1)
   }
 
-  @Test func passedRequiresTheFourWebsitePrompts() {
-    let ready = WebsitePermissionProbeVerdict.passed(
-      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-      unexpectedSurfaces: [], promptedNames: ["media"], rememberedKinds: [], openedProtocols: [])
+  @Test func passedRequiresTheFourWebsitePromptsAndBothMediaDecisions() {
+    let ready = verdict(promptedNames: ["media-allow"], rememberedKinds: [])
     #expect(!ready)
-    let complete = WebsitePermissionProbeVerdict.passed(
-      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-      unexpectedSurfaces: [],
-      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
+    let complete = verdict(
+      promptedNames: prompts,
       rememberedKinds: ["geolocation", "notifications", "midi"],
       openedProtocols: ["web+shaarparity"])
     #expect(complete)
   }
 
-  @Test func passedRequiresEveryMediaAndHiddenSurfaceCheck() {
-    let prompts = ["media", "geolocation", "notifications", "midi", "protocol"]
-    for failingCheck in ["error", "mediaPrompted", "mediaTracks", "hidden", "surface"] {
-      let result = WebsitePermissionProbeVerdict.passed(
-        error: failingCheck == "error" ? "fixture failed" : nil,
-        mediaPrompted: failingCheck != "mediaPrompted",
-        mediaTracks: failingCheck != "mediaTracks",
-        hidden: failingCheck != "hidden",
-        unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
-        promptedNames: prompts, rememberedKinds: ["geolocation", "notifications", "midi"],
-        openedProtocols: [])
-      #expect(!result, "\(failingCheck) must prevent a pass")
-    }
+  @Test(arguments: ["error", "mediaPrompted", "mediaTracks", "mediaDenied", "hidden", "surface"])
+  func passedRequiresEveryMediaAndHiddenSurfaceCheck(_ failingCheck: String) {
+    #expect(!verdict(
+      error: failingCheck == "error" ? "fixture failed" : nil,
+      mediaPrompted: failingCheck != "mediaPrompted",
+      mediaTracks: failingCheck != "mediaTracks",
+      mediaDenied: failingCheck != "mediaDenied",
+      hidden: failingCheck != "hidden",
+      unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
+      promptedNames: prompts,
+      rememberedKinds: ["geolocation", "notifications", "midi"]))
   }
 
   @Test func extraPromptNamesDoNotSubstituteForARequiredPrompt() {
-    let result = WebsitePermissionProbeVerdict.passed(
-      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-      unexpectedSurfaces: [],
-      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol", "clipboard"]
-        .filter { $0 != "midi" },
+    #expect(!verdict(
+      promptedNames: prompts.filter { $0 != "midi" } + ["clipboard"],
       rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: ["web+shaarparity"])
-    #expect(!result)
+      openedProtocols: ["web+shaarparity"]))
   }
 
   @Test func passedRequiresShaarWebProtocolRegistration() {
-    #expect(!WebsitePermissionProbeVerdict.passed(
-      error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-      unexpectedSurfaces: [],
-      promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
-      rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: []))
+    #expect(!verdict(
+      promptedNames: prompts,
+      rememberedKinds: ["geolocation", "notifications", "midi"]))
   }
 
   @Test(arguments: ["geolocation", "notifications", "midi"])
   func passedFailsWhenAnyRequestedPromptIsMissing(_ missing: String) {
-    let prompted = ["media", "geolocation", "notifications", "midi", "protocol"]
-      .filter { $0 != missing }
-    #expect(
-      !WebsitePermissionProbeVerdict.passed(
-        error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-        unexpectedSurfaces: [], promptedNames: prompted,
-        rememberedKinds: ["geolocation", "notifications", "midi"],
-        openedProtocols: ["web+shaarparity"]))
+    #expect(!verdict(
+      promptedNames: prompts.filter { $0 != missing },
+      rememberedKinds: ["geolocation", "notifications", "midi"],
+      openedProtocols: ["web+shaarparity"]))
   }
 
   @Test(arguments: ["geolocation", "notifications", "midi"])
   func passedRequiresEachDecisionToBeRemembered(_ missing: String) {
-    let remembered = ["geolocation", "notifications", "midi"].filter { $0 != missing }
-    #expect(
-      !WebsitePermissionProbeVerdict.passed(
-        error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
-        unexpectedSurfaces: [],
-        promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
-        rememberedKinds: remembered,
-        openedProtocols: ["web+shaarparity"]))
+    #expect(!verdict(
+      promptedNames: prompts,
+      rememberedKinds: ["geolocation", "notifications", "midi"].filter { $0 != missing },
+      openedProtocols: ["web+shaarparity"]))
+  }
 
+  private func verdict(
+    error: String? = nil, mediaPrompted: Bool = true, mediaTracks: Bool = true,
+    mediaDenied: Bool = true, hidden: Bool = true, unexpectedSurfaces: [String] = [],
+    promptedNames: [String], rememberedKinds: [String], openedProtocols: Set<String> = []
+  ) -> Bool {
+    WebsitePermissionProbeVerdict.passed(
+      error: error, mediaPrompted: mediaPrompted, mediaTracks: mediaTracks,
+      mediaDenied: mediaDenied, hidden: hidden, unexpectedSurfaces: unexpectedSurfaces,
+      promptedNames: promptedNames, rememberedKinds: rememberedKinds,
+      openedProtocols: openedProtocols)
   }
 }

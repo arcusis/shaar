@@ -620,6 +620,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0153-shaar-private-otr-pref-isolation.patch",
       "sha256": "2c7a53eeffea7e8772f81e4fe31ccceb452f18db14a3e928351e3c12d4d04350"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0154-shaar-reload-close-watch-crashes.patch",
+      "sha256": "cd771553f7dd6d711a6fe28c8ed2450e35b302208190c6de31460bc4d12daa65"
     }
   ],
   "devtoolsFrontend157": {

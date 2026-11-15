@@ -16,10 +16,11 @@ MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 
 
 class PrivateOTRPreferenceIsolationPatchTests(unittest.TestCase):
-    def test_patch_is_last_and_has_matching_digest(self):
+    def test_patch_is_listed_and_has_matching_digest(self):
         entries = json.loads(MANIFEST.read_text())["patches"]
-        self.assertEqual(str(PATCH.relative_to(ROOT)), entries[-1]["file"])
-        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), entries[-1]["sha256"])
+        matches = [entry for entry in entries if entry["file"] == str(PATCH.relative_to(ROOT))]
+        self.assertEqual(1, len(matches))
+        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), matches[0]["sha256"])
 
     def test_all_off_the_record_profiles_use_the_non_syncing_pref_service(self):
         patch = PATCH.read_text()

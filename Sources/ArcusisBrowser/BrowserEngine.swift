@@ -839,6 +839,19 @@ final class BrowserEngine {
     else { return false }
     guard ensureLiveWindow() else { return false }
     if liveTabs.contains(tab) {
+      if pages[tab]?.loading == true, mode == .normal,
+        let destination = store?.session.page(forTabID: tab)?.tab.url
+      {
+        return Self.restartPendingNavigation(
+          stop: {
+            self.runtime.stopTabID(tab.uuidString, profileID: profile.uuidString)
+          },
+          navigate: {
+            self.runtime.navigateTabID(
+              tab.uuidString, profileID: profile.uuidString, windowID: self.windowID,
+              url: destination.absoluteString)
+          })
+      }
       if runtime.reloadTabID(
         tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
       {
@@ -851,6 +864,11 @@ final class BrowserEngine {
       return recreateAfterRejectedReload(tab)
     }
     return openRetainedDocument(tab, profile: profile)
+  }
+
+  static func restartPendingNavigation(stop: () -> Bool, navigate: () -> Bool) -> Bool {
+    guard stop() else { return false }
+    return navigate()
   }
 
   private func recreateAfterRejectedReload(_ tab: UUID) -> Bool {

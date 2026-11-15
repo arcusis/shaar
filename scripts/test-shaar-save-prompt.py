@@ -25,6 +25,7 @@ BUTTON = (
 )
 EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
 DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "
+TRUSTED_INPUT_TRACE_PREFIX = "Trusted probe text: trace: "
 TRUSTED_INPUT_FAILURE_PREFIX = "trusted input failed at "
 TRUSTED_INPUT_FAILURE_STAGES = {
     "invalid fixture text request", "render surface unavailable",
@@ -37,7 +38,9 @@ TRUSTED_INPUT_FAILURE_STAGES = {
     "element point unavailable or outside view", "target unavailable at element point",
     "target unavailable before dispatch", "target unavailable before text commit",
     "capture timed out",
+    "tab lookup", "render widget host", "focus", "input injection", "page receipt",
 }
+TRUSTED_INPUT_TRACE_STAGES = {"bridge handler entered"}
 DIAGNOSTIC_STAGES = {
     "hook:password", "hook:card", "hook:address", "offer:entered",
     "offer:invalid-input", "offer:context-denied", "offer:no-profile-services",
@@ -173,6 +176,17 @@ def trusted_input_failure_stages(output):
     return stages
 
 
+def trusted_input_trace_stages(output):
+    stages = []
+    for line in output.splitlines():
+        if TRUSTED_INPUT_TRACE_PREFIX not in line:
+            continue
+        stage = line.split(TRUSTED_INPUT_TRACE_PREFIX, 1)[1].strip()
+        if stage in TRUSTED_INPUT_TRACE_STAGES:
+            stages.append(stage)
+    return stages
+
+
 def safe_trusted_text_diagnostics(report):
     """Keep field outcomes while excluding DOM values and arbitrary report data."""
     diagnostics = report.get("trustedTextDiagnostics", [])
@@ -200,6 +214,13 @@ def safe_trusted_text_diagnostics(report):
             "activeInputType": diagnostic.get("activeInputType"),
         })
     return safe
+
+
+def safe_trusted_input_failure_stages(report):
+    stages = report.get("trustedInputFailureStages", [])
+    if not isinstance(stages, list):
+        return []
+    return [stage for stage in stages if stage in TRUSTED_INPUT_FAILURE_STAGES]
 
 
 def profile_autofill_preferences(data_root):
@@ -321,6 +342,8 @@ def main():
         "submissionCounts": submission_counts,
         "diagnosticStages": diagnostics,
         "trustedInputFailures": trusted_input_failures,
+        "trustedInputTrace": trusted_input_trace_stages(combined_output),
+        "trustedInputFailureStages": safe_trusted_input_failure_stages(report),
         "screenshots": screenshots,
         "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True

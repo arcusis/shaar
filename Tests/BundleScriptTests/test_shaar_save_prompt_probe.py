@@ -17,6 +17,14 @@ SPEC.loader.exec_module(PROBE)
 
 
 class SavePromptFixtureSubmissionTests(unittest.TestCase):
+    def test_receipt_retains_only_known_trusted_input_stages(self):
+        self.assertEqual(
+            PROBE.safe_trusted_input_failure_stages({
+                "trustedInputFailureStages": ["page receipt", "secret-value", 3]
+            }),
+            ["page receipt"],
+        )
+
     def setUp(self):
         self.server = PROBE.FixtureServer(("127.0.0.1", 0), PROBE.Fixture)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)

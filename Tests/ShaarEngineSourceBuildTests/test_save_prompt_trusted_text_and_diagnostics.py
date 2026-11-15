@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 from pathlib import Path
+import importlib.util
 import unittest
 
 
@@ -15,6 +16,32 @@ FIXTURE = ROOT / "scripts/test-shaar-save-prompt.py"
 
 
 class SavePromptTrustedTextTests(unittest.TestCase):
+    def test_fixture_preserves_unknown_engine_stage_names_without_log_payloads(self):
+        spec = importlib.util.spec_from_file_location("save_prompt_fixture", FIXTURE)
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        output = (
+            "Trusted probe text: trusted input failed at render widget host\n"
+            "Trusted probe text: trusted input failed at focus: password-secret\n"
+            "Trusted probe text: trusted input failed at page receipt"
+        )
+        self.assertEqual(
+            fixture.trusted_input_failure_stages(output),
+            ["render widget host", "page receipt"],
+        )
+
+    def test_fixture_records_only_safe_trusted_input_trace_stages(self):
+        spec = importlib.util.spec_from_file_location("save_prompt_fixture", FIXTURE)
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        output = (
+            "Trusted probe text: trace: bridge handler entered\n"
+            "Trusted probe text: trace: password-secret"
+        )
+        self.assertEqual(
+            fixture.trusted_input_trace_stages(output), ["bridge handler entered"]
+        )
+
     def test_text_operation_is_narrow_and_uses_chromium_ime_input(self):
         header = (LAYER / "public/shaar_engine.h").read_text()
         source = (LAYER / "devtools/shaar_devtools.cc").read_text()
@@ -59,6 +86,10 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertIn("submitTrustedProbeTextInTabID", bridge)
         self.assertIn("shaarDevToolsSubmit:1099", bridge)
         self.assertIn("valuesEntered", probe)
+        self.assertIn('trustedTextFailureStages.append("tab lookup")', probe)
+        self.assertIn('trustedTextFailureStages.append("input injection")', probe)
+        self.assertIn('trustedTextFailureStages.append("page receipt")', probe)
+        self.assertIn('"trustedInputFailureStages": trustedTextFailureStages', probe)
         self.assertIn("valueMatches: field?.value === value", probe)
         self.assertNotIn('value="parity-user"', fixture)
         self.assertNotIn('value="4111111111111111"', fixture)

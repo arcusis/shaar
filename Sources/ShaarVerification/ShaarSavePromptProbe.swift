@@ -59,6 +59,7 @@ final class ShaarSavePromptRenderSurface {
 /// Hidden verification check for Chromium save offers.
 @MainActor enum ShaarSavePromptProbe {
   private static var trustedTextDiagnostics: [[String: Any]] = []
+  private static var trustedTextFailureStages: [String] = []
 
   static func run(
     frameworkURL: URL, outputURL: URL, pageURL: URL?, neverPageURL: URL?
@@ -106,6 +107,7 @@ final class ShaarSavePromptRenderSurface {
     outputURL: URL
   ) async {
     trustedTextDiagnostics = []
+    trustedTextFailureStages = []
     var rows: [[String: Any]] = []
     defer {
       hideWindows()
@@ -131,6 +133,7 @@ final class ShaarSavePromptRenderSurface {
             "framesCaptured": renderFramesCaptured,
           ],
           "trustedTextDiagnostics": trustedTextDiagnostics,
+          "trustedInputFailureStages": trustedTextFailureStages,
         ],
         to: outputURL)
       host.events.quit()
@@ -436,14 +439,20 @@ final class ShaarSavePromptRenderSurface {
   private static func trustedText(
     _ fields: [(String, String)], context: NativeBrowserContext, runtime: ARCShaarRuntime
   ) async -> Bool {
-    guard let tab = context.engine.siteControlTarget?.tabID else { return false }
+    guard let tab = context.engine.siteControlTarget?.tabID else {
+      trustedTextFailureStages.append("tab lookup")
+      return false
+    }
     for (elementID, text) in fields {
       let accepted = await withCheckedContinuation { continuation in
         runtime.submitTrustedProbeText(
           inTabID: tab.uuidString, elementID: elementID, text: text)
         { continuation.resume(returning: $0) }
       }
-      if !accepted { return false }
+      if !accepted {
+        trustedTextFailureStages.append("input injection")
+        return false
+      }
     }
     let expected = Dictionary(uniqueKeysWithValues: fields)
     guard let data = try? JSONSerialization.data(withJSONObject: expected),
@@ -482,6 +491,7 @@ final class ShaarSavePromptRenderSurface {
       try? await Task.sleep(for: .milliseconds(50))
     }
     trustedTextDiagnostics.append(lastVerification ?? ["evaluationReturned": false])
+    trustedTextFailureStages.append("page receipt")
     return false
   }
 

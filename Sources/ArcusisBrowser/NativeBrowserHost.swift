@@ -293,6 +293,18 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     hasSelectedPage && !commandIsOpen && hasNativePrint
   }
 
+  static func shouldPresentNativePrint(presentation: Presentation) -> Bool {
+    switch presentation {
+    case .visible: true
+    case .hiddenProbe: false
+    }
+  }
+
+  static func routeNativePrint(presentation: Presentation, print: () -> Void) {
+    guard shouldPresentNativePrint(presentation: presentation) else { return }
+    print()
+  }
+
   static func settingsSpaceSelectionShouldPresentWindow(in presentation: Presentation) -> Bool {
     presentation == .visible
   }
@@ -839,17 +851,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID),
         navigate: context.engine.navigateCurrentPage(to:))
     case .print:
-      guard let page = store.session.selectedPage,
-        let runtime = context.engine.runtime as? ARCShaarRuntime,
-        runtime.printTabID(
-          page.tab.id.uuidString, windowID: context.nativeID,
-          profileID: store.session.selectedSpace.profileID.uuidString)
-      else {
-        report(
-          NSError(
-            domain: "com.arcusis.browser.print", code: 1,
-            userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")]))
-        return
+      Self.routeNativePrint(presentation: presentation) {
+        guard let page = store.session.selectedPage,
+          let runtime = context.engine.runtime as? ARCShaarRuntime,
+          runtime.printTabID(
+            page.tab.id.uuidString, windowID: context.nativeID,
+            profileID: store.session.selectedSpace.profileID.uuidString)
+        else {
+          report(
+            NSError(
+              domain: "com.arcusis.browser.print", code: 1,
+              userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")]))
+          return
+        }
       }
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)

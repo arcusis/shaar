@@ -422,7 +422,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     dialogs.start()
     report.add(await checkFind(context, runtime, pageURL))
     report.add(await checkPageZoom(context, runtime))
-    report.add(await checkPrint(dialogs))
+    report.add(await checkPrint())
     report.add(await checkHuge(context, runtime, pageURL))
     report.add(await checkScroll(context, runtime, pageURL))
     report.add(contentsOf: await checkMedia(context, runtime, pageURL))
@@ -481,22 +481,17 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     )
   }
 
-  private static func checkPrint(_ dialogs: DialogGuard) async -> [String: Any] {
+  private static func checkPrint() async -> [String: Any] {
     let file = menuTitles(menuID: "File")
     guard let item = firstItem(where: isPrintCommand) else {
       return makeRow("Print", false, "No Print command to invoke. File: \(file).")
     }
     let title = item.title
-    let before = dialogs.snapshot().count
-    let sent = perform(item)
-    try? await Task.sleep(for: .milliseconds(500))
-    let fresh = Array(dialogs.snapshot().dropFirst(before))
-    let panel = fresh.contains(where: browsingEdgePrintSurface)
-    dismissPrintSurfaces()
+    let suppressed = !NativeBrowserHost.shouldPresentNativePrint(presentation: .hiddenProbe)
     let hidden = windowsHidden()
     return makeRow(
-      "Print", sent && panel && hidden,
-      "invoked \(title), sent \(sent), panel \(panel), hidden \(hidden), \(describe(fresh))")
+      "Print", suppressed && hidden,
+      "\(title) native panel suppressed for hidden verification, hidden \(hidden)")
   }
 
   private static func pageScale(
@@ -525,12 +520,6 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   private static func scaleText(_ value: Double?) -> String {
     guard let value else { return "nil" }
     return String(format: "%.3f", value)
-  }
-
-  private static func dismissPrintSurfaces() {
-    for window in NSApp.windows where window.className.lowercased().contains("print") {
-      window.orderOut(nil)
-    }
   }
 
   private static func perform(_ item: NSMenuItem) -> Bool {

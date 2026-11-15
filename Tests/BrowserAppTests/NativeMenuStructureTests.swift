@@ -24,6 +24,15 @@ import Testing
     hasSelectedPage: true, commandIsOpen: true, hasNativePrint: true))
 }
 
+@Test @MainActor func nativePrintIsSuppressedForHiddenVerificationHosts() {
+  var printCalls = 0
+  NativeBrowserHost.routeNativePrint(presentation: .visible) { printCalls += 1 }
+  #expect(printCalls == 1)
+
+  NativeBrowserHost.routeNativePrint(presentation: .hiddenProbe) { printCalls += 1 }
+  #expect(printCalls == 1)
+}
+
 @Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
   let workspace = try BrowserWorkspaceStore()
   try workspace.removeWindow(workspace.workspace.windows[0].id)

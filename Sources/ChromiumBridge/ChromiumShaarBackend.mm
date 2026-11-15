@@ -1691,6 +1691,12 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [self submitTabID:tabID operation:SHAAR_OP_TAB_GO
             payload:@{@"schemaVersion": @1, @"direction": @"forward"}];
 }
+- (BOOL)stopTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  if (![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      [_shaarClearedActiveTabs containsObject:tabID]) return NO;
+  return [self submitTabID:tabID operation:SHAAR_OP_TAB_STOP
+                  payload:@{@"schemaVersion": @1}];
+}
 - (void)reloadTabID:(NSString *)tabID {
   [self reloadTabID:tabID profileID:_shaarTabProfiles[tabID] mode:ARCPageReloadModeNormal];
 }

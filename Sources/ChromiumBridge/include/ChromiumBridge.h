@@ -247,6 +247,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
          completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL accepted))completion NS_SWIFT_UI_ACTOR;
 - (void)goBackInTabID:(NSString *)tabID;
 - (void)goForwardInTabID:(NSString *)tabID;
+- (BOOL)stopTabID:(NSString *)tabID profileID:(NSString *)profileID;
 - (void)reloadTabID:(NSString *)tabID;
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID;
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode;
@@ -464,6 +465,7 @@ FOUNDATION_EXPORT BOOL ARCBundleIsAdHocSigned(NSBundle *bundle);
                completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)navigatePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID url:(NSString *)url;
 - (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (BOOL)stopPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
                     mode:(ARCPageReloadMode)mode;
 - (BOOL)goBackPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;

@@ -216,6 +216,9 @@ final class BrowserEngine {
     store.onReloadPage = { [weak self] tab, profile, mode in
       self?.reloadPage(tab, profile: profile, mode: mode) ?? false
     }
+    store.onStopPage = { [weak self] tab, profile in
+      self?.runtime.stopTabID(tab.uuidString, profileID: profile.uuidString) == true
+    }
     store.onNavigatePage = { [weak self] tab, profile, url in
       guard let self, !self.isClosed, let store = self.store,
         self.liveTabs.contains(tab),

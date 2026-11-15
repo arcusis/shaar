@@ -63,6 +63,7 @@ final class PrivatePageSession {
     store.onSessionChanged = { [weak self] in self?.reconcile() }
     store.onCloseTab = { [weak self] id in self?.close(id) }
     store.onReloadPage = { [weak self] id, _, mode in self?.reload(id, mode: mode) ?? false }
+    store.onStopPage = { [weak self] id, _ in self?.stop(id) ?? false }
     store.onNavigatePage = { [weak self] id, _, url in self?.navigate(id, to: url) ?? false }
     store.onFindRequest = { [weak self] request, forward in
       guard let self else { return false }
@@ -166,6 +167,11 @@ final class PrivatePageSession {
     guard liveTabs.contains(id) else { return false }
     return runtime.reloadPrivateTabID(
       id.uuidString, windowID: windowID, contextID: contextID, mode: mode.engineMode)
+  }
+
+  func stop(_ id: UUID) -> Bool {
+    guard liveTabs.contains(id) else { return false }
+    return runtime.stopPrivateTabID(id.uuidString, windowID: windowID, contextID: contextID)
   }
 
   func goBack(_ id: UUID) {

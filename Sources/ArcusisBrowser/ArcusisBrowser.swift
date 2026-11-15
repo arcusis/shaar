@@ -419,6 +419,11 @@ private struct BrowserApplication: App {
         Button(ShellL10n.string("Toggle sidebar")) { store.sidebarIsVisible.toggle() }
           .keyboardShortcut("s")
       }
+      CommandMenu(ShellL10n.string("View")) {
+        Button(ShellL10n.string("Stop Loading")) { store.stopCurrentPage() }
+          .keyboardShortcut(".")
+          .disabled(!store.canStopCurrentPage)
+      }
       CommandMenu(ShellL10n.string("Bookmarks")) {
         Button(ShellL10n.string("Bookmark this page")) { store.bookmarkCurrentPage() }
           .keyboardShortcut("d")

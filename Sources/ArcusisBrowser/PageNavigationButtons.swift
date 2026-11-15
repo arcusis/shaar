@@ -4,6 +4,17 @@
 
 import SwiftUI
 
+struct NavigationLoadingPresentation: Equatable {
+  let symbol: String
+  let labelKey: String
+
+  static func forLoadingState(_ isLoading: Bool) -> Self {
+    Self(
+      symbol: isLoading ? "xmark" : "arrow.clockwise",
+      labelKey: isLoading ? "Stop Loading" : "Reload (Command-R)")
+  }
+}
+
 struct PageNavigationButtons: View {
   @Bindable var store: BrowserStore
   let engine: BrowserEngine?
@@ -12,6 +23,7 @@ struct PageNavigationButtons: View {
   var body: some View {
     let id = tabID ?? store.session.selectedPage?.tab.id
     let state = id.flatMap { engine?.pages[$0] ?? store.privatePage?.pages[$0] }
+    let loadingPresentation = NavigationLoadingPresentation.forLoadingState(state?.loading == true)
 
     HStack(spacing: tabID == nil ? 4 : 0) {
       navigationButton("chevron.backward", label: ShellL10n.string("Back")) {
@@ -26,16 +38,16 @@ struct PageNavigationButtons: View {
       .disabled(state?.canGoForward != true)
       .browserChromeControl("browser.chrome.forward")
 
-      navigationButton("arrow.clockwise", label: ShellL10n.string("Reload (Command-R)")) {
-        if let tabID {
-          store.focusSplitTab(tabID)
-          store.reloadCurrentPage()
-        } else {
-          store.reloadCurrentPage()
-        }
+      navigationButton(
+        loadingPresentation.symbol,
+        label: ShellL10n.string(loadingPresentation.labelKey)
+      ) {
+        if let tabID { store.focusSplitTab(tabID) }
+        if state?.loading == true { store.stopCurrentPage() }
+        else { store.reloadCurrentPage() }
       }
-      .disabled(tabID.map { !store.canReloadPage($0) } ?? !store.canReloadCurrentPage)
-      .browserChromeControl("browser.chrome.reload")
+      .disabled(state?.loading == true ? false : (tabID.map { !store.canReloadPage($0) } ?? !store.canReloadCurrentPage))
+      .browserChromeControl(state?.loading == true ? "browser.chrome.stop" : "browser.chrome.reload")
     }
   }
 

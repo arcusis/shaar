@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 
 @testable import ArcusisBrowser
@@ -106,6 +107,7 @@ final class ShaarSavePromptRenderSurface {
     outputURL: URL
   ) async {
     trustedTextDiagnostics = []
+    var autofillPreferenceEvidence: [String: [String: Bool]] = [:]
     var rows: [[String: Any]] = []
     defer {
       hideWindows()
@@ -130,6 +132,7 @@ final class ShaarSavePromptRenderSurface {
             "presentedSafely": surfacePresentedSafely, "orderedOut": surfaceOrderedOut,
             "framesCaptured": renderFramesCaptured,
           ],
+          "autofillPreferences": autofillPreferenceEvidence,
           "trustedTextDiagnostics": trustedTextDiagnostics,
         ],
         to: outputURL)
@@ -138,6 +141,8 @@ final class ShaarSavePromptRenderSurface {
     do {
       try host.restore()
       guard let context = host.contexts.values.first else { throw Failure("No hidden window") }
+      autofillPreferenceEvidence = savePromptAutofillPreferences(
+        runtime.privatePrivacyPreferences(forContextID: context.id.uuidString))
       for scenario in ShaarSavePromptProbeScenario.all {
         let caseContext = try freshContext(host: host, from: context)
         switch scenario {
@@ -214,6 +219,7 @@ final class ShaarSavePromptRenderSurface {
       "clicked": clicked,
       "prompt": prompt != nil, "offscreen": offscreen, "saved": saved, "cleared": cleared,
       "filledUsername": filled.0, "filledPassword": filled.1, "screenshot": screenshot,
+      "panelPresentation": panelPresentationEvidence(),
       "renderSurfacePresentedSafely": surfacePresentedSafely,
       "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
@@ -289,6 +295,7 @@ final class ShaarSavePromptRenderSurface {
       "saved": actionSent && decision == .save,
       "neverAvailabilityMatchesKind": neverAvailabilityMatchesKind,
       "cleared": cleared, "screenshot": screenshot,
+      "panelPresentation": panelPresentationEvidence(),
       "renderSurfacePresentedSafely": surfacePresentedSafely,
       "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
@@ -549,6 +556,35 @@ final class ShaarSavePromptRenderSurface {
   private static func promptPanelIsVisibleOffscreenAndNonKey() -> Bool {
     guard let panel = promptPanel(), panel.isVisible, !panel.isKeyWindow else { return false }
     return !NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
+  }
+
+  private static func panelPresentationEvidence() -> [String: Any] {
+    guard let panel = promptPanel() else { return ["exists": false] }
+    let intersectsScreen = NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
+    return [
+      "exists": true, "visible": panel.isVisible, "key": panel.isKeyWindow,
+      "intersectsScreen": intersectsScreen,
+      "originX": panel.frame.origin.x, "originY": panel.frame.origin.y,
+    ]
+  }
+
+  private static func savePromptAutofillPreferences(
+    _ preferences: [AnyHashable: Any]?
+  ) -> [String: [String: Bool]] {
+    let keys = [
+      "credentials_enable_service", "autofill.profile_enabled",
+      "autofill.credit_card_enabled",
+    ]
+    var safe: [String: [String: Bool]] = [:]
+    for key in keys {
+      guard let pair = preferences?[key] as? [String: Any] else { continue }
+      var values: [String: Bool] = [:]
+      for scope in ["normal", "private"] {
+        if let value = pair[scope] as? Bool { values[scope] = value }
+      }
+      if !values.isEmpty { safe[key] = values }
+    }
+    return safe
   }
 
   private static func windowsOnScreen() -> Bool {

@@ -9,6 +9,16 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct ShaarSavePromptProbeConfigurationTests {
+  @Test func actionMatrixCoversSaveAndDismissForEachPromptAndNeverForPasswordsOnly() {
+    #expect(
+      ShaarSavePromptProbeScenario.all == [
+        .save(.password), .dismiss(.password),
+        .save(.card), .dismiss(.card),
+        .save(.address), .dismiss(.address),
+        .neverPassword,
+      ])
+  }
+
   @Test func fixtureMustUseHTTPOnTheIPv4LoopbackAddress() {
     let invalid: [URL?] = [
       nil,

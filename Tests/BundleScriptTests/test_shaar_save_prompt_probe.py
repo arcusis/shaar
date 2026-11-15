@@ -49,14 +49,34 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "probe"
-            destination = root / "receipt"
             source.mkdir()
-            (source / "save-prompt-password.png").write_bytes(b"png-data")
+            for name in PROBE.PROMPT_NAMES:
+                (source / f"save-prompt-{name}.png").write_bytes(name.encode())
 
-            copied = PROBE.copy_prompt_screenshots(source, destination)
+            receipt = root / "receipt.json"
+            english_dir = PROBE.screenshot_directory(receipt, "en")
+            hebrew_dir = PROBE.screenshot_directory(receipt, "he")
+            english = PROBE.copy_prompt_screenshots(source, english_dir)
+            hebrew = PROBE.copy_prompt_screenshots(source, hebrew_dir)
 
-            self.assertEqual(copied, {"password": str(destination / "save-prompt-password.png")})
-            self.assertEqual((destination / "save-prompt-password.png").read_bytes(), b"png-data")
+            expected = {name: str(english_dir / f"save-prompt-{name}.png")
+                        for name in PROBE.PROMPT_NAMES}
+            self.assertEqual(english, expected)
+            self.assertEqual(
+                set(hebrew), set(PROBE.PROMPT_NAMES))
+            self.assertNotEqual(english["password-save"], hebrew["password-save"])
+            self.assertEqual(
+                (english_dir / "save-prompt-address-dismiss.png").read_bytes(),
+                b"address-dismiss")
+            with self.assertRaises(ValueError):
+                PROBE.screenshot_directory(receipt, "fr")
+
+    def test_action_submission_counts_distinguish_each_choice(self):
+        for _ in range(2):
+            self.server.record_submission("http://127.0.0.1:8000/card")
+        self.server.record_submission("http://127.0.0.1:8000/address")
+        self.assertEqual(
+            self.server.submission_counts(), {"/card": 2, "/address": 1})
 
 
 if __name__ == "__main__":

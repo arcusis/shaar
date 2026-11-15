@@ -17,13 +17,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  echo 'Usage: release.sh --notes <notes.html> [--notarize] [--upload] [--allow-unsigned-update]' >&2
+  echo 'Usage: release.sh --notes <notes.html> [--notarize] [--upload] [--allow-unsigned-update] [--with-widevine-cdm]' >&2
   exit 2
 }
 notes=''
 notarize=false
 upload=false
 allow_unsigned=false
+widevine=false
 while (($#)); do
   case "$1" in
     --notes)
@@ -39,6 +40,11 @@ while (($#)); do
     --upload)
       if $upload; then usage; fi
       upload=true
+      shift
+      ;;
+    --with-widevine-cdm)
+      if $widevine; then usage; fi
+      widevine=true
       shift
       ;;
     --allow-unsigned-update)
@@ -133,7 +139,9 @@ mkdir -p "$out/entitlements"
 feed check-newer
 
 echo '==> Building engine bundle with the update feed'
-bash scripts/bundle-app.sh --with-engine --with-updates
+bundle_flags=(--with-engine --with-updates)
+$widevine && bundle_flags+=(--with-widevine-cdm)
+bash scripts/bundle-app.sh "${bundle_flags[@]}"
 # Move rather than copy so no ad hoc build with a live update feed stays behind.
 mv build/Shaar.app "$app"
 if /usr/bin/grep -q '<key>ShaarUseMockKeychain</key>' "$app/Contents/Info.plist"; then
@@ -161,6 +169,13 @@ needs_jit() {
   esac
 }
 
+loads_cdm() {
+  case "$(basename "$1")" in
+    "Chromium Helper.app"|"Chromium Helper (Aperitif).app") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 sign_like_upstream() {
   local target="$1" upstream="$2"
   local entitlements
@@ -170,6 +185,13 @@ sign_like_upstream() {
   # hardened runtime: renderer and GPU helpers fall back to the repository JIT grant.
   if [[ ! -s "$entitlements" ]] && needs_jit "$target"; then
     cp ThirdParty/ChromiumEngine/signing/jit.entitlements "$entitlements"
+  fi
+  # The Widevine CDM keeps Google's signature, so the utility helpers that load it need
+  # library validation off, as Chrome's own plugin helper has.
+  if $widevine && loads_cdm "$target"; then
+    [[ -s "$entitlements" ]] || cp ThirdParty/ChromiumEngine/signing/cdm-host.entitlements "$entitlements"
+    /usr/libexec/PlistBuddy -c 'Add :com.apple.security.cs.disable-library-validation bool true' \
+      "$entitlements" 2>/dev/null || true
   fi
   # Helpers such as app_mode_loader carry no entitlements upstream; codesign rejects an
   # empty entitlements file, so sign those without one.
@@ -216,10 +238,16 @@ echo '==> Verifying code signature'
 codesign --verify --deep --strict --verbose=2 "$app"
 # An ad hoc or foreign nested signature still passes --deep --strict, yet dyld library
 # validation kills it at launch and notarization rejects it. Check every piece of code.
+widevine_team_id=EQHXZ8M8AV
 echo "==> Asserting team $team_id and hardened runtime on all bundled code"
 unsigned=0
 while IFS= read -r -d '' item; do
   details=$(codesign -dvv "$item" 2>&1 || true)
+  # Google signs the Widevine CDM; it must stay that way for Chromium to load it.
+  if $widevine && [[ $item == */Libraries/WidevineCdm/* ]] \
+    && grep -Fxq "TeamIdentifier=$widevine_team_id" <<< "$details"; then
+    continue
+  fi
   if ! grep -Fxq "TeamIdentifier=$team_id" <<< "$details" \
     || ! grep -Eq 'flags=0x[0-9a-f]+\([^)]*runtime' <<< "$details"; then
     echo "  !! ${item#"$app"/} is not signed by $team_id with the hardened runtime" >&2

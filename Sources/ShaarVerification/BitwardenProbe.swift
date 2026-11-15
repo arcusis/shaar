@@ -23,6 +23,21 @@ enum BitwardenProbeEvidence {
       return !disabled.boolValue
     }
   }
+
+  @MainActor
+  static func waitForExtensionPopup(
+    attempts: Int = 50, interval: Duration = .milliseconds(100),
+    panel: () -> ExtensionPanelRoute?, notice: () -> String?
+  ) async throws -> ExtensionPopupContext {
+    for _ in 0..<attempts {
+      if case .popup(let popup) = panel() { return popup }
+      if let notice = notice() {
+        throw BitwardenProbeFailure("Native extension action failed: \(notice)")
+      }
+      try await Task.sleep(for: interval)
+    }
+    throw BitwardenProbeFailure("Bitwarden did not open its native-hosted popup.")
+  }
 }
 
 enum BitwardenStoreButtonValidation {
@@ -188,10 +203,8 @@ final class BitwardenProbe {
     }
     engine.refreshExtensions()
     engine.executeExtension(extensionID)
-    guard case .popup(var popup) = engine.extensionPanel else {
-      throw BitwardenProbeFailure(
-        "Bitwarden did not open its native-hosted popup: \(engine.notice ?? "no native notice")")
-    }
+    var popup = try await BitwardenProbeEvidence.waitForExtensionPopup(
+      panel: { engine.extensionPanel }, notice: { engine.notice })
     try expect(
       popup.profileID == profile && popup.tabID.uuidString == tab,
       "Bitwarden popup retains the selected profile and page target")

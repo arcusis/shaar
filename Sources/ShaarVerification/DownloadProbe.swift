@@ -134,6 +134,7 @@ final class DownloadProbe {
       engine.downloads.fileToOpen(
         id: complete.id, profileID: a.profileID,
         selectedProfileID: b.profileID) == nil, "file actions reject the wrong selected profile")
+    try verifyFileActions(for: complete, profileID: a.profileID)
     try expect(
       engine.downloads.perform(
         .remove, id: beta.id, profileID: b.profileID,
@@ -307,6 +308,33 @@ final class DownloadProbe {
       "downloaded bytes match \(account)'s authenticated response in the temporary destination")
   }
 
+  private func verifyFileActions(for item: BrowserDownload, profileID: UUID) throws {
+    guard let directory = runtime.downloadsDirectory(forProfileID: profileID.uuidString),
+      let candidate = engine.downloads.fileToOpen(
+        id: item.id, profileID: profileID, selectedProfileID: profileID),
+      let url = BrowserEngine.validatedDownloadURL(candidate, in: directory)
+    else { throw DownloadProbeFailure("Completed download is unavailable to file actions.") }
+
+    var opened: [URL] = []
+    var revealed: [URL] = []
+    let openAccepted = BrowserEngine.performDownloadFileAction(
+      url, open: true,
+      openFile: { opened.append($0); return true },
+      revealFile: { revealed.append($0) })
+    try expect(
+      openAccepted && opened == [url] && revealed.isEmpty,
+      "Open routes the completed download to the selected file")
+
+    opened.removeAll()
+    let revealAccepted = BrowserEngine.performDownloadFileAction(
+      url, open: false,
+      openFile: { opened.append($0); return true },
+      revealFile: { revealed.append($0) })
+    try expect(
+      revealAccepted && opened.isEmpty && revealed == [url],
+      "Show in Finder reveals only the completed download")
+  }
+
   private func capture(profile: UUID, name: String) async throws {
     let host = NSHostingView(
       rootView: DownloadsPanel(store: store, engine: engine, profileID: profile))
@@ -339,7 +367,7 @@ final class DownloadProbe {
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "engineNotice": engine.notice as Any? ?? NSNull(),
         "scope":
-          "Real engine downloads from authored loopback fixtures into a marked temporary directory. No files opened, Finder launched, or native dialog shown.",
+          "Real engine downloads from authored loopback fixtures into a marked temporary directory; open and Finder actions route the verified file to headless spies. No external app or Finder is launched, and no native dialog is shown.",
       ],
       options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-downloads.json"), options: .atomic)

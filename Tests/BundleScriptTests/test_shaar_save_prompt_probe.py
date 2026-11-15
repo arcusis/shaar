@@ -94,6 +94,48 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
              "engine request rejected"],
         )
 
+    def test_receipt_keeps_redacted_trusted_text_field_diagnostics(self):
+        diagnostics = PROBE.safe_trusted_text_diagnostics({
+            "trustedTextDiagnostics": [{
+                "valuesEntered": True,
+                "fields": [{
+                    "id": "password", "present": True, "valueMatches": False,
+                    "valueLength": 13, "focused": True, "value": "secret-value",
+                }],
+                "activeElementIsInput": True,
+                "activeInputType": "password",
+                "unexpected": "discarded",
+            }],
+            "unexpected": "discarded",
+        })
+
+        self.assertEqual(diagnostics, [{
+            "valuesEntered": True,
+            "fields": [{
+                "id": "password", "present": True, "valueMatches": False,
+                "valueLength": 13, "focused": True,
+            }],
+            "activeElementIsInput": True,
+            "activeInputType": "password",
+        }])
+
+    def test_profile_receipt_keeps_only_save_offer_preference_booleans(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary) / "Chromium" / "Default"
+            profile.mkdir(parents=True)
+            (profile / "Preferences").write_text(
+                '{"credentials_enable_service":true,"autofill":'
+                '{"profile_enabled":false,"credit_card_enabled":true},'
+                '"homepage":"https://example.invalid"}'
+            )
+
+            self.assertEqual(PROBE.profile_autofill_preferences(profile.parent), [{
+                "profile": "Default",
+                "credentialsEnableService": True,
+                "autofillProfileEnabled": False,
+                "autofillCreditCardEnabled": True,
+            }])
+
 
 if __name__ == "__main__":
     unittest.main()

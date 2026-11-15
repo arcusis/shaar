@@ -4,6 +4,7 @@
 
 import Foundation
 import Testing
+import BrowserCore
 
 @testable import ShaarVerification
 
@@ -34,5 +35,10 @@ struct ReopenProbeTests {
     #expect(
       !ReopenProbe.hasFreshNativeView(
         reopenedID: reopened, closedIDs: [closed], hasNativeView: false))
+  }
+
+  @MainActor @Test func commandSearchUsesTheClosedTabVerbInTheCurrentLocale() {
+    #expect(
+      ReopenProbe.closedTabSearchQuery(language: .hebrew) == "פתיחה מחדש של לשונית שנסגרה")
   }
 }

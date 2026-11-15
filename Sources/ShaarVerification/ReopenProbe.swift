@@ -211,7 +211,7 @@ final class ReopenProbe {
       "reopening reveals collapsed folder ancestors")
     try await close(alpha)
     store.showCommand()
-    store.commandQuery = "reopen"
+    store.commandQuery = Self.closedTabSearchQuery()
     try await capture(
       BrowserWindow(store: store), size: NSSize(width: 760, height: 520),
       name: "\(phase)-reopen-command-compact.png", scheme: .light)
@@ -315,6 +315,10 @@ final class ReopenProbe {
     reopenedID: UUID, closedIDs: Set<UUID>, hasNativeView: Bool
   ) -> Bool {
     hasNativeView && !closedIDs.contains(reopenedID)
+  }
+
+  static func closedTabSearchQuery(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string("Reopen closed tab", language: language)
   }
 
   private func capture<V: View>(_ view: V, size: NSSize, name: String, scheme: ColorScheme)

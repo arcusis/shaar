@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+#include <iterator>
 #include <deque>
 #include <map>
 #include <set>
@@ -60,6 +61,8 @@
 #include "content/public/browser/render_widget_host.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "ui/base/ime/text_input_client.h"
+#include "ui/gfx/range/range.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/common/isolated_world_ids.h"
@@ -415,9 +418,10 @@ class ProbeTrustedInput final
                     int x,
                     int y,
                     std::string element_id,
-                    bool scroll = false)
+                    bool scroll = false,
+                    std::string text = {})
       : reply_(reply), x_(x), y_(y), element_id_(std::move(element_id)),
-        scroll_(scroll) {}
+        scroll_(scroll), text_(std::move(text)) {}
 
   void Start(content::WebContents* contents) {
     contents_ = contents->GetWeakPtr();
@@ -482,7 +486,11 @@ class ProbeTrustedInput final
     }
     const std::string script =
         "(()=>{const e=document.getElementById('" + element_id_ +
-        "');if(!e)return null;const r=e.getBoundingClientRect();return "
+        "');if(!e)return null;" +
+        (text_.empty()
+             ? std::string()
+             : "if(e.tagName!=='INPUT'||e.disabled||e.readOnly)return null;") +
+        "const r=e.getBoundingClientRect();return "
         "{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()";
     frame->ExecuteJavaScriptForTests(
         base::UTF8ToUTF16(script),
@@ -518,6 +526,30 @@ class ProbeTrustedInput final
       DispatchTrustedScroll(widget, x, y);
     else
       DispatchTrustedClick(widget, x, y);
+    if (!text_.empty()) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&ProbeTrustedInput::CommitText,
+                         base::WrapRefCounted(this)),
+          base::Milliseconds(50));
+      return;
+    }
+    CompleteSuccess();
+  }
+
+  void CommitText() {
+    if (finished_)
+      return;
+    auto* widget = Activate();
+    if (!widget) {
+      Fail();
+      return;
+    }
+    widget->ImeCommitText(base::UTF8ToUTF16(text_), {}, gfx::Range::InvalidRange(), 0);
+    CompleteSuccess();
+  }
+
+  void CompleteSuccess() {
     finished_ = true;
     timer_.Stop();
     Reply(reply_, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
@@ -546,6 +578,7 @@ class ProbeTrustedInput final
   int y_;
   std::string element_id_;
   bool scroll_;
+  std::string text_;
   base::WeakPtr<content::WebContents> contents_;
   base::ScopedClosureRunner capturer_;
   base::OneShotTimer timer_;
@@ -1444,6 +1477,35 @@ bool ParseProbeScrollArguments(shaar_bytes args_json,
          !element_id->empty();
 }
 
+bool ParseProbeTextArguments(shaar_bytes args_json,
+                             std::string* element_id,
+                             std::string* text) {
+  if (!element_id || !text || !args_json.data || args_json.size == 0 ||
+      args_json.size > 512)
+    return false;
+  auto value = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+  if (!value || !value->is_dict() ||
+      !ExactKeys(value->GetDict(), {"schemaVersion", "elementID", "text"}) ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return false;
+  const std::string* requested_element = value->GetDict().FindString("elementID");
+  const std::string* requested_text = value->GetDict().FindString("text");
+  static constexpr std::string_view kAllowedFields[] = {
+      "username", "password", "card-name", "card-number", "card-exp-month",
+      "card-exp-year", "address-name", "address-street", "address-city",
+      "address-region", "address-postal", "address-country", "address-email"};
+  if (!requested_element || !requested_text || requested_text->empty() ||
+      requested_text->size() > 64 ||
+      std::find(std::begin(kAllowedFields), std::end(kAllowedFields),
+                *requested_element) == std::end(kAllowedFields) ||
+      requested_text->find_first_of("\r\n\t") != std::string::npos)
+    return false;
+  *element_id = *requested_element;
+  *text = *requested_text;
+  return true;
+}
+
 bool ParseNodeProbePort(shaar_bytes args_json, int* port) {
   if (!port || !args_json.data || args_json.size > 128)
     return false;
@@ -1651,7 +1713,8 @@ shaar_error_code HandleDevToolsOperation(
     return SHAAR_OK;
   }
   if (operation == SHAAR_OP_PROBE_TRUSTED_CLICK ||
-      operation == SHAAR_OP_PROBE_TRUSTED_SCROLL) {
+      operation == SHAAR_OP_PROBE_TRUSTED_SCROLL ||
+      operation == SHAAR_OP_PROBE_TRUSTED_TEXT) {
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
     const bool selected = context->browser_tabs->IsSelectedWebContents(
         engine, window, tab, contents);
@@ -1667,13 +1730,17 @@ shaar_error_code HandleDevToolsOperation(
     int y = 0;
     std::string element_id;
     const bool scroll = operation == SHAAR_OP_PROBE_TRUSTED_SCROLL;
-    const bool parsed = scroll
-        ? ParseProbeScrollArguments(args_json, &element_id)
-        : ParseProbeClickArguments(args_json, &x, &y, &element_id);
+    std::string text;
+    const bool trusted_text = operation == SHAAR_OP_PROBE_TRUSTED_TEXT;
+    const bool parsed = trusted_text
+        ? ParseProbeTextArguments(args_json, &element_id, &text)
+        : (scroll ? ParseProbeScrollArguments(args_json, &element_id)
+                  : ParseProbeClickArguments(args_json, &x, &y, &element_id));
     if (!parsed)
       return Fail(error, SHAAR_INVALID_ARGUMENT,
-                  scroll ? "invalid trusted scroll element"
-                         : "invalid trusted click point");
+                  trusted_text ? "invalid trusted text input"
+                               : (scroll ? "invalid trusted scroll element"
+                                         : "invalid trusted click point"));
     auto* view = contents->GetRenderWidgetHostView();
     if (!view || !view->GetRenderWidgetHost() ||
         (element_id.empty() &&
@@ -1681,7 +1748,7 @@ shaar_error_code HandleDevToolsOperation(
       return Fail(error, SHAAR_NOT_READY, "trusted input viewport unavailable");
     base::MakeRefCounted<ProbeTrustedInput>(
         ReplyContext{request_id, reply, reply_context}, x, y,
-        std::move(element_id), scroll)
+        std::move(element_id), scroll, std::move(text))
         ->Start(contents);
     return SHAAR_OK;
   }

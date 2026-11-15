@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include <map>
@@ -16,6 +17,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -31,6 +33,12 @@
 #include "url/origin.h"
 
 namespace shaar::save_prompts {
+
+extern "C" void shaar_save_prompt_diagnostic(const char* stage) {
+  const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (testing && std::strcmp(testing, "1") == 0 && stage)
+    LOG(INFO) << "SHAAR_SAVE_PROMPT_DIAGNOSTIC " << stage;
+}
 
 GURL CleanPageURLForSavePrompt(const GURL& url) {
   if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
@@ -413,6 +421,7 @@ bool OfferSavePrompt(content::WebContents* contents,
                      const char* detail,
                      bool update,
                      base::OnceCallback<void(int)> decision) {
+  shaar_save_prompt_diagnostic("offer:entered");
   if (!decision)
     return false;
   auto decline = [&decision]() {
@@ -420,30 +429,40 @@ bool OfferSavePrompt(content::WebContents* contents,
     return false;
   };
   const bool password = prompt && std::strcmp(prompt, "password") == 0;
-  if (!contents || !KnownPrompt(prompt) || (update && !password))
+  if (!contents || !KnownPrompt(prompt) || (update && !password)) {
+    shaar_save_prompt_diagnostic("offer:invalid-input");
     return decline();
+  }
   content::BrowserContext* browser_context = contents->GetBrowserContext();
   const bool off_the_record =
       browser_context && browser_context->IsOffTheRecord();
-  if (!SavePromptAllowedForContext(browser_context != nullptr, off_the_record))
+  if (!SavePromptAllowedForContext(browser_context != nullptr, off_the_record)) {
+    shaar_save_prompt_diagnostic("offer:context-denied");
     return decline();
-  if (!shaar::EngineContext().profile_services)
+  }
+  if (!shaar::EngineContext().profile_services) {
+    shaar_save_prompt_diagnostic("offer:no-profile-services");
     return decline();
+  }
 
   shaar_engine* engine = lifecycle::ActiveEngine();
   auto identity =
       windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
   if (!lifecycle::EngineIsReady(engine) || !identity ||
       identity->profile_id.empty() || identity->window_id.empty() ||
-      identity->tab_id.empty())
+      identity->tab_id.empty()) {
+    shaar_save_prompt_diagnostic("offer:no-selected-regular-tab");
     return decline();
+  }
 
   const GURL page = CleanPageURLForSavePrompt(contents->GetLastCommittedURL());
   const GURL origin = OriginURL(page);
   if (!page.is_valid() || !origin.is_valid() ||
       page.spec().size() > kMaximumPageBytes ||
-      origin.spec().size() > kMaximumOriginBytes)
+      origin.spec().size() > kMaximumOriginBytes) {
+    shaar_save_prompt_diagnostic("offer:invalid-page-url");
     return decline();
+  }
 
   const std::string safe_detail = SanitizeDetail(detail ? detail : "");
   const std::string id = std::to_string(++NextRequestID());
@@ -457,8 +476,10 @@ bool OfferSavePrompt(content::WebContents* contents,
   payload.Set("detail", safe_detail);
   payload.Set("update", update);
   std::string json;
-  if (!base::JSONWriter::Write(payload, &json))
+  if (!base::JSONWriter::Write(payload, &json)) {
+    shaar_save_prompt_diagnostic("offer:serialize-failed");
     return decline();
+  }
 
   const std::string profile_id = identity->profile_id;
   const std::string window_id = identity->window_id;
@@ -466,8 +487,10 @@ bool OfferSavePrompt(content::WebContents* contents,
   shaar_window* const window = identity->window;
   shaar_tab* const tab = identity->tab;
   Supersede(contents);
-  if (Pending().size() >= kMaximumPending)
+  if (Pending().size() >= kMaximumPending) {
+    shaar_save_prompt_diagnostic("offer:pending-limit");
     return decline();
+  }
 
   Pending().emplace(id, PendingPrompt{engine, contents, window, tab, profile_id,
                                       window_id, tab_id, prompt, page, update,
@@ -476,6 +499,7 @@ bool OfferSavePrompt(content::WebContents* contents,
       base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE, base::BindOnce(&Expire, id), base::Minutes(2));
   if (!expiry_scheduled) {
+    shaar_save_prompt_diagnostic("offer:expiry-schedule-failed");
     Finish(id, kDecisionDismiss);
     return false;
   }
@@ -483,6 +507,8 @@ bool OfferSavePrompt(content::WebContents* contents,
       engine, SHAAR_EVENT_SAVE_PROMPT, {profile_id.data(), profile_id.size()},
       {}, {window_id.data(), window_id.size()}, {tab_id.data(), tab_id.size()},
       {json.data(), json.size()});
+  shaar_save_prompt_diagnostic(emitted == SHAAR_OK ? "offer:event-emitted"
+                                                   : "offer:event-rejected");
   if (emitted != SHAAR_OK)
     Finish(id, kDecisionDismiss);
   return emitted == SHAAR_OK && Pending().find(id) != Pending().end();

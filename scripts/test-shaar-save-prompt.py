@@ -58,8 +58,8 @@ class Fixture(BaseHTTPRequestHandler):
         if page == "/password":
             body = f"""<!doctype html><meta charset="utf-8"><title>Password</title>
 <form action="/saved" method="post">
-<input name="username" autocomplete="username" value="parity-user">
-<input name="password" type="password" autocomplete="current-password" value="parity-secret">
+<input id="username" name="username" autocomplete="username">
+<input id="password" name="password" type="password" autocomplete="current-password">
 {BUTTON}Sign in</button></form>"""
         elif page == "/login":
             body = """<!doctype html><meta charset="utf-8"><title>Login</title>
@@ -70,21 +70,21 @@ class Fixture(BaseHTTPRequestHandler):
         elif page == "/card":
             body = f"""<!doctype html><meta charset="utf-8"><title>Card</title>
 <form action="/saved" method="post">
-<input name="cc-name" autocomplete="cc-name" value="Parity Probe">
-<input name="cc-number" type="tel" autocomplete="cc-number" value="4111111111111111">
-<input name="cc-exp-month" autocomplete="cc-exp-month" value="12">
-<input name="cc-exp-year" autocomplete="cc-exp-year" value="2030">
+<input id="card-name" name="cc-name" autocomplete="cc-name">
+<input id="card-number" name="cc-number" type="tel" autocomplete="cc-number">
+<input id="card-exp-month" name="cc-exp-month" autocomplete="cc-exp-month">
+<input id="card-exp-year" name="cc-exp-year" autocomplete="cc-exp-year">
 {BUTTON}Pay</button></form>"""
         elif page == "/address":
             body = f"""<!doctype html><meta charset="utf-8"><title>Address</title>
 <form action="/saved" method="post">
-<input name="name" autocomplete="name" value="Parity Probe">
-<input name="street-address" autocomplete="street-address" value="1 Loopback Road">
-<input name="address-level2" autocomplete="address-level2" value="Mountain View">
-<input name="address-level1" autocomplete="address-level1" value="CA">
-<input name="postal-code" autocomplete="postal-code" value="94043">
-<input name="country-name" autocomplete="country-name" value="US">
-<input name="email" type="email" autocomplete="email" value="parity@example.com">
+<input id="address-name" name="name" autocomplete="name">
+<input id="address-street" name="street-address" autocomplete="street-address">
+<input id="address-city" name="address-level2" autocomplete="address-level2">
+<input id="address-region" name="address-level1" autocomplete="address-level1">
+<input id="address-postal" name="postal-code" autocomplete="postal-code">
+<input id="address-country" name="country-name" autocomplete="country-name">
+<input id="address-email" name="email" type="email" autocomplete="email">
 {BUTTON}Save address</button></form>"""
         elif page == "/saved":
             body = "<!doctype html><title>Saved</title><main>submitted</main>"

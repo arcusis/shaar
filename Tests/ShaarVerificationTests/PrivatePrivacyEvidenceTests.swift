@@ -229,4 +229,17 @@ import Testing
     #expect(!ARCProbeTrustedScrollElementAllowed("popup"))
     #expect(!ARCProbeTrustedScrollElementAllowed(""))
   }
+
+  @Test func trustedTextAllowlistMatchesOnlySavePromptFixtureFields() {
+    for field in [
+      "username", "password", "card-name", "card-number", "card-exp-month",
+      "card-exp-year", "address-name", "address-street", "address-city",
+      "address-region", "address-postal", "address-country", "address-email",
+    ] {
+      #expect(ARCProbeTrustedTextFieldAllowed(field))
+    }
+    #expect(!ARCProbeTrustedTextFieldAllowed("plain"))
+    #expect(!ARCProbeTrustedTextFieldAllowed("password-extra"))
+    #expect(!ARCProbeTrustedTextFieldAllowed(""))
+  }
 }

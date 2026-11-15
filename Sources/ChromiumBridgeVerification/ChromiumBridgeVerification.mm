@@ -1605,6 +1605,15 @@ extern "C" BOOL ARCProbeTrustedScrollElementAllowed(NSString *elementID) {
   return [elementID isEqualToString:@"feed"];
 }
 
+extern "C" BOOL ARCProbeTrustedTextFieldAllowed(NSString *elementID) {
+  NSSet<NSString *> *allowed = [NSSet setWithArray:@[
+    @"username", @"password", @"card-name", @"card-number",
+    @"card-exp-month", @"card-exp-year", @"address-name", @"address-street",
+    @"address-city", @"address-region", @"address-postal", @"address-country",
+    @"address-email"]];
+  return [allowed containsObject:elementID];
+}
+
 using ShaarQuitPrepare = shaar_error_code (*)(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *, shaar_request_id,
     shaar_reply_fn, void *, shaar_error *);
@@ -1906,6 +1915,46 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
                    payload:@{@"schemaVersion": @1, @"elementID": elementID}
                 completion:^(NSDictionary *reply, NSError *error) {
     if (error) NSLog(@"Trusted probe scroll: %@", error.localizedDescription);
+    completion(!error && [reply[@"submitted"] boolValue]);
+  }];
+}
+
+@end
+
+@implementation ARCShaarRuntime (TrustedProbeText)
+
+- (void)submitTrustedProbeTextInTabID:(NSString *)tabID
+                            elementID:(NSString *)elementID
+                                 text:(NSString *)text
+                           completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
+  if (!completion) return;
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0 ||
+      !ARCProbeTrustedTextFieldAllowed(elementID) || text.length == 0 || text.length > 64) {
+    completion(NO);
+    return;
+  }
+  NSView *view = [self viewForTabID:tabID];
+  if (!view.window || view.window.isVisible) {
+    completion(NO);
+    return;
+  }
+  for (NSWindow *window in NSApp.windows) {
+    if (window.isVisible) {
+      completion(NO);
+      return;
+    }
+  }
+  NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    completion(NO);
+    return;
+  }
+  [self shaarDevToolsSubmit:1099 tabID:tabID profileID:profileID windowID:windowID
+                   payload:@{@"schemaVersion": @1, @"elementID": elementID, @"text": text}
+                completion:^(NSDictionary *reply, NSError *error) {
+    if (error) NSLog(@"Trusted probe text: %@", error.localizedDescription);
     completion(!error && [reply[@"submitted"] boolValue]);
   }];
 }

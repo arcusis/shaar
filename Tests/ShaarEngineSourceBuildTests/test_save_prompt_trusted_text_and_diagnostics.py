@@ -1,0 +1,64 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from pathlib import Path
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[2]
+LAYER = ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0066-shaar-save-prompts.patch"
+BRIDGE = ROOT / "Sources/ChromiumBridgeVerification/ChromiumBridgeVerification.mm"
+PROBE = ROOT / "Sources/ShaarVerification/ShaarSavePromptProbe.swift"
+FIXTURE = ROOT / "scripts/test-shaar-save-prompt.py"
+
+
+class SavePromptTrustedTextTests(unittest.TestCase):
+    def test_text_operation_is_narrow_and_uses_chromium_ime_input(self):
+        header = (LAYER / "public/shaar_engine.h").read_text()
+        source = (LAYER / "devtools/shaar_devtools.cc").read_text()
+        tests = (LAYER / "devtools/shaar_devtools_unittest.cc").read_text()
+        self.assertIn("SHAAR_OP_PROBE_TRUSTED_TEXT = 1099", header)
+        self.assertIn("ParseProbeTextArguments", source)
+        self.assertIn("widget->ImeCommitText", source)
+        self.assertIn("ProbeWindowAllowed", source)
+        for field in (
+            "username", "password", "card-name", "card-number", "card-exp-month",
+            "card-exp-year", "address-name", "address-street", "address-city",
+            "address-region", "address-postal", "address-country", "address-email",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f'"{field}"', source)
+                self.assertIn(f'"{field}"', tests)
+        self.assertIn("ParseProbeTextArguments(Bytes(invalid)", tests)
+
+    def test_hook_and_offer_diagnostics_are_redacted_and_testing_only(self):
+        prompt_source = (LAYER / "save_prompts/shaar_save_prompts.cc").read_text()
+        patch = PATCH.read_text()
+        self.assertIn('std::strcmp(testing, "1") == 0', prompt_source)
+        self.assertIn("offer:context-denied", prompt_source)
+        self.assertIn("offer:no-selected-regular-tab", prompt_source)
+        self.assertIn('"offer:event-emitted"', prompt_source)
+        self.assertIn('"offer:event-rejected"', prompt_source)
+        for hook in ("password", "card", "address"):
+            with self.subTest(hook=hook):
+                self.assertIn(f'"hook:{hook}"', patch)
+        self.assertNotIn("parity-secret", prompt_source + patch)
+        self.assertNotIn("4111111111111111", prompt_source + patch)
+
+    def test_probe_enters_values_and_fixture_starts_empty(self):
+        bridge = BRIDGE.read_text()
+        probe = PROBE.read_text()
+        fixture = FIXTURE.read_text()
+        self.assertIn("submitTrustedProbeTextInTabID", bridge)
+        self.assertIn("shaarDevToolsSubmit:1099", bridge)
+        self.assertIn("valuesEntered", probe)
+        self.assertIn("document.getElementById(id)?.value===value", probe)
+        self.assertNotIn('value="parity-user"', fixture)
+        self.assertNotIn('value="4111111111111111"', fixture)
+        self.assertNotIn('value="Parity Probe"', fixture)
+
+
+if __name__ == "__main__":
+    unittest.main()

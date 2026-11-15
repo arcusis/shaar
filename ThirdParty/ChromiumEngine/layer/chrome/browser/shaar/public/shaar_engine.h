@@ -247,6 +247,8 @@ typedef enum {
   SHAAR_OP_PROBE_TRUSTED_SCROLL = 1097,
   // Testing only: send a trusted click to a never-shown owned extension popup.
   SHAAR_OP_PROBE_POPUP_TRUSTED_CLICK = 1098,
+  // Testing only: click an authored fixture field and commit trusted IME text.
+  SHAAR_OP_PROBE_TRUSTED_TEXT = 1099,
   // END devtools operation IDs.
 
   // BEGIN media

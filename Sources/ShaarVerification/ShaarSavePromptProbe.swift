@@ -82,7 +82,12 @@ import Foundation
   ) async -> [String: Any] {
     let opened = await open(base.appending(path: "password"), context: context)
     hideWindows()
-    let clicked = opened ? await trustedClick(context: context, runtime: runtime) : false
+    let valuesEntered = opened
+      ? await trustedText(
+        [("username", "parity-user"), ("password", "parity-secret")],
+        context: context, runtime: runtime)
+      : false
+    let clicked = valuesEntered ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = await waitForPrompt(in: context, kind: .password)
     let screenshot = prompt != nil && capturePrompt(name: "password", outputURL: outputURL)
     let offscreen = panelStaysOffscreen()
@@ -92,10 +97,12 @@ import Foundation
     }
     let filled = saved ? await filledLogin(context: context, base: base) : (false, false)
     let passed =
-      opened && clicked && prompt != nil && offscreen && saved && cleared
+      opened && valuesEntered && clicked && prompt != nil && offscreen && saved && cleared
       && filled.0 && filled.1 && screenshot
     return [
-      "name": "password", "passed": passed, "opened": opened, "clicked": clicked,
+      "name": "password", "passed": passed, "opened": opened,
+      "valuesEntered": valuesEntered,
+      "clicked": clicked,
       "prompt": prompt != nil, "offscreen": offscreen, "saved": saved, "cleared": cleared,
       "filledUsername": filled.0, "filledPassword": filled.1, "screenshot": screenshot,
     ]
@@ -107,7 +114,17 @@ import Foundation
   ) async -> [String: Any] {
     let opened = await open(base.appending(path: path), context: context)
     hideWindows()
-    let clicked = opened ? await trustedClick(context: context, runtime: runtime) : false
+    let fields: [(String, String)] = name == "card"
+      ? [("card-name", "Parity Probe"), ("card-number", "4111111111111111"),
+         ("card-exp-month", "12"), ("card-exp-year", "2030")]
+      : [("address-name", "Parity Probe"), ("address-street", "1 Loopback Road"),
+         ("address-city", "Mountain View"), ("address-region", "CA"),
+         ("address-postal", "94043"), ("address-country", "US"),
+         ("address-email", "parity@example.com")]
+    let valuesEntered = opened
+      ? await trustedText(fields, context: context, runtime: runtime) : false
+    let clicked = valuesEntered
+      ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = await waitForPrompt(in: context, kind: kind)
     let screenshot = prompt?.kind == kind && capturePrompt(name: name, outputURL: outputURL)
     let offscreen = panelStaysOffscreen()
@@ -116,10 +133,12 @@ import Foundation
       context.store.savePrompt == nil && promptPanel()?.isVisible != true
     }
     let passed =
-      opened && clicked && prompt?.kind == kind && offscreen && saved && cleared
+      opened && valuesEntered && clicked && prompt?.kind == kind && offscreen && saved && cleared
       && screenshot
     return [
-      "name": name, "passed": passed, "opened": opened, "clicked": clicked,
+      "name": name, "passed": passed, "opened": opened,
+      "valuesEntered": valuesEntered,
+      "clicked": clicked,
       "prompt": prompt?.kind.rawValue ?? "", "offscreen": offscreen, "saved": saved,
       "cleared": cleared, "screenshot": screenshot,
     ]
@@ -143,6 +162,32 @@ import Foundation
         continuation.resume(returning: $0)
       }
     }
+  }
+
+  private static func trustedText(
+    _ fields: [(String, String)], context: NativeBrowserContext, runtime: ARCShaarRuntime
+  ) async -> Bool {
+    guard let tab = context.engine.siteControlTarget?.tabID else { return false }
+    for (elementID, text) in fields {
+      let accepted = await withCheckedContinuation { continuation in
+        runtime.submitTrustedProbeText(
+          inTabID: tab.uuidString, elementID: elementID, text: text)
+        { continuation.resume(returning: $0) }
+      }
+      if !accepted { return false }
+    }
+    let expected = Dictionary(uniqueKeysWithValues: fields)
+    guard let data = try? JSONSerialization.data(withJSONObject: expected),
+      let json = String(data: data, encoding: .utf8)
+    else { return false }
+    let script =
+      "(()=>{const expected=\(json);return {valuesEntered:Object.entries(expected).every(([id,value])=>document.getElementById(id)?.value===value)}})()"
+    for _ in 0..<20 {
+      let verification = await evaluate(context.engine.runtime, tab: tab, script: script)
+      if verification?["valuesEntered"] as? Bool == true { return true }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    return false
   }
 
   private static func waitForPrompt(

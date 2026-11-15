@@ -6,7 +6,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 5,6,9,14,15,...]' >&2; exit 2; }
+usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 5,6,9,14,15,...|private-window]' >&2; exit 2; }
 archive_path=
 locale=en
 probe_filter=
@@ -35,7 +35,7 @@ if [[ -n $probe_filter ]]; then
   IFS=',' read -r -a requested_probes <<< "$probe_filter"
   case ",$probe_filter," in *,,*) usage ;; esac
   for probe in "${requested_probes[@]}"; do
-    case "$probe" in 5|6|9|14|15|16|17|19) ;; *) usage ;; esac
+    case "$probe" in 5|6|9|14|15|16|17|19|private-window) ;; *) usage ;; esac
   done
 fi
 probe_selected() { [[ ",$probe_filter," == *",$1,"* ]]; }
@@ -88,6 +88,7 @@ run_step() {
     'Bookmarks/history and browser import') probe_id=5 ;;
     'Chrome Web Store extension install') probe_id=6 ;;
     'Local MV3 extension install'|'Hebrew local MV3 extensions') probe_id=9 ;;
+    'Private window isolation') probe_id=private-window ;;
     'External protocol handler consent'|'Hebrew protocol handler') probe_id=14 ;;
     'Permission and protocol prompts') probe_id=15 ;;
     'Save prompts') probe_id=16 ;;

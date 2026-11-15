@@ -40,6 +40,7 @@ final class PrivateWindowProbe {
   private var normalSelectionAudit: [String: Any] = [:]
   private var privateWindows: [String] = []
   private var diskSnapshot: [String: String] = [:]
+  private var diskAuditBaselineStage = "before-private-contexts"
   private var privateDiskMarkers: Set<Data> = []
   private var privateDiskArtifactAudit: [String: Any] = [:]
   private var privateWindowContexts: [String: String] = [:]
@@ -246,7 +247,18 @@ final class PrivateWindowProbe {
     markStage("checking-private-privacy")
     let privacy = try await PrivatePrivacyProbe(
       runtime: runtime, root: root, fixture: fixture, phase: phase,
-      tabID: t1, windowID: w1, contextID: contextA, normalTabID: normalTab
+      tabID: t1, windowID: w1, contextID: contextA, normalTabID: normalTab,
+      snapshotDiskFiles: { [weak self] in
+        self?.chromiumProfileFiles() ?? [:]
+      },
+      checkpointNormalControlFiles: { [weak self] before, after in
+        guard let self else { return }
+        // The paired normal controls write the same sentinel key into normal storage. Checkpoint
+        // only files they changed; preserve earlier private-navigation changes for the audit.
+        self.diskSnapshot = PrivateDiskArtifactBaseline.checkpointNormalControlChanges(
+          baseline: self.diskSnapshot, beforeControls: before, afterControls: after)
+        self.diskAuditBaselineStage = "after-normal-positive-controls"
+      }
     ).run()
     markStage("checking-private-sharing")
     checks["privatePrivacyDefaultsAndCookieAllow"] = privacy
@@ -545,7 +557,10 @@ final class PrivateWindowProbe {
         leaked.append(URL(fileURLWithPath: path).lastPathComponent)
       }
     }
-    return ["passed": leaked.isEmpty, "newFileCount": changedFiles.count, "leakedFiles": leaked]
+    return [
+      "passed": leaked.isEmpty, "newFileCount": changedFiles.count,
+      "leakedFiles": leaked, "baselineStage": diskAuditBaselineStage,
+    ]
   }
 
   private func begin(_ id: String, _ source: String) async throws -> Bool {
@@ -1124,6 +1139,19 @@ final class PrivateWindowProbe {
 
   private var requiredChecksPassed: Bool {
     Self.evidencePassed(checks: checks, expectedFailures: expectedPrivateFailures)
+  }
+}
+
+enum PrivateDiskArtifactBaseline {
+  static func checkpointNormalControlChanges(
+    baseline: [String: String], beforeControls: [String: String],
+    afterControls: [String: String]
+  ) -> [String: String] {
+    var result = baseline
+    for (path, metadata) in afterControls where beforeControls[path] != metadata {
+      result[path] = metadata
+    }
+    return result
   }
 }
 

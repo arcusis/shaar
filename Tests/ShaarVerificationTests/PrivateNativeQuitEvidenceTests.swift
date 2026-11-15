@@ -20,6 +20,18 @@ import Testing
         requestEventObserved: false, cancellationEventObserved: true))
   }
 
+  @Test func quitRequestEventSurvivesTransientRuntimeQuitFlag() {
+    #expect(
+      PrivateProductHostProbe.observedNativeQuitRequest(
+        runtimeQuitting: false, requestEventObserved: true))
+    #expect(
+      PrivateProductHostProbe.observedNativeQuitRequest(
+        runtimeQuitting: true, requestEventObserved: false))
+    #expect(
+      !PrivateProductHostProbe.observedNativeQuitRequest(
+        runtimeQuitting: false, requestEventObserved: false))
+  }
+
   @Test func canceledQuitHoldCleanupRequiresLiveOwnerAndCompletedQuit() {
     #expect(ARCProbeShouldReleaseCanceledQuitHold(false, true))
     #expect(!ARCProbeShouldReleaseCanceledQuitHold(true, true))

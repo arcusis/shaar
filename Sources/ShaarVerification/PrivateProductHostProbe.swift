@@ -43,6 +43,12 @@ final class PrivateProductHostProbe {
     requestEventObserved && cancellationEventObserved
   }
 
+  static func observedNativeQuitRequest(
+    runtimeQuitting: Bool, requestEventObserved: Bool
+  ) -> Bool {
+    runtimeQuitting || requestEventObserved
+  }
+
   private let runtime: ARCChromiumRuntime
   private let root: URL
   private let fixture: URL
@@ -910,7 +916,9 @@ final class PrivateProductHostProbe {
     var recordedDialogCancelResult = false
     var privateCloseTask: Task<NativeCloseReceipt, Never>?
     for _ in 0..<200 {
-      if !runtime.isQuitting && !quitRequestedEvent {
+      if !Self.observedNativeQuitRequest(
+        runtimeQuitting: runtime.isQuitting, requestEventObserved: quitRequestedEvent)
+      {
         if observedQuit {
           writeQuitDiagnostic(
             "quitFlagClearedBeforeDialogCancellation", owner: owner,
@@ -930,11 +938,14 @@ final class PrivateProductHostProbe {
         let current = host.ownedWindows.first(where: { $0.windowID == owner.windowID })
       {
         attemptedPrivateClose = true
+        let nativeQuitRequestObserved = Self.observedNativeQuitRequest(
+          runtimeQuitting: runtime.isQuitting, requestEventObserved: quitRequestedEvent)
         writeQuitDiagnostic(
           "privateWindowCloseRequested", owner: current, normalWindow: normalWindow,
           normalTabID: normalTabID)
         privateCloseTask = Task { @MainActor in
-          await self.closeNativeWindowReceipt(current)
+          await self.closeNativeWindowReceipt(
+            current, nativeQuitRequestObserved: nativeQuitRequestObserved)
         }
         await Task.yield()
       }
@@ -1262,10 +1273,14 @@ final class PrivateProductHostProbe {
     await closeNativeWindowReceipt(owner).closed
   }
 
-  private func closeNativeWindowReceipt(_ owner: PrivateBrowserHost.Owner) async
+  private func closeNativeWindowReceipt(
+    _ owner: PrivateBrowserHost.Owner, nativeQuitRequestObserved: Bool = false
+  ) async
     -> NativeCloseReceipt
   {
-    let requestedWhileQuitting = runtime.isQuitting
+    let requestedWhileQuitting = Self.observedNativeQuitRequest(
+      runtimeQuitting: runtime.isQuitting,
+      requestEventObserved: nativeQuitRequestObserved)
     return await withCheckedContinuation { continuation in
       runtime.closePrivateWindowID(owner.windowID, contextID: owner.contextID) {
         continuation.resume(

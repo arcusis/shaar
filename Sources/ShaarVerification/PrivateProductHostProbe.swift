@@ -930,13 +930,18 @@ final class PrivateProductHostProbe {
       let alreadyCancelled = Self.observedNativeQuitCancellation(
         requestEventObserved: quitRequestedEvent,
         cancellationEventObserved: quitCancelledEvent)
-      var cancelled = alreadyCancelled
-      if !cancelled {
-        let dialogCancelled = await cancelNativeBeforeUnload(on: normalTabID)
-        cancelled = dialogCancelled || Self.observedNativeQuitCancellation(
+      var dialogCancelled = false
+      if alreadyCancelled {
+        // The observer can see the native cancellation before the runtime flag changes.
+        // Still run the probe API so it releases its hold before the next quit cycle.
+        _ = await cancelNativeBeforeUnload(on: normalTabID)
+      } else {
+        dialogCancelled = await cancelNativeBeforeUnload(on: normalTabID)
+      }
+      let cancelled = alreadyCancelled || dialogCancelled
+        || Self.observedNativeQuitCancellation(
           requestEventObserved: quitRequestedEvent,
           cancellationEventObserved: quitCancelledEvent)
-      }
       if !recordedDialogCancelResult {
         writeQuitDiagnostic(
           cancelled ? "nativeDialogCancellationCompleted" : "nativeDialogCancellationRejected",

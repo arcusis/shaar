@@ -45,6 +45,9 @@ FOUNDATION_EXPORT BOOL ARCProbeNativePrepareShouldReleaseHold(
 /// Native audit is visible only while the current Swift owner is the native hold.
 FOUNDATION_EXPORT BOOL ARCProbeNativeHoldAuditVisible(
   BOOL ownerCurrent, BOOL nativeHold);
+/// A canceled quit may still own the disposable probe hold; release it only for its live owner.
+FOUNDATION_EXPORT BOOL ARCProbeShouldReleaseCanceledQuitHold(
+  BOOL runtimeQuitting, BOOL ownerCurrent);
 /// Trusted clicks are limited to authored fixture element ids.
 FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
 /// Trusted wheel input is limited to the authored infinite-scroll fixture.

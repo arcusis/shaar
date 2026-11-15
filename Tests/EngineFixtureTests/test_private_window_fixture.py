@@ -55,7 +55,10 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                         visibleNativeViewportCount=1),
                     cleanup=dict(windowsRemaining=0, contextsRemaining=0, passed=True),
                     privateDiskArtifactAudit=dict(
-                        passed=True, newFileCount=3, leakedFiles=[],
+                        passed=True, newFileCount=3,
+                        privateUUIDMarker=self.run_id.lower(),
+                        normalProfileUUIDMatches=[], privateUUIDMatches=[],
+                        postCloseUUIDMatches=[],
                         baselineStage='after-normal-positive-controls'),
                     scope=fixture.PRIVATE_WINDOW_SCOPE)
 
@@ -120,11 +123,23 @@ class PrivateWindowFixtureTests(unittest.TestCase):
 
     def test_private_disk_artifact_leak_fails_evidence_validation(self):
         evidence = self.evidence('initial')
-        evidence['privateDiskArtifactAudit'] = dict(
-            passed=False, newFileCount=1, leakedFiles=['Cookies'])
+        evidence['privateDiskArtifactAudit']['privateUUIDMatches'] = [
+            'Chromium/Default/Local Storage/leveldb/000003.log']
         (self.root / 'initial-private-window.json').write_text(json.dumps(evidence))
         with self.assertRaisesRegex(RuntimeError, 'failed or mismatched checks/cleanup'):
             fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))
+
+    def test_private_disk_audit_rejects_uuid_in_normal_profile(self):
+        evidence = self.evidence('initial')
+        evidence['privateDiskArtifactAudit']['normalProfileUUIDMatches'] = [
+            'Chromium/Default/Session Storage/000003.log']
+        (self.root / 'initial-private-window.json').write_text(json.dumps(evidence))
+        with self.assertRaisesRegex(RuntimeError, 'failed or mismatched checks/cleanup'):
+            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'))
+
+    def test_private_window_schema_includes_native_host_attachment_checks(self):
+        self.assertIn('productPrivateHostRemainsAttachedAcrossTabs', fixture.PRIVATE_WINDOW_CHECKS)
+        self.assertIn('productPrivateHostRemainsAttachedAfterTabClose', fixture.PRIVATE_WINDOW_CHECKS)
 
     def test_private_disk_audit_requires_baseline_after_normal_controls(self):
         evidence = self.evidence('initial')
@@ -212,6 +227,51 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             port = listener.getsockname()[1]
             self.assertFalse(fixture.verify_fixture_listener_closed(port))
         self.assertTrue(fixture.verify_fixture_listener_closed(port))
+
+    def test_private_navigation_count_endpoint_reports_inflight_request(self):
+        import threading
+        from urllib.request import urlopen
+
+        path = f'/account/private-window-{self.run_id.lower()}-slow'
+        fixture.Fixture.private_navigation_requests.pop(path, None)
+        self.assertEqual(fixture.Fixture.next_private_navigation_request(path), 1)
+        server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        from urllib.parse import quote
+        address = (
+            f'http://127.0.0.1:{server.server_port}/account/private-navigation-count'
+            f'?path={quote(path, safe="")}'
+        )
+        with urlopen(address, timeout=3) as response:
+            value = json.loads(response.read())
+        self.assertEqual(value, {'path': path, 'count': 1})
+
+    def test_nested_private_slow_route_counts_the_authored_request(self):
+        import threading
+        from urllib.request import urlopen
+        from urllib.parse import quote
+
+        path = f'/account/private-window-{self.run_id.lower()}-slow'
+        fixture.Fixture.private_navigation_requests.pop(path, None)
+        server = fixture.http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.Fixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        address = f'http://127.0.0.1:{server.server_port}{path}'
+        with urlopen(address, timeout=4) as response:
+            body = response.read().decode()
+        self.assertIn('data-private-request="1"', body)
+        count_address = (
+            f'http://127.0.0.1:{server.server_port}/account/private-navigation-count'
+            f'?path={quote(path, safe="")}'
+        )
+        with urlopen(count_address, timeout=3) as response:
+            count = json.loads(response.read())
+        self.assertEqual(count['count'], 1)
 
     def test_schema_rejects_missing_check_failed_check_digest_and_cleanup(self):
         mutations = (

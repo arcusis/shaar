@@ -37,6 +37,12 @@ final class PrivateProductHostProbe {
     let confirmedWhileQuitting: Bool
   }
 
+  static func observedNativeQuitCancellation(
+    requestEventObserved: Bool, cancellationEventObserved: Bool
+  ) -> Bool {
+    requestEventObserved && cancellationEventObserved
+  }
+
   private let runtime: ARCChromiumRuntime
   private let root: URL
   private let fixture: URL
@@ -289,7 +295,18 @@ final class PrivateProductHostProbe {
       throw PrivateWindowFailure("Private final-quit fixture did not retain its owner.")
     }
     let finalQuitContext = finalQuitOwner.contextID
-    guard await prepareNativeQuitCancellation(on: normalTabID) else {
+    let finalQuitCancellationPrepared = await prepareNativeQuitCancellation(on: normalTabID)
+    let finalPreparationAudit = runtime.privateQuitCDPHoldAudit(forTabID: normalTabID) ?? [:]
+    writeQuitDiagnostic(
+      "finalNativeQuitCancellationPreparation", owner: finalQuitOwner,
+      normalWindow: normalWindow, normalTabID: normalTabID,
+      values: [
+        "nativeQuitCancellationPrepared": finalQuitCancellationPrepared,
+        "cdpHoldCommandPending": finalPreparationAudit["holdCommandPending"] ?? false,
+        "cdpHoldConfirmedPending": finalPreparationAudit["holdConfirmedPending"] ?? false,
+        "cdpHoldSelectedNormalTab": finalPreparationAudit["selectedNormalTab"] ?? false,
+      ])
+    guard finalQuitCancellationPrepared else {
       throw PrivateWindowFailure("Normal fixture page could not rearm native quit cancellation.")
     }
     let finalHoldAudit = runtime.privateQuitCDPHoldAudit(forTabID: normalTabID) ?? [:]
@@ -862,11 +879,27 @@ final class PrivateProductHostProbe {
     normalTabID: String, closePrivateWindow: Bool
   ) async -> Bool {
     var observedQuit = false
+    var quitRequestedEvent = false
+    var quitCancelledEvent = false
+    let previousQuitRequested = runtime.onQuitRequested
+    let previousQuitCancelled = runtime.onQuitCancelled
+    runtime.onQuitRequested = {
+      previousQuitRequested?()
+      quitRequestedEvent = true
+    }
+    runtime.onQuitCancelled = {
+      previousQuitCancelled?()
+      quitCancelledEvent = true
+    }
+    defer {
+      runtime.onQuitRequested = previousQuitRequested
+      runtime.onQuitCancelled = previousQuitCancelled
+    }
     var attemptedPrivateClose = false
     var recordedDialogCancelResult = false
     var privateCloseTask: Task<NativeCloseReceipt, Never>?
     for _ in 0..<200 {
-      if !runtime.isQuitting {
+      if !runtime.isQuitting && !quitRequestedEvent {
         if observedQuit {
           writeQuitDiagnostic(
             "quitFlagClearedBeforeDialogCancellation", owner: owner,
@@ -894,7 +927,16 @@ final class PrivateProductHostProbe {
         }
         await Task.yield()
       }
-      let cancelled = await cancelNativeBeforeUnload(on: normalTabID)
+      let alreadyCancelled = Self.observedNativeQuitCancellation(
+        requestEventObserved: quitRequestedEvent,
+        cancellationEventObserved: quitCancelledEvent)
+      var cancelled = alreadyCancelled
+      if !cancelled {
+        let dialogCancelled = await cancelNativeBeforeUnload(on: normalTabID)
+        cancelled = dialogCancelled || Self.observedNativeQuitCancellation(
+          requestEventObserved: quitRequestedEvent,
+          cancellationEventObserved: quitCancelledEvent)
+      }
       if !recordedDialogCancelResult {
         writeQuitDiagnostic(
           cancelled ? "nativeDialogCancellationCompleted" : "nativeDialogCancellationRejected",

@@ -19,7 +19,8 @@ struct SavePromptTests {
 
   private func request(
     _ store: BrowserStore, id: String = "1", kind: SavePromptRequest.Kind = .password,
-    update: Bool = false, detail: String = "parity-user", profileID: UUID? = nil,
+    update: Bool = false, detail: String = "parity-user",
+    pageURL: String = "http://127.0.0.1:9/password", profileID: UUID? = nil,
     tabID: UUID? = nil
   ) throws -> SavePromptRequest {
     let tab = try #require(store.session.selectedSpace.selectedTab)
@@ -30,7 +31,7 @@ struct SavePromptTests {
         "id": id,
         "prompt": kind.rawValue,
         "origin": "http://127.0.0.1:9",
-        "pageURL": "http://127.0.0.1:9/password",
+        "pageURL": pageURL,
         "detail": detail,
         "update": update,
         "profileID": (profileID ?? store.session.selectedSpace.profileID).uuidString,
@@ -55,6 +56,20 @@ struct SavePromptTests {
     #expect(store.savePrompt == nil)
     store.resolveSavePrompt(first.id, decision: .save)
     #expect(decisions == ["1:save"])
+  }
+
+  @Test func originOnlyOfferIsBoundToTheCurrentPageAndDismissesAfterNavigation() throws {
+    let store = store()
+    let offer = try request(store, pageURL: "http://127.0.0.1:9/")
+    var decisions: [SavePromptRequest.Decision] = []
+    store.onSavePromptDecision = { _, decision in decisions.append(decision) }
+
+    #expect(store.requestSavePrompt(offer))
+    #expect(store.savePrompt?.pageURL == URL(string: "http://127.0.0.1:9/password"))
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.nativeTabChanged(tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
+    #expect(store.savePrompt == nil)
+    #expect(decisions == [.dismiss])
   }
 
   @Test func duplicateIDWithDifferentDetailsIsRejected() throws {

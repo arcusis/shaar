@@ -104,6 +104,25 @@ private func payload(
   #expect(!request.matches(anotherPage))
 }
 
+@Test func originOnlySaveOfferBindsToCurrentPageBeforeExactMatching() throws {
+  let selectedProfile = BrowserProfile(id: profile, name: "Selected")
+  func session(at pageURL: URL) throws -> BrowserSession {
+    let selectedTab = BrowserTab(id: tab, url: pageURL)
+    let selectedSpace = BrowserSpace(
+      profileID: profile, name: "Selected", symbol: "house", tint: .lavender,
+      tabs: [selectedTab], selectedTabID: tab)
+    return try BrowserSession(
+      profiles: [selectedProfile], spaces: [selectedSpace], selectedSpaceID: selectedSpace.id)
+  }
+
+  let offer = try #require(SavePromptRequest(payload: payload(page: "http://127.0.0.1:9/")))
+  let passwordPage = try session(at: URL(string: "http://127.0.0.1:9/password")!)
+  let bound = try #require(offer.boundToCurrentPage(in: passwordPage))
+  #expect(bound.pageURL == URL(string: "http://127.0.0.1:9/password"))
+  #expect(bound.matches(passwordPage))
+  #expect(!bound.matches(try session(at: URL(string: "http://127.0.0.1:9/account")!)))
+}
+
 @Test func savePromptNeverAppliesOnlyToANewPassword() {
   let password = SavePromptRequest(payload: payload())
   let update = SavePromptRequest(payload: payload(update: true))

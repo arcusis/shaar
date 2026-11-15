@@ -63,6 +63,23 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertNotIn('value="4111111111111111"', fixture)
         self.assertNotIn('value="Parity Probe"', fixture)
 
+    def test_text_uses_the_same_non_key_transparent_surface_guard_as_clicks(self):
+        bridge = BRIDGE.read_text()
+        helper = bridge[bridge.index("BOOL ProbeTrustedInputSurfaceAllowed"):]
+        text_handler = bridge[bridge.index("submitTrustedProbeTextInTabID"):]
+        self.assertIn("!pageWindow.isKeyWindow", helper)
+        self.assertIn("pageWindow.alphaValue == 0", helper)
+        self.assertIn("pageWindow.ignoresMouseEvents", helper)
+        self.assertIn("if (!ProbeTrustedInputSurfaceAllowed(view))", text_handler)
+        self.assertNotIn("view.window.isVisible", text_handler)
+        self.assertNotIn("for (NSWindow *window in NSApp.windows)", text_handler)
+
+    def test_frame_capture_retries_transient_unpresented_frames(self):
+        probe = PROBE.read_text()
+        capture = probe[probe.index("private static func captureFrame"):]
+        self.assertIn("for attempt in 0..<4", capture)
+        self.assertIn("Task.sleep(for: .milliseconds(75))", capture)
+
 
 if __name__ == "__main__":
     unittest.main()

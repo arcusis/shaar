@@ -385,11 +385,16 @@ final class ShaarSavePromptRenderSurface {
     context: NativeBrowserContext, runtime: ARCShaarRuntime
   ) async -> Bool {
     guard let tab = context.engine.siteControlTarget?.tabID else { return false }
-    return await withCheckedContinuation { continuation in
-      runtime.captureProbeTabID(tab.uuidString) {
-        continuation.resume(returning: $0?.isEmpty == false)
+    for attempt in 0..<4 {
+      let captured = await withCheckedContinuation { continuation in
+        runtime.captureProbeTabID(tab.uuidString) {
+          continuation.resume(returning: $0?.isEmpty == false)
+        }
       }
+      if captured { return true }
+      if attempt < 3 { try? await Task.sleep(for: .milliseconds(75)) }
     }
+    return false
   }
 
   private static func open(_ url: URL, context: NativeBrowserContext) async -> Bool {

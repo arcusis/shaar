@@ -39,6 +39,8 @@ void Register(ShaarModuleRegistry* registry);
 content::JavaScriptDialogManager* GetManager();
 bool DialogMayBePresented(
     bool is_selected_tab, bool is_regular_profile, bool before_unload = false);
+bool DialogReplyMayBeAccepted(bool before_unload, bool is_owned_tab,
+                              bool is_selected_tab);
 bool SuppressedDialogAccepted(content::JavaScriptDialogType type);
 shaar_error_code HandleJavaScriptDialogOperation(
     shaar::ShaarEngineContext*, shaar_engine*, shaar_scope, shaar_window*,

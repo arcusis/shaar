@@ -1156,13 +1156,19 @@ final class BrowserStore {
     let isCurrent = presented && dialog.matches(session)
       && rendererFailures[dialog.tabID] == nil
     let allowed = isCurrent && accepted
+    if dialog.kind == .beforeUnload && !allowed {
+      requestedTabCloses.remove(dialog.tabID)
+    }
     onJavaScriptDialogDecision?(id, allowed, allowed ? input : nil)
     presentNextConsent()
   }
 
   func dismissJavaScriptDialog(_ id: String) {
     let sheetID = "javascript-dialog-\(id)"
-    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    guard let request = consentRequests.first(where: { $0.id == sheetID }),
+      case .javascriptDialog(let dialog) = request
+    else { return }
+    if dialog.kind == .beforeUnload { requestedTabCloses.remove(dialog.tabID) }
     consentRequests.removeAll { $0.id == sheetID }
     if presentedConsentID == sheetID {
       presentedConsentID = nil
@@ -1551,6 +1557,7 @@ final class BrowserStore {
     case .webShare(let request): onWebShareDecision?(request.id, .cancelled)
     case .print(let request): onPrintDecision?(request.id, false)
     case .javascriptDialog(let request):
+      if request.kind == .beforeUnload { requestedTabCloses.remove(request.tabID) }
       onJavaScriptDialogDecision?(request.id, request.kind == .alert, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .deviceChooser(let request): onDeviceChooserDecision?(request, nil)

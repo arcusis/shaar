@@ -27,6 +27,9 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
+    def test_submit_button_stays_in_normal_flow_below_form_fields(self):
+        self.assertNotIn("style=", PROBE.BUTTON)
+
     def test_receipt_tracks_password_card_and_address_posts_by_referer(self):
         for form in ("/password", "/card", "/address"):
             connection = http.client.HTTPConnection(*self.server.server_address)

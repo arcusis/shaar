@@ -21,8 +21,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
 BUTTON = (
-    '<button id="plain" type="submit" '
-    'style="position:fixed;left:8px;top:8px;width:180px;height:48px">'
+    '<button id="plain" type="submit">'
 )
 EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
 DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "

@@ -56,8 +56,12 @@ import Testing
     let window = NSWindow(
       contentRect: NSRect(x: -32_000, y: -32_000, width: 120, height: 80),
       styleMask: [.titled], backing: .buffered, defer: false)
-    let surface = ShaarSavePromptRenderSurface(window: window)
+    var focusedProbeTab = false
+    let surface = ShaarSavePromptRenderSurface(window: window) {
+      focusedProbeTab = true
+    }
 
+    #expect(focusedProbeTab)
     #expect(surface.isPresentingFramesWithoutInputOrFocus)
     #expect(!window.isKeyWindow)
     #expect(surface.orderOutAndRestore())

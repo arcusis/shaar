@@ -29,10 +29,11 @@ final class ShaarSavePromptRenderSurface {
   private let previouslyIgnoredMouseEvents: Bool
   private var finished = false
 
-  init(window: NSWindow) {
+  init(window: NSWindow, focusTab: () -> Void) {
     self.window = window
     previousAlphaValue = window.alphaValue
     previouslyIgnoredMouseEvents = window.ignoresMouseEvents
+    focusTab()
     window.alphaValue = 0
     window.ignoresMouseEvents = true
     // orderFront does not activate the app or make the browser window key.
@@ -174,7 +175,7 @@ final class ShaarSavePromptRenderSurface {
   ) async -> [String: Any] {
     let opened = await open(base.appending(path: "password"), context: context)
     hideWindows()
-    let renderSurface = opened ? ShaarSavePromptRenderSurface(window: context.window) : nil
+    let renderSurface = opened ? renderSurface(context: context, runtime: runtime) : nil
     let surfacePresentedSafely =
       renderSurface?.isPresentingFramesWithoutInputOrFocus == true
     let renderFrameCaptured: Bool
@@ -224,7 +225,7 @@ final class ShaarSavePromptRenderSurface {
     let path = "/\(kind.rawValue)"
     let opened = await open(base.appending(path: path), context: context)
     hideWindows()
-    let renderSurface = opened ? ShaarSavePromptRenderSurface(window: context.window) : nil
+    let renderSurface = opened ? renderSurface(context: context, runtime: runtime) : nil
     let surfacePresentedSafely =
       renderSurface?.isPresentingFramesWithoutInputOrFocus == true
     let renderFrameCaptured: Bool
@@ -296,7 +297,7 @@ final class ShaarSavePromptRenderSurface {
     let page = base.appending(path: "password")
     let opened = await open(page, context: context)
     hideWindows()
-    let firstSurface = opened ? ShaarSavePromptRenderSurface(window: context.window) : nil
+    let firstSurface = opened ? renderSurface(context: context, runtime: runtime) : nil
     let firstSurfacePresentedSafely =
       firstSurface?.isPresentingFramesWithoutInputOrFocus == true
     let firstFrameCaptured: Bool
@@ -325,7 +326,7 @@ final class ShaarSavePromptRenderSurface {
     hideWindows()
     let reopened = await open(page, context: context)
     hideWindows()
-    let secondSurface = reopened ? ShaarSavePromptRenderSurface(window: context.window) : nil
+    let secondSurface = reopened ? renderSurface(context: context, runtime: runtime) : nil
     let secondSurfacePresentedSafely =
       secondSurface?.isPresentingFramesWithoutInputOrFocus == true
     let secondFrameCaptured: Bool
@@ -395,6 +396,15 @@ final class ShaarSavePromptRenderSurface {
       if attempt < 3 { try? await Task.sleep(for: .milliseconds(75)) }
     }
     return false
+  }
+
+  private static func renderSurface(
+    context: NativeBrowserContext, runtime: ARCShaarRuntime
+  ) -> ShaarSavePromptRenderSurface? {
+    guard let tab = context.engine.siteControlTarget?.tabID else { return nil }
+    return ShaarSavePromptRenderSurface(window: context.window) {
+      runtime.focusTabID(tab.uuidString)
+    }
   }
 
   private static func open(_ url: URL, context: NativeBrowserContext) async -> Bool {

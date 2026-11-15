@@ -1,0 +1,39 @@
+--- a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
++++ b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
+@@ -141,8 +141,8 @@
+     payments::PaymentsAutofillClient::LocalSaveCardPromptCallback
+         save_card_prompt_callback) {
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
+-    if (shaar_save_prompt_diagnostic)
+-      shaar_save_prompt_diagnostic("hook:card");
++    if (shaar::save_prompts::shaar_save_prompt_diagnostic)
++      shaar::save_prompts::shaar_save_prompt_diagnostic("hook:card");
+     if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete)
+       HideBubble(/*initiated_by_bubble_manager=*/false);
+     const std::string detail =
+--- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
++++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+@@ -885,8 +885,8 @@
+ #else
+   if (save_address_bubble_type != SaveAddressBubbleType::kMigrateToAccount &&
+       base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
+-    if (shaar_save_prompt_diagnostic)
+-      shaar_save_prompt_diagnostic("hook:address");
++    if (shaar::save_prompts::shaar_save_prompt_diagnostic)
++      shaar::save_prompts::shaar_save_prompt_diagnostic("hook:address");
+     std::string detail;
+     auto append_field = [&](FieldType type) {
+       const std::string part =
+--- a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
++++ b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+@@ -1596,8 +1596,8 @@
+       state == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
+   if ((is_save || is_update) &&
+       base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
+-    if (shaar_save_prompt_diagnostic)
+-      shaar_save_prompt_diagnostic("hook:password");
++    if (shaar::save_prompts::shaar_save_prompt_diagnostic)
++      shaar::save_prompts::shaar_save_prompt_diagnostic("hook:password");
+     const int prompt_generation = ++shaar_save_prompt_generation_;
+     auto decision = base::BindOnce(
+         [](base::WeakPtr<ManagePasswordsUIController> controller, bool update,

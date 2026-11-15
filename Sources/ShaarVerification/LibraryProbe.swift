@@ -130,10 +130,12 @@ final class LibraryProbe {
         self.hasHistory(persistedA, in: a) && self.hasHistory(persistedB, in: b)
       }
       try expect(true, "closed-page history restores from the engine without reopening those pages")
-      try expect(
-        store.library.bookmarks[a]?.items.contains { $0.address == external.absoluteString }
-          == true,
-        "extension-created native bookmark survives restart")
+      if !importOnly {
+        try expect(
+          store.library.bookmarks[a]?.items.contains { $0.address == external.absoluteString }
+            == true,
+          "extension-created native bookmark survives restart")
+      }
     }
     try await wait("initial native library snapshots") {
       self.store.library.bookmarks[a] != nil && self.store.library.bookmarks[b] != nil

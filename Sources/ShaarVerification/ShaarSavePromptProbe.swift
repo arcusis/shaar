@@ -58,6 +58,8 @@ final class ShaarSavePromptRenderSurface {
 
 /// Hidden verification check for Chromium save offers.
 @MainActor enum ShaarSavePromptProbe {
+  private static var trustedTextDiagnostics: [[String: Any]] = []
+
   static func run(
     frameworkURL: URL, outputURL: URL, pageURL: URL?, neverPageURL: URL?
   ) -> Int32 {
@@ -103,6 +105,7 @@ final class ShaarSavePromptRenderSurface {
     host: NativeBrowserHost, runtime: ARCShaarRuntime, base: URL, neverBase: URL,
     outputURL: URL
   ) async {
+    trustedTextDiagnostics = []
     var rows: [[String: Any]] = []
     defer {
       hideWindows()
@@ -127,6 +130,7 @@ final class ShaarSavePromptRenderSurface {
             "presentedSafely": surfacePresentedSafely, "orderedOut": surfaceOrderedOut,
             "framesCaptured": renderFramesCaptured,
           ],
+          "trustedTextDiagnostics": trustedTextDiagnostics,
         ],
         to: outputURL)
       host.events.quit()
@@ -210,6 +214,7 @@ final class ShaarSavePromptRenderSurface {
       "clicked": clicked,
       "prompt": prompt != nil, "offscreen": offscreen, "saved": saved, "cleared": cleared,
       "filledUsername": filled.0, "filledPassword": filled.1, "screenshot": screenshot,
+      "panelPresentation": panelPresentationEvidence(),
       "renderSurfacePresentedSafely": surfacePresentedSafely,
       "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
@@ -285,6 +290,7 @@ final class ShaarSavePromptRenderSurface {
       "saved": actionSent && decision == .save,
       "neverAvailabilityMatchesKind": neverAvailabilityMatchesKind,
       "cleared": cleared, "screenshot": screenshot,
+      "panelPresentation": panelPresentationEvidence(),
       "renderSurfacePresentedSafely": surfacePresentedSafely,
       "renderFrameCaptured": renderFrameCaptured,
       "renderSurfaceOrderedOut": surfaceOrderedOut,
@@ -443,13 +449,39 @@ final class ShaarSavePromptRenderSurface {
     guard let data = try? JSONSerialization.data(withJSONObject: expected),
       let json = String(data: data, encoding: .utf8)
     else { return false }
-    let script =
-      "(()=>{const expected=\(json);return {valuesEntered:Object.entries(expected).every(([id,value])=>document.getElementById(id)?.value===value)}})()"
+    let script = """
+      (() => {
+        const expected = \(json);
+        const fields = Object.entries(expected).map(([id, value]) => {
+          const field = document.getElementById(id);
+          return {
+            id,
+            present: field instanceof HTMLInputElement,
+            valueMatches: field?.value === value,
+            valueLength: field instanceof HTMLInputElement ? field.value.length : null,
+            focused: document.activeElement === field,
+          };
+        });
+        const active = document.activeElement;
+        return {
+          valuesEntered: fields.every(field => field.valueMatches),
+          fields,
+          activeElementIsInput: active instanceof HTMLInputElement,
+          activeInputType: active instanceof HTMLInputElement ? active.type : null,
+        };
+      })()
+      """
+    var lastVerification: [String: Any]?
     for _ in 0..<20 {
       let verification = await evaluate(context.engine.runtime, tab: tab, script: script)
-      if verification?["valuesEntered"] as? Bool == true { return true }
+      lastVerification = verification
+      if verification?["valuesEntered"] as? Bool == true {
+        trustedTextDiagnostics.append(verification ?? [:])
+        return true
+      }
       try? await Task.sleep(for: .milliseconds(50))
     }
+    trustedTextDiagnostics.append(lastVerification ?? ["evaluationReturned": false])
     return false
   }
 
@@ -519,6 +551,16 @@ final class ShaarSavePromptRenderSurface {
   private static func promptPanelIsVisibleOffscreenAndNonKey() -> Bool {
     guard let panel = promptPanel(), panel.isVisible, !panel.isKeyWindow else { return false }
     return !NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
+  }
+
+  private static func panelPresentationEvidence() -> [String: Any] {
+    guard let panel = promptPanel() else { return ["exists": false] }
+    let intersectsScreen = NSScreen.screens.contains { $0.frame.intersects(panel.frame) }
+    return [
+      "exists": true, "visible": panel.isVisible, "key": panel.isKeyWindow,
+      "intersectsScreen": intersectsScreen,
+      "originX": panel.frame.origin.x, "originY": panel.frame.origin.y,
+    ]
   }
 
   private static func windowsOnScreen() -> Bool {

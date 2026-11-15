@@ -21,7 +21,7 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         tests = (LAYER / "devtools/shaar_devtools_unittest.cc").read_text()
         self.assertIn("SHAAR_OP_PROBE_TRUSTED_TEXT = 1099", header)
         self.assertIn("ParseProbeTextArguments", source)
-        self.assertIn("widget->ImeCommitText", source)
+        self.assertIn("widget->GetWidgetInputHandler()->ImeCommitText", source)
         self.assertIn("ProbeWindowAllowed", source)
         for field in (
             "username", "password", "card-name", "card-number", "card-exp-month",
@@ -59,7 +59,7 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertIn("submitTrustedProbeTextInTabID", bridge)
         self.assertIn("shaarDevToolsSubmit:1099", bridge)
         self.assertIn("valuesEntered", probe)
-        self.assertIn("document.getElementById(id)?.value===value", probe)
+        self.assertIn("valueMatches: field?.value === value", probe)
         self.assertNotIn('value="parity-user"', fixture)
         self.assertNotIn('value="4111111111111111"', fixture)
         self.assertNotIn('value="Parity Probe"', fixture)
@@ -74,6 +74,20 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertIn("if (!ProbeTrustedInputSurfaceAllowed(view))", text_handler)
         self.assertNotIn("view.window.isVisible", text_handler)
         self.assertNotIn("for (NSWindow *window in NSApp.windows)", text_handler)
+
+    def test_native_preflight_diagnostics_are_testing_only_and_redacted(self):
+        bridge = BRIDGE.read_text()
+        self.assertIn('NSLog(@"Trusted probe text: trusted input failed at %s", stage)', bridge)
+        self.assertIn('NSLog(@"Trusted probe text: trace: %s", stage)', bridge)
+        self.assertIn('std::strcmp(testing, "1") == 0 && ProbeCaptureAllowed()', bridge)
+        self.assertIn('LogTrustedInputTrace("bridge handler entered")', bridge)
+        self.assertIn('LogTrustedInputFailure("engine request rejected")', bridge)
+        self.assertIn('LogTrustedInputFailure("engine reply not submitted")', bridge)
+        self.assertIn('LogTrustedInputFailure("invalid fixture text request")', bridge)
+        self.assertIn('LogTrustedInputFailure("render surface unavailable")', bridge)
+        self.assertIn('LogTrustedInputFailure("tab ownership unavailable")', bridge)
+        self.assertNotIn('LogTrustedInputFailure([elementID', bridge)
+        self.assertNotIn('LogTrustedInputFailure([text', bridge)
 
     def test_frame_capture_retries_transient_unpresented_frames(self):
         probe = PROBE.read_text()
@@ -94,19 +108,52 @@ class SavePromptTrustedTextTests(unittest.TestCase):
     def test_trusted_input_failures_report_only_the_stage(self):
         source = (LAYER / "devtools/shaar_devtools.cc").read_text()
         for stage in (
-            "capture lease wait timed out", "target unavailable at start",
+            "capture lease wait timed out",
+            "target unavailable while waiting for capture lease",
+            "target unavailable at start",
             "target unavailable before snapshot", "forced snapshot was empty",
             "tab disappeared after snapshot", "target unavailable after snapshot",
             "main frame unavailable after snapshot",
             "element point unavailable or outside view",
             "target unavailable at element point",
             "target unavailable before dispatch",
-            "target unavailable before text commit", "capture timed out",
+            "focused frame widget unavailable before text commit", "capture timed out",
         ):
             with self.subTest(stage=stage):
                 self.assertIn(f'Fail("{stage}")', source)
         self.assertIn('std::string("trusted input failed at ") + stage', source)
         self.assertNotIn('std::string("trusted input failed at ") + text_', source)
+
+    def test_trusted_text_focuses_widget_and_waits_for_renderer_commit_ack(self):
+        source = (LAYER / "devtools/shaar_devtools.cc").read_text()
+        commit = source[source.index("  void CommitText()"):
+                        source.index("  void CompleteSuccess()", source.index("  void CommitText()"))]
+        self.assertIn("focused_widget->Focus();", commit)
+        self.assertIn("focused_widget->GetWidgetInputHandler()->ImeCommitText(", commit)
+        self.assertIn("ProbeTrustedInput::OnTextCommitted", commit)
+        self.assertIn("void OnTextCommitted()", commit)
+        self.assertNotIn("CompleteSuccess();", commit.split("void OnTextCommitted()", 1)[0])
+        self.assertIn("CompleteSuccess();", commit.split("void OnTextCommitted()", 1)[1])
+
+    def test_save_prompt_probe_reports_field_state_without_values(self):
+        probe = PROBE.read_text()
+        self.assertIn('"trustedTextDiagnostics": trustedTextDiagnostics', probe)
+        self.assertIn("valueMatches: field?.value === value", probe)
+        self.assertIn("valueLength: field instanceof HTMLInputElement ? field.value.length : null", probe)
+        self.assertIn("activeElementIsInput: active instanceof HTMLInputElement", probe)
+        self.assertNotIn("value:field.value", probe)
+    def test_text_commit_targets_the_focused_frame_widget(self):
+        source = (LAYER / "devtools/shaar_devtools.cc").read_text()
+        commit = source[source.index("  void CommitText()"):
+                        source.index("  void CompleteSuccess()", source.index("  void CommitText()"))]
+        self.assertIn("contents->GetFocusedFrame()", commit)
+        self.assertIn("focused_frame->GetRenderWidgetHost()", commit)
+        self.assertIn('Fail("focused frame widget unavailable before text commit")', commit)
+        self.assertIn("focused_widget->input_router()->MakeActive()", commit)
+        self.assertIn("focused_widget->GetWidgetInputHandler()->SetFocus(", commit)
+        self.assertIn("blink::mojom::FocusState::kFocused", commit)
+        self.assertIn("focused_widget->GetWidgetInputHandler()->ImeCommitText(", commit)
+        self.assertNotIn("auto* widget = Activate();", commit)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,10 @@ EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
 DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "
 TRUSTED_INPUT_FAILURE_PREFIX = "trusted input failed at "
 TRUSTED_INPUT_FAILURE_STAGES = {
-    "capture lease unavailable", "target unavailable at start",
+    "invalid fixture text request", "render surface unavailable",
+    "engine request rejected", "engine reply not submitted",
+    "tab ownership unavailable", "capture lease wait timed out",
+    "target unavailable while waiting for capture lease", "target unavailable at start",
     "target unavailable before snapshot", "forced snapshot was empty",
     "tab disappeared after snapshot", "target unavailable after snapshot",
     "main frame unavailable after snapshot",
@@ -170,6 +173,64 @@ def trusted_input_failure_stages(output):
     return stages
 
 
+def safe_trusted_text_diagnostics(report):
+    """Keep field outcomes while excluding DOM values and arbitrary report data."""
+    diagnostics = report.get("trustedTextDiagnostics", [])
+    if not isinstance(diagnostics, list):
+        return []
+    safe = []
+    for diagnostic in diagnostics:
+        if not isinstance(diagnostic, dict):
+            continue
+        fields = diagnostic.get("fields", [])
+        safe_fields = []
+        if isinstance(fields, list):
+            for field in fields:
+                if not isinstance(field, dict):
+                    continue
+                safe_fields.append({
+                    key: field[key]
+                    for key in ("id", "present", "valueMatches", "valueLength", "focused")
+                    if key in field
+                })
+        safe.append({
+            "valuesEntered": diagnostic.get("valuesEntered") is True,
+            "fields": safe_fields,
+            "activeElementIsInput": diagnostic.get("activeElementIsInput") is True,
+            "activeInputType": diagnostic.get("activeInputType"),
+        })
+    return safe
+
+
+def profile_autofill_preferences(data_root):
+    """Read only the three booleans that gate password and Autofill offers."""
+    evidence = []
+    for path in sorted(data_root.rglob("Preferences")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            root = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(root, dict):
+            continue
+        autofill = root.get("autofill")
+        if not isinstance(autofill, dict):
+            autofill = {}
+        values = {
+            "credentialsEnableService": root.get("credentials_enable_service"),
+            "autofillProfileEnabled": autofill.get("profile_enabled"),
+            "autofillCreditCardEnabled": autofill.get("credit_card_enabled"),
+        }
+        if any(isinstance(value, bool) for value in values.values()):
+            evidence.append({
+                "profile": str(path.parent.relative_to(data_root)),
+                **{key: value for key, value in values.items()
+                   if isinstance(value, bool)},
+            })
+    return evidence
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
@@ -184,6 +245,7 @@ def main():
         parser.error(f"Missing verification app: {executable}")
     before = crash_names()
     screenshots = {}
+    autofill_preferences = []
     with FixtureServer(("127.0.0.1", 0), Fixture) as server, FixtureServer(
         ("127.0.0.1", 0), Fixture
     ) as never_server:
@@ -207,7 +269,8 @@ def main():
             environment.update(HOME=str(home), CFFIXED_USER_HOME=str(home),
                                SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
             command = [
-                str(executable), "--probe-data-dir", str(root),
+                str(executable), "--enable-logging=stderr", "--log-level=0",
+                "--probe-data-dir", str(root),
                 "--save-prompt-probe", str(report_path), page, never_page,
             ]
             if options.locale == "he":
@@ -232,6 +295,7 @@ def main():
             screenshots = copy_prompt_screenshots(
                 root, screenshot_directory(options.receipt, options.locale)
             )
+            autofill_preferences = profile_autofill_preferences(root / "Chromium")
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
         never_server.shutdown()
@@ -252,6 +316,8 @@ def main():
         "windowsOnScreen": report.get("windowsOnScreen"),
         "renderSurface": report.get("renderSurface"),
         "rows": report.get("rows", []), "submittedForms": submitted_forms,
+        "trustedTextDiagnostics": safe_trusted_text_diagnostics(report),
+        "autofillPreferences": autofill_preferences,
         "submissionCounts": submission_counts,
         "diagnosticStages": diagnostics,
         "trustedInputFailures": trusted_input_failures,

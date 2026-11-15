@@ -1443,11 +1443,11 @@ final class BrowserStore {
 
   @discardableResult
   func requestSavePrompt(_ request: SavePromptRequest) -> Bool {
-    guard !isPrivate else { return false }
-    if savePrompt?.id == request.id { return savePrompt == request }
-    guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else {
+    guard let request = request.boundToCurrentPage(in: session, inPrivateWindow: isPrivate) else {
       return false
     }
+    if savePrompt?.id == request.id { return savePrompt == request }
+    guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else { return false }
     guard let pageURL = session.selectedPage?.tab.url,
       let cleanedPageURL = cleanedSavePromptPageURL(pageURL)
     else { return false }

@@ -65,6 +65,25 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
     return Self.samePage(current, pageURL) && Self.sameOrigin(current, origin)
   }
 
+  /// Binds Chromium's origin-only offer envelope to the selected page without copying its path
+  /// into the bridge payload. Once accepted, the stored request still requires an exact page match.
+  public func boundToCurrentPage(
+    in session: BrowserSession, inPrivateWindow: Bool = false
+  ) -> SavePromptRequest? {
+    guard !inPrivateWindow,
+      session.selectedSpace.profileID == profileID,
+      session.selectedPage?.tab.id == tabID,
+      session.profileID(forTabID: tabID) == profileID,
+      let current = session.selectedPage?.tab.url,
+      Self.sameOrigin(current, origin),
+      Self.samePage(current, pageURL)
+        || (Self.sameOrigin(origin, pageURL) && Self.isOrigin(pageURL))
+    else { return nil }
+    return SavePromptRequest(
+      id: id, kind: kind, profileID: profileID, tabID: tabID, windowID: windowID,
+      origin: origin, pageURL: Self.cleanedPage(current), detail: detail, update: update)
+  }
+
   public func decision(_ choice: Decision, matchesSession: Bool) -> Decision {
     guard matchesSession else { return .dismiss }
     if choice == .never && !allowsNever { return .dismiss }
@@ -171,14 +190,33 @@ public struct SavePromptRequest: Identifiable, Equatable, Sendable {
   }
 
   private static func samePage(_ lhs: URL, _ rhs: URL) -> Bool {
-    guard var components = URLComponents(url: lhs, resolvingAgainstBaseURL: false) else {
-      return false
+    cleanedPage(lhs) == cleanedPage(rhs)
+  }
+
+  private static func cleanedPage(_ url: URL) -> URL {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return url
     }
     components.user = nil
     components.password = nil
     components.query = nil
     components.fragment = nil
-    return components.url == rhs
+    return components.url ?? url
+  }
+
+  private init(
+    id: String, kind: Kind, profileID: UUID, tabID: UUID, windowID: String,
+    origin: URL, pageURL: URL, detail: String, update: Bool
+  ) {
+    self.id = id
+    self.kind = kind
+    self.profileID = profileID
+    self.tabID = tabID
+    self.windowID = windowID
+    self.origin = origin
+    self.pageURL = pageURL
+    self.detail = detail
+    self.update = update
   }
 
 }

@@ -88,33 +88,49 @@ class Fixture(BaseHTTPRequestHandler):
         page = self.path.split("?", 1)[0]
         if page == "/password":
             body = f"""<!doctype html><meta charset="utf-8"><title>Password</title>
-<form action="/saved" method="post">
+<form action="/password" method="post" autocomplete="on">
+<label for="username">Email or username</label>
 <input id="username" name="username" autocomplete="username">
+<label for="password">Password</label>
 <input id="password" name="password" type="password" autocomplete="current-password">
 {BUTTON}Sign in</button></form>"""
         elif page == "/login":
             body = """<!doctype html><meta charset="utf-8"><title>Login</title>
-<form>
+<form action="/login" method="post" autocomplete="on">
+<label for="username">Email or username</label>
 <input id="username" name="username" autocomplete="username">
+<label for="password">Password</label>
 <input id="password" name="password" type="password" autocomplete="current-password">
+<button id="login-submit" type="submit">Sign in</button>
 </form>"""
         elif page == "/card":
             body = f"""<!doctype html><meta charset="utf-8"><title>Card</title>
-<form action="/saved" method="post">
+<form action="/card" method="post" autocomplete="on">
+<label for="card-name">Name on card</label>
 <input id="card-name" name="cc-name" autocomplete="cc-name">
-<input id="card-number" name="cc-number" type="tel" autocomplete="cc-number">
+<label for="card-number">Card number</label>
+<input id="card-number" name="cc-number" inputmode="numeric" autocomplete="cc-number">
+<label for="card-exp-month">Expiration month</label>
 <input id="card-exp-month" name="cc-exp-month" autocomplete="cc-exp-month">
+<label for="card-exp-year">Expiration year</label>
 <input id="card-exp-year" name="cc-exp-year" autocomplete="cc-exp-year">
 {BUTTON}Pay</button></form>"""
         elif page == "/address":
             body = f"""<!doctype html><meta charset="utf-8"><title>Address</title>
-<form action="/saved" method="post">
+<form action="/address" method="post" autocomplete="on">
+<label for="address-name">Full name</label>
 <input id="address-name" name="name" autocomplete="name">
+<label for="address-street">Street address</label>
 <input id="address-street" name="street-address" autocomplete="street-address">
+<label for="address-city">City</label>
 <input id="address-city" name="address-level2" autocomplete="address-level2">
+<label for="address-region">State</label>
 <input id="address-region" name="address-level1" autocomplete="address-level1">
+<label for="address-postal">Postal code</label>
 <input id="address-postal" name="postal-code" autocomplete="postal-code">
+<label for="address-country">Country</label>
 <input id="address-country" name="country-name" autocomplete="country-name">
+<label for="address-email">Email</label>
 <input id="address-email" name="email" type="email" autocomplete="email">
 {BUTTON}Save address</button></form>"""
         elif page == "/saved":
@@ -290,6 +306,12 @@ def saved_in_profile(evidence, profile_id):
     )
 
 
+def password_save_profile_id(rows):
+    """Read the saved profile from the save row, not the earlier dismiss row."""
+    return next((row.get("saveProfileID") for row in rows
+                 if row.get("name") == "password"), None)
+
+
 def storage_diagnostics(output):
     evidence = []
     pattern = re.compile(r"oscrypt|safe storage|keychain|password.?store|addlogin|login data", re.I)
@@ -340,6 +362,7 @@ def main():
     screenshots = {}
     autofill_preferences = []
     password_evidence = []
+    save_profile_id = None
     keychain_evidence = verification_keychain_evidence(options.app)
     with FixtureServer(("127.0.0.1", 0), Fixture) as server, FixtureServer(
         ("127.0.0.1", 0), Fixture
@@ -379,6 +402,7 @@ def main():
                 env=environment, capture_output=True, text=True, timeout=180, check=False,
             )
             report = json.loads(report_path.read_text()) if report_path.is_file() else {}
+            save_profile_id = password_save_profile_id(report.get("rows", []))
             diagnostics = []
             combined_output = result.stdout + "\n" + result.stderr
             trusted_input_failures = trusted_input_failure_stages(combined_output)
@@ -396,7 +420,7 @@ def main():
             password_evidence = profile_password_evidence(
                 root / "Chromium", "parity-user",
                 f"http://127.0.0.1:{server.server_address[1]}/",
-                (report.get("rows") or [{}])[0].get("saveProfileID"),
+                save_profile_id,
             )
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
@@ -424,9 +448,7 @@ def main():
         "storageDiagnostics": storage_diagnostics(combined_output),
         "autofillPreferences": autofill_preferences,
         "passwordStoreEvidence": password_evidence,
-        "passwordSaveStoredInSaveProfile": saved_in_profile(
-            password_evidence, (report.get("rows") or [{}])[0].get("saveProfileID")
-        ),
+        "passwordSaveStoredInSaveProfile": saved_in_profile(password_evidence, save_profile_id),
         "keychainEvidence": keychain_evidence,
         "submissionCounts": submission_counts,
         "diagnosticStages": diagnostics,
@@ -442,9 +464,7 @@ def main():
         and set(screenshots) == (
             {"password-save"} if options.password_only else set(PROMPT_NAMES)
         )
-        and saved_in_profile(
-            password_evidence, (report.get("rows") or [{}])[0].get("saveProfileID")
-        )
+        and saved_in_profile(password_evidence, save_profile_id)
         and not crashes,
     }
     options.receipt.parent.mkdir(parents=True, exist_ok=True)

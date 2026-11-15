@@ -12,11 +12,35 @@ import Testing
   @Test func actionMatrixCoversSaveAndDismissForEachPromptAndNeverForPasswordsOnly() {
     #expect(
       ShaarSavePromptProbeScenario.all == [
-        .save(.password), .dismiss(.password),
-        .save(.card), .dismiss(.card),
-        .save(.address), .dismiss(.address),
+        .dismiss(.password), .save(.password),
+        .dismiss(.card), .save(.card),
+        .dismiss(.address), .save(.address),
         .neverPassword,
       ])
+  }
+
+  @Test func cardFixtureExpiryRemainsInTheFuture() {
+    let currentYear = Calendar.current.component(.year, from: .now)
+    let fixtureYear = Int(ShaarSavePromptProbe.cardExpiryYear(relativeTo: .now))
+
+    #expect(fixtureYear == currentYear + 4)
+  }
+
+  @Test func normalSavePreferencesAreSeededForTheWorkspaceProfiles() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let profileID = UUID()
+    let preferences = try ShaarSavePromptProbe.seedNormalProfileSavePreferences(
+      profileIDs: [profileID], dataRoot: root)
+    let values = try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: preferences[0])) as? [String: Any])
+    let autofill = try #require(values["autofill"] as? [String: Any])
+
+    #expect(preferences[0].deletingLastPathComponent().lastPathComponent
+      == "Profile \(profileID.uuidString.lowercased())")
+    #expect(values["credentials_enable_service"] as? Bool == true)
+    #expect(autofill["profile_enabled"] as? Bool == true)
+    #expect(autofill["credit_card_enabled"] as? Bool == true)
   }
 
   @Test func fixtureMustUseHTTPOnTheIPv4LoopbackAddress() {
@@ -69,4 +93,20 @@ import Testing
     #expect(window.alphaValue == 1)
     #expect(!window.ignoresMouseEvents)
   }
+
+  @Test func promptPanelFrameMovesOutsideEveryDisplay() {
+    let screens = [
+      NSRect(x: 0, y: 0, width: 1_440, height: 900),
+      NSRect(x: 1_440, y: 0, width: 1_920, height: 1_080),
+    ]
+    let frame = NSRect(x: 1_200, y: 600, width: 320, height: 180)
+
+    let offscreen = ShaarSavePromptProbe.offscreenPanelFrame(
+      frame, visibleScreenFrames: screens)
+
+    #expect(!screens.contains { $0.intersects(offscreen) })
+    #expect(offscreen.size == frame.size)
+    #expect(offscreen.origin.y == frame.origin.y)
+  }
+
 }

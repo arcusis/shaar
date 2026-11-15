@@ -2556,6 +2556,12 @@
         }
       }
     },
+    "Stop Loading": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Stop Loading" } },
+        "he": { "stringUnit": { "state": "translated", "value": "עצירת הטעינה" } }
+      }
+    },
     "Reload this page (Command-R)": {
       "localizations": {
         "en": {

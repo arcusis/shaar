@@ -123,6 +123,10 @@ struct CommandPanel: View {
       TextField(Self.searchPrompt, text: $store.commandQuery)
         .textFieldStyle(.plain)
         .font(.system(size: 20))
+        .onKeyPress(.escape) {
+          guard store.stopCurrentPage() else { return .ignored }
+          return .handled
+        }
         .focused($searchIsFocused)
         .onSubmit { acceptCommand() }
         .accessibilityLabel(Self.searchPrompt)

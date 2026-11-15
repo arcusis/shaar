@@ -332,9 +332,14 @@ import os
         reloaded && settledSlow && repeatedRequest ? "pass" : "fail",
         "Reload during load inFlight=\(stillLoading), reload=\(reloaded), settled=\(settledSlow), repeatedRequest=\(repeatedRequest), requests=\(reloadRequests ?? "missing"), URL=\(context.store.session.selectedPage?.tab.url.absoluteString ?? "missing"), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
         ["elapsedMs": milliseconds(since: slowStarted)]))
-    runtime.goBack(inTabID: current.uuidString)
-    let backPath = await until(attempts: 100, condition: { settled(context, path: "/nav/1") })
-      ? context.store.session.selectedPage?.tab.url.path : nil
+    let backAvailable = await until(attempts: 40, condition: { canGoBack(context) })
+    if backAvailable { runtime.goBack(inTabID: current.uuidString) }
+    var backPath: String?
+    if backAvailable,
+      await until(attempts: 100, condition: { settled(context, path: "/nav/1") })
+    {
+      backPath = context.store.session.selectedPage?.tab.url.path
+    }
     runtime.goForward(inTabID: current.uuidString)
     let forwardPath = await until(attempts: 100, condition: { settled(context, path: reloadPath) })
       ? context.store.session.selectedPage?.tab.url.path : nil
@@ -343,8 +348,25 @@ import os
     rows.append(
       row(
         "churn-reload-history", reloadHistoryOK ? "pass" : "fail",
-        "Back after reload reached \(backPath ?? "nothing"); forward reached \(forwardPath ?? "nothing")."
+        "Back enabled after reload=\(backAvailable); back reached \(backPath ?? "nothing"); forward reached \(forwardPath ?? "nothing")."
       ))
+    let committedPath = context.store.session.selectedPage?.tab.url.path
+    let stopPath = "/slow-reload/stop-\(UUID().uuidString)"
+    let stopStarted = context.engine.navigateCurrentPage(to: url(base, path: stopPath))
+    var stopLoadingStarted = false
+    if stopStarted {
+      stopLoadingStarted = await until(attempts: 40, condition: { pageIsLoading(context) })
+    }
+    let stopped = stopLoadingStarted && runtime.stopTabID(
+      current.uuidString, profileID: context.store.session.selectedSpace.profileID.uuidString)
+    var stopSettled = false
+    if stopped {
+      stopSettled = await until(attempts: 60, condition: { !pageIsLoading(context) })
+    }
+    let stopPreservedPage = context.store.session.selectedPage?.tab.url.path == committedPath
+    rows.append(row(
+      "churn-stop-loading", stopLoadingStarted && stopped && stopSettled && stopPreservedPage ? "pass" : "fail",
+      "Started=\(stopLoadingStarted), stop accepted=\(stopped), loading ended=\(stopSettled), committed page preserved=\(stopPreservedPage)."))
     let failures = context.store.rendererFailures.count
     rows.append(
       row(
@@ -1026,6 +1048,11 @@ import os
     return context.engine.pages[id]?.loading == true
   }
 
+  private static func canGoBack(_ context: NativeBrowserContext) -> Bool {
+    guard let id = context.store.session.selectedPage?.tab.id else { return false }
+    return context.engine.pages[id]?.canGoBack == true
+  }
+
   private static func settled(_ context: NativeBrowserContext, path: String) -> Bool {
     guard let id = context.store.session.selectedPage?.tab.id,
       context.store.session.selectedPage?.tab.url.path == path
@@ -1110,6 +1137,12 @@ import os
     backPath: String?, forwardPath: String?, expectedReloadPath: String
   ) -> Bool {
     backPath == "/nav/1" && forwardPath == expectedReloadPath
+  }
+
+  static func stopLoadingPassed(
+    started: Bool, accepted: Bool, loadingEnded: Bool, committedPagePreserved: Bool
+  ) -> Bool {
+    started && accepted && loadingEnded && committedPagePreserved
   }
 
   static func isLoopbackFixtureURL(_ value: URL?) -> Bool {

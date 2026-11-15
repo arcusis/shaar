@@ -185,6 +185,7 @@ final class PrivateBrowserHost {
     owner.store.onSessionChanged = nil
     owner.store.onCloseTab = nil
     owner.store.onReloadPage = nil
+    owner.store.onStopPage = nil
     owner.store.onNavigatePage = nil
     owner.store.onFindRequest = nil
     owner.store.onStopFinding = nil

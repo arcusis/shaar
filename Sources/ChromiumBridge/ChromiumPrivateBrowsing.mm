@@ -408,6 +408,11 @@ void PrivateLifecycleFinish(void (^completion)(BOOL), BOOL accepted) {
                         contextID:contextID payload:@{@"schemaVersion": @1,
                                                       @"mode": nativeMode}];
 }
+- (BOOL)stopPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+               contextID:(NSString *)contextID {
+  return [self privateTabOperation:SHAAR_OP_TAB_STOP tabID:tabID windowID:windowID
+                        contextID:contextID payload:@{@"schemaVersion": @1}];
+}
 - (BOOL)goBackPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                  contextID:(NSString *)contextID {
   NSDictionary *tab = ARCPrivateShaarState(self)[@"tabs"][tabID];

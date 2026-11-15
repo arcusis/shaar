@@ -172,6 +172,7 @@ final class BrowserStore {
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID, PageReloadMode) -> Bool)?
+  @ObservationIgnored var onStopPage: ((UUID, UUID) -> Bool)?
   /// Sends a media command to a live tab; false when the engine cannot deliver it.
   @ObservationIgnored var onMediaCommand: ((UUID, MediaCommand) -> Bool)?
   /// A site's automatic picture-in-picture setting changed for a profile.
@@ -925,6 +926,17 @@ final class BrowserStore {
       return false
     }
     return true
+  }
+
+  @discardableResult
+  func stopCurrentPage() -> Bool {
+    guard let tab = session.selectedPage?.tab, canStopCurrentPage else { return false }
+    return onStopPage?(tab.id, session.selectedSpace.profileID) == true
+  }
+
+  var canStopCurrentPage: Bool {
+    guard let id = session.selectedPage?.tab.id else { return false }
+    return engine?.pages[id]?.loading == true || privatePage?.pages[id]?.loading == true
   }
 
   func nativeTabChanged(_ id: UUID, url: URL, title: String) {

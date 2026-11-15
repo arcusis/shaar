@@ -23,6 +23,21 @@ enum BasicBrowsingPageEvidence {
   }
 }
 
+enum BasicBrowsingNavigationEvidence {
+  static func searchDestination(_ destination: URL, matches engine: BrowserSearchEngine, query: String)
+    -> Bool
+  {
+    guard let endpoint = URLComponents(string: engine.searchEndpoint.url),
+      let actual = URLComponents(url: destination, resolvingAgainstBaseURL: false)
+    else { return false }
+    let queryItems = actual.queryItems ?? []
+    return actual.scheme == endpoint.scheme && actual.host == endpoint.host
+      && actual.path == endpoint.path && queryItems.count == 1
+      && queryItems[0].name == engine.searchEndpoint.queryName
+      && queryItems[0].value == query
+  }
+}
+
 /// A short user-flow smoke in the normal browser store, backed by the disposable engine fixture.
 @MainActor
 struct BasicBrowsingProbe {
@@ -55,12 +70,16 @@ struct BasicBrowsingProbe {
     checks.append("Command-T typing opens no menu or picker")
 
     let searchText = "shaar basic browsing smoke"
+    let searchEngine = store.preferences.searchEngine(for: store.session.selectedSpace.profileID)
     store.commandQuery = searchText
     guard
       let searchURL = NavigationInput.destination(
-        for: searchText,
-        searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID))
+        for: searchText, searchEngine: searchEngine)
     else { throw Failure("Search query did not produce a destination.") }
+    try expect(
+      BasicBrowsingNavigationEvidence.searchDestination(
+        searchURL, matches: searchEngine, query: searchText),
+      "address bar search targets the selected default engine with the entered query")
     store.acceptCommand()
     guard let searchTab = store.session.selectedSpace.selectedTabID else {
       throw Failure("Search did not open a tab.")
@@ -69,7 +88,22 @@ struct BasicBrowsingProbe {
       throw Failure("Search command did not navigate to its selected result.")
     }
     try await waitForLivePage(searchTab, expectedHost: searchURL.host())
+    checks.append("address bar search targets the selected default engine with the entered query")
     checks.append("normal window searches and lands on live results")
+
+    let typedURL = fixture.appending(path: "typed-address-entry")
+    store.showCommand()
+    store.commandEditsCurrentURL = true
+    store.commandQuery = typedURL.absoluteString
+    guard NavigationInput.address(for: store.commandQuery) == typedURL else {
+      throw Failure("The address bar did not parse the typed fixture URL as a web address.")
+    }
+    store.acceptCommand()
+    guard let typedTab = store.session.selectedSpace.selectedTabID,
+      store.session.selectedSpace.selectedTab?.url == typedURL
+    else { throw Failure("Typing a web URL in the address bar did not navigate to it.") }
+    try await waitForLivePage(typedTab, expectedHost: fixture.host())
+    checks.append("address bar typed URL opens a live page")
 
     var opened: [UUID] = []
     for name in ["smoke-one", "smoke-two", "smoke-three"] {

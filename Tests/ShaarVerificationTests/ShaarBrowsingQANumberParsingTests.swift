@@ -9,6 +9,7 @@ import Testing
 @Suite @MainActor struct ShaarBrowsingQANumberParsingTests {
   @Test func wholeNumberTrimsAndParsesIntegerResponseValues() {
     #expect(ShaarBrowsingQA.wholeNumber(" 200\n") == 200)
+    #expect(ShaarBrowsingQA.wholeNumber("\"2\"") == 2)
     #expect(ShaarBrowsingQA.wholeNumber("0") == 0)
     #expect(ShaarBrowsingQA.wholeNumber("-1") == -1)
   }

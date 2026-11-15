@@ -330,7 +330,7 @@ import os
       row(
         "churn-reload-during-load",
         reloaded && settledSlow && repeatedRequest ? "pass" : "fail",
-        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), requests=\(reloadRequests ?? "missing"), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
+        "Reload during load inFlight=\(stillLoading), reload=\(reloaded), settled=\(settledSlow), repeatedRequest=\(repeatedRequest), requests=\(reloadRequests ?? "missing"), URL=\(context.store.session.selectedPage?.tab.url.absoluteString ?? "missing"), finished in \(milliseconds(since: slowStarted)) ms at \(landed).",
         ["elapsedMs": milliseconds(since: slowStarted)]))
     runtime.goBack(inTabID: current.uuidString)
     let backPath = await until(attempts: 100, condition: { settled(context, path: "/nav/1") })
@@ -1094,9 +1094,10 @@ import os
   }
 
   static func wholeNumber(_ value: String?) -> Int? {
-    guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+    guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
       return nil
     }
+    let text = (try? JSONDecoder().decode(String.self, from: Data(raw.utf8))) ?? raw
     return Int(text)
   }
 

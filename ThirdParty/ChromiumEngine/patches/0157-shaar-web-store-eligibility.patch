@@ -1,0 +1,46 @@
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -180,6 +180,7 @@
+ #include "third_party/blink/public/web/web_plugin_container.h"
+ #include "third_party/blink/public/web/web_plugin_params.h"
+ #include "third_party/blink/public/web/web_security_policy.h"
++#include "third_party/blink/public/web/web_script_source.h"
+ #include "third_party/blink/public/web/web_view.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/page_transition_types.h"
+@@ -1491,6 +1492,34 @@
+ 
+ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
+     content::RenderFrame* render_frame) {
++  if (render_frame && render_frame->IsMainFrame() &&
++      render_frame->GetWebFrame()) {
++    const GURL url(render_frame->GetWebFrame()->GetDocument().Url());
++    if (url.SchemeIs("https") && url.host() == "chromewebstore.google.com" &&
++        url.EffectiveIntPort() == 443) {
++      // The Web Store's browser eligibility gate arrives as IJ_values[24].
++      // Shaar has the required install APIs, but the store currently sets this
++      // flag to false even with Chrome client hints. Change only this gate on
++      // the exact Web Store origin before its page scripts initialize.
++      constexpr char kWebStoreEligibilityScript[] = R"JS(
++        Object.defineProperty(window, 'IJ_values', {
++          configurable: true,
++          set(values) {
++            if (Array.isArray(values) && values.length === 56 &&
++                values[6] === 'chromewebstore.google.com' &&
++                values[24] === false) {
++              values[24] = true;
++            }
++            Object.defineProperty(window, 'IJ_values', {
++              configurable: true, writable: true, value: values
++            });
++          }
++        });
++      )JS";
++      render_frame->GetWebFrame()->ExecuteScript(blink::WebScriptSource(
++          blink::WebString::FromUtf8(kWebStoreEligibilityScript)));
++    }
++  }
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   extensions::ExtensionsRendererClient::Get()->RunScriptsAtDocumentStart(
+       render_frame);

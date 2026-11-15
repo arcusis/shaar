@@ -26,6 +26,20 @@ struct BasicBrowsingProbeTests {
     #expect(!BasicBrowsingPageEvidence.isLive(["ready": "complete"], expectedHost: nil))
   }
 
+  @Test func addressBarSearchEvidenceRequiresTheSelectedEndpointAndQuery() throws {
+    let expected = try #require(URL(string: "https://www.google.com/search?q=shaar%20smoke"))
+    #expect(
+      BasicBrowsingNavigationEvidence.searchDestination(
+        expected, matches: .google, query: "shaar smoke"))
+    #expect(
+      !BasicBrowsingNavigationEvidence.searchDestination(
+        expected, matches: .google, query: "different query"))
+    #expect(
+      !BasicBrowsingNavigationEvidence.searchDestination(
+        try #require(URL(string: "https://duckduckgo.com/?q=shaar%20smoke")),
+        matches: .google, query: "shaar smoke"))
+  }
+
   @Test func blackCaptureFailsAndColoredPageCapturePasses() throws {
     let bitmap = try #require(
       NSBitmapImageRep(

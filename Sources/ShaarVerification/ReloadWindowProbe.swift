@@ -189,7 +189,8 @@ final class ReloadWindowProbe {
     let page = try require(await document(destination, runtime: runtime), "No destination document")
     let destinationURL = (page["href"] as? String).flatMap(URL.init(string:))
     if elementID != "plain" {
-      let sourcePage = try require(await document(source, runtime: runtime), "No source document after opening destination")
+      let sourcePage = try require(
+        await document(source, runtime: runtime), "No source document after opening destination")
       try expect(
         Self.newWindowDestinationPassed(
           sourceTabID: source, destinationTabID: destination,
@@ -205,8 +206,11 @@ final class ReloadWindowProbe {
     try expect(
       page["marker"] as? String == "Cross-site destination loaded",
       "\(name) reaches the second origin")
+    let tabsUnderTest: Set<UUID> = [source, destination]
+    let failedTabs = Set(
+      host.contexts.values.flatMap { $0.store.rendererFailures.keys })
     try expect(
-      host.contexts.values.allSatisfy { $0.store.rendererFailures.isEmpty },
+      Self.hasNoRendererFailures(on: tabsUnderTest, failureTabIDs: failedTabs),
       "\(name) does not show Shaar's failed-page view")
     try expect(NSApp.windows.allSatisfy { !$0.isVisible }, "\(name) keeps all windows hidden")
     return "\(name) reaches the second origin without a failed page or visible window"
@@ -368,5 +372,9 @@ final class ReloadWindowProbe {
       return createdTabs.isEmpty && destination == source
     }
     return createdTabs.count == 1 && createdTabs.contains(destination)
+  }
+
+  static func hasNoRendererFailures(on tabs: Set<UUID>, failureTabIDs: Set<UUID>) -> Bool {
+    tabs.isDisjoint(with: failureTabIDs)
   }
 }

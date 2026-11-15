@@ -100,4 +100,18 @@ import Testing
         destinationHref: "http://localhost:41000/cross-site-b",
         marker: ""))
   }
+
+  @Test func failedPageCheckOnlyConsidersTheSourceAndDestinationTabs() {
+    let source = UUID()
+    let destination = UUID()
+    let unrelated = UUID()
+    let tested: Set<UUID> = [source, destination]
+
+    #expect(
+      ReloadWindowProbe.hasNoRendererFailures(on: tested, failureTabIDs: [unrelated]))
+    #expect(
+      !ReloadWindowProbe.hasNoRendererFailures(on: tested, failureTabIDs: [source]))
+    #expect(
+      !ReloadWindowProbe.hasNoRendererFailures(on: tested, failureTabIDs: [destination]))
+  }
 }

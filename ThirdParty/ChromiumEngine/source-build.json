@@ -49,9 +49,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "77e003655c299d5c7d225a0b4cf8bd84df34e9e408808204b798160a0d2a9b51",
+    "sha256": "47b843adabc3cdf15d9fd43034f1e8c00418c81ec0f407d03b8a3545ebbfda9b",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "89b6468c4f05aa178dbdeb078882ff36c271ad0f98ac9053be2b6c906de9fe1b",
+      "chrome/browser/shaar/BUILD.gn": "9a0d6821e46e4c75d8d90e5774f1eeb9dd267b574aa9e4d3464e791630a1dcb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",
@@ -114,11 +114,11 @@
       "chrome/browser/shaar/media/shaar_media_permission.cc": "35873fd4f5d320ccdaa695470b7c04e988bd50212f68164972861131f4f1405d",
       "chrome/browser/shaar/media/shaar_media_permission.h": "f8f5bf3ae0222238c78b37cdce05aead1acb7277ed5d97bc1d6ebc496357cf02",
       "chrome/browser/shaar/media/shaar_media_unittest.cc": "88e4977f6cc010d0dc968cc1b08a5356ab4c876280e36700c5e8eea35acb960f",
-      "chrome/browser/shaar/navigation/shaar_navigation.cc": "cb60b876b88ef942993017c0543b6bafc5151a1ff8d293764867fa7ec2937ba9",
-      "chrome/browser/shaar/navigation/shaar_navigation.h": "f51befe4b790eb06f2edc54daa5688654609eb85a45ca8895bb8ceebcfe2dd0d",
+      "chrome/browser/shaar/navigation/shaar_navigation.cc": "5bae854761b4cb1c9d58bf74d8deb7602d96083370362fb42a269144f8dd6cfc",
+      "chrome/browser/shaar/navigation/shaar_navigation.h": "a9a740749ee2cb4a3c5d84af0f119c2323875992dd4e092f1caefb927c7b05c6",
       "chrome/browser/shaar/navigation/shaar_navigation_context.h": "2e08bb5166249ecd7ceb38a16a09adbbd10e650f0fe555663928c01c12a38f75",
       "chrome/browser/shaar/navigation/shaar_navigation_lifecycle_adapter.cc": "7ca45a29a16458fafd4fb75c3dd6b2c4bf584dcec5b47397150b5afe6fa7e381",
-      "chrome/browser/shaar/navigation/shaar_navigation_unittest.cc": "792fca86605e573c660fb7cbac3913f01a38542cf2bfd1d9c796c3e2743dd865",
+      "chrome/browser/shaar/navigation/shaar_navigation_unittest.cc": "5582cbffa81f1dbc5442aad037308d96f7ab1909a16bf84050e16d4c66dd5dd9",
       "chrome/browser/shaar/permissions/shaar_permission_prompt.cc": "255abe5f8dc8e72ae925f75502a375d26925988384c6b4b66e4f2b2f0e4ddf64",
       "chrome/browser/shaar/permissions/shaar_permission_prompt.h": "c8c4ec3ee8391a793606bf58420931929eb96589655b93595db54345c3cce961",
       "chrome/browser/shaar/permissions/shaar_permission_prompt_unittest.cc": "354083dcf177da9639269a75415a8065eb37b1a0288528edf7ea870389df1741",
@@ -625,7 +625,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0154-shaar-reload-close-watch-crashes.patch",
-      "sha256": "cd771553f7dd6d711a6fe28c8ed2450e35b302208190c6de31460bc4d12daa65"
+      "sha256": "410afd8f2d488e0de47adfbd1bfc52543903c1a4bb07aa6bdf96adf725558d4f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0155-shaar-web-store-install.patch",

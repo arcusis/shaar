@@ -179,6 +179,8 @@ source_set("engine") {
     "//components/content_settings/core/common",
     "//components/language/core/browser:browser",
     "//components/prefs",
+    "//components/embedder_support:user_agent",
+    "//components/version_info",
     "//components/history/core/browser",
     "//components/keep_alive_registry",
     # BEGIN site_data

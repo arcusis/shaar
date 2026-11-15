@@ -546,8 +546,21 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             return request
 
     def do_GET(self):
-        path = urlparse(self.path).path
-        if path.startswith('/private-window-') and path.endswith('-slow'):
+        request_url = urlparse(self.path)
+        path = request_url.path
+        route = path.rsplit('/', 1)[-1]
+        if path.endswith('/private-navigation-count'):
+            target = parse_qs(request_url.query).get('path', [''])[0]
+            with self.private_navigation_requests_lock:
+                count = self.private_navigation_requests.get(target, 0)
+            body = json.dumps({'path': target, 'count': count}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if route.startswith('private-window-') and route.endswith('-slow'):
             request = self.next_private_navigation_request(path)
             time.sleep(1.5)
             body = (f'<!doctype html><html data-arcusis-fixture="v1" '
@@ -987,6 +1000,8 @@ PRIVATE_WINDOW_CHECKS = (
     'lastCloseReopenClearsPrivateData', 'normalSelectionUnchanged', 'staleContextRejected',
     'closedWindowRejected', 'cleanupChildrenClosed', 'cleanupContextsRetired',
     'productHostOwnsPrivateNativeWindow', 'productCommandTUsesPrivateOpaqueSearch',
+    'productPrivateHostRemainsAttachedAcrossTabs',
+    'productPrivateHostRemainsAttachedAfterTabClose',
     'productAlphabetSearchDoesNotOpenPicker', 'productFirstPrivateTabRenders',
     'productSecondPrivateTabRenders', 'productThirdPrivateTabRenders',
     'productPrivateWindowCloseLeavesNoData',
@@ -1212,6 +1227,12 @@ def validate_private_window_report(root, phase, report):
         canonical_run = False
     digest = evidence.get('historyPathDigest')
     workspace_digest = evidence.get('workspaceSHA256')
+    private_uuid_marker = disk_audit.get('privateUUIDMarker') if isinstance(disk_audit, dict) else None
+    normal_uuid_matches = (
+        disk_audit.get('normalProfileUUIDMatches') if isinstance(disk_audit, dict) else None)
+    private_uuid_matches = disk_audit.get('privateUUIDMatches') if isinstance(disk_audit, dict) else None
+    post_close_uuid_matches = (
+        disk_audit.get('postCloseUUIDMatches') if isinstance(disk_audit, dict) else None)
     screenshot_digest = evidence.get('productScreenshotSHA256')
     renderer_digest = evidence.get('productRendererScreenshotSHA256')
     viewport_audit = evidence.get('productRendererViewportAudit')
@@ -1278,8 +1299,10 @@ def validate_private_window_report(root, phase, report):
             or cleanup.get('contextsRemaining') != 0 or cleanup.get('passed') is not True
             or not isinstance(disk_audit, dict) or disk_audit.get('passed') is not True
             or type(disk_audit.get('newFileCount')) is not int
-            or not isinstance(disk_audit.get('leakedFiles'), list)
-            or disk_audit.get('leakedFiles')
+            or not isinstance(private_uuid_marker, str)
+            or not isinstance(normal_uuid_matches, list) or normal_uuid_matches
+            or not isinstance(private_uuid_matches, list) or private_uuid_matches
+            or not isinstance(post_close_uuid_matches, list) or post_close_uuid_matches
             or disk_audit.get('baselineStage') != 'after-normal-positive-controls'
             or evidence.get('scope') != PRIVATE_WINDOW_SCOPE):
         raise RuntimeError(f'{phase} private-window evidence has failed or mismatched checks/cleanup')

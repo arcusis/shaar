@@ -31,6 +31,7 @@ struct PrivatePrivacyProbe {
   let windowID: String
   let contextID: String
   let normalTabID: String
+  let privateUUIDMarker: String
   let snapshotDiskFiles: () -> [String: String]
   let checkpointNormalControlFiles: (_ before: [String: String], _ after: [String: String]) -> Void
 
@@ -45,7 +46,7 @@ struct PrivatePrivacyProbe {
       observations["engineStatus"] = engineStatus
       checks.merge(PrivatePrivacyEvidence.engineStatus(engineStatus)) { _, value in value }
       checks.merge(PrivatePrivacyEvidence.preferences(prefs)) { _, value in value }
-      let normal = try await evaluate(normalTabID, storageScript)
+      let normal = try await evaluate(normalTabID, storageScript(privateMarker: nil))
       observations["normalStorage"] = normal
       checks["normalStoragePositiveControl"] =
         PrivatePrivacyEvidence.storage(normal, allowed: true, includesIndexedDB: false)
@@ -54,7 +55,7 @@ struct PrivatePrivacyProbe {
       checks["normalNetworkCookiePositiveControl"] =
         normalNetwork["cookieReturned"] as? Bool == true
       checkpointNormalControlFiles(normalControlSnapshot, snapshotDiskFiles())
-      let blocked = try await evaluate(tabID, storageScript)
+      let blocked = try await evaluate(tabID, storageScript(privateMarker: privateUUIDMarker))
       observations["blockedStorage"] = blocked
       checks["privateFirstPartyCookieAndStorageBlocked"] =
         PrivatePrivacyEvidence.storage(blocked, allowed: false, includesIndexedDB: true)
@@ -119,7 +120,7 @@ struct PrivatePrivacyProbe {
       checks["privateSiteControlsAllowAcknowledged"] = model.allowed == true && model.failure == nil
       try captureSiteControls(model)
       try await reload()
-      let allowed = try await evaluate(tabID, storageScript)
+      let allowed = try await evaluate(tabID, storageScript(privateMarker: privateUUIDMarker))
       observations["allowedStorage"] = allowed
       checks["privatePerSiteAllowEnablesCookieAndStorage"] =
         PrivatePrivacyEvidence.storage(allowed, allowed: true, includesIndexedDB: true)
@@ -130,7 +131,7 @@ struct PrivatePrivacyProbe {
       checks["privateSiteControlsRevokeAcknowledged"] =
         model.allowed == false && model.failure == nil
       try await reload()
-      let revoked = try await evaluate(tabID, storageScript)
+      let revoked = try await evaluate(tabID, storageScript(privateMarker: privateUUIDMarker))
       observations["revokedStorage"] = revoked
       checks["privatePerSiteRevokeBlocksStorageAgain"] =
         PrivatePrivacyEvidence.storage(revoked, allowed: false, includesIndexedDB: false)
@@ -181,16 +182,25 @@ struct PrivatePrivacyProbe {
     }
   }
 
-  private var storageScript: String {
-    """
-    (async()=>{const r={};try{document.cookie='privacyJS=1; Path=/; SameSite=Lax';r.cookie=document.cookie.includes('privacyJS=1')}catch{r.cookie=false}
-    for(const [key,store] of [['local','localStorage'],['session','sessionStorage']]){
-      try{window[store].setItem('privacyProbe','1');r[key]=window[store].getItem('privacyProbe')==='1';window[store].removeItem('privacyProbe')}catch{r[key]=false}
-    }
-    r.indexedDB=await new Promise(resolve=>{try{const q=indexedDB.open('privacyProbe');q.onerror=()=>resolve(false);q.onsuccess=()=>{q.result.close();resolve(true)}}catch{resolve(false)}});
-    try{document.cookie='privacyJS=; Max-Age=0; Path=/'}catch{}
-    return r})()
-    """
+  private func storageScript(privateMarker: String?) -> String {
+    let privateMarkerStorage =
+      privateMarker.map { marker in
+        let encoded =
+          (try? JSONEncoder().encode(marker)).flatMap { String(data: $0, encoding: .utf8) }
+          ?? "null"
+        return
+          "for(const name of ['localStorage','sessionStorage']){try{window[name].setItem('private-audit-uuid',\(encoded));window[name].setItem(\(encoded),\(encoded))}catch{}}"
+      } ?? ""
+    return """
+      (async()=>{const r={};try{document.cookie='privacyJS=1; Path=/; SameSite=Lax';r.cookie=document.cookie.includes('privacyJS=1')}catch{r.cookie=false}
+      for(const [key,store] of [['local','localStorage'],['session','sessionStorage']]){
+        try{window[store].setItem('privacyProbe','1');r[key]=window[store].getItem('privacyProbe')==='1';window[store].removeItem('privacyProbe')}catch{r[key]=false}
+      }
+      r.indexedDB=await new Promise(resolve=>{try{const q=indexedDB.open('privacyProbe');q.onerror=()=>resolve(false);q.onsuccess=()=>{q.result.close();resolve(true)}}catch{resolve(false)}});
+      \(privateMarkerStorage)
+      try{document.cookie='privacyJS=; Max-Age=0; Path=/'}catch{}
+      return r})()
+      """
   }
 
   private func reload() async throws {

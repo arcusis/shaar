@@ -74,6 +74,8 @@ final class EngineProbe {
   private let includeBitwarden: Bool
   private let storePageOnlyMode: Bool
   private let bitwardenOnboardingControl: Bool
+  private let libraryOnlyMode: Bool
+  private let bitwardenOnlyMode: Bool
   private let awaitAbruptTermination: Bool
   private let savedTabCapacityMode: Bool
   private let externalAppConsentMode: Bool
@@ -130,7 +132,7 @@ final class EngineProbe {
   private init(
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
     storePageOnlyMode: Bool,
-    bitwardenOnboardingControl: Bool,
+    bitwardenOnboardingControl: Bool, libraryOnlyMode: Bool, bitwardenOnlyMode: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
@@ -147,6 +149,8 @@ final class EngineProbe {
     self.includeBitwarden = includeBitwarden
     self.storePageOnlyMode = storePageOnlyMode
     self.bitwardenOnboardingControl = bitwardenOnboardingControl
+    self.libraryOnlyMode = libraryOnlyMode
+    self.bitwardenOnlyMode = bitwardenOnlyMode
     self.awaitAbruptTermination = awaitAbruptTermination
     self.savedTabCapacityMode = savedTabCapacityMode
     self.externalAppConsentMode = externalAppConsentMode
@@ -278,8 +282,10 @@ final class EngineProbe {
       else {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }
-      let includeBitwarden = arguments.contains("--bitwarden")
       let storePageOnlyMode = arguments.contains("--probe-store-page-only")
+      let libraryOnlyMode = arguments.contains("--probe-library-only")
+      let bitwardenOnlyMode = arguments.contains("--probe-bitwarden-only")
+      let includeBitwarden = arguments.contains("--bitwarden") || bitwardenOnlyMode
       let bitwardenOnboardingControl = arguments.contains("--bitwarden-onboarding-control")
       let awaitAbruptTermination = arguments.contains("--probe-await-abrupt-termination")
       let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
@@ -321,7 +327,7 @@ final class EngineProbe {
       let noLaunchGuard = arguments.contains("--shaar-test-external-protocol-no-launch")
       let conflictingFlags = [
         "--bitwarden", "--bitwarden-onboarding-control",
-        "--probe-store-page-only",
+        "--probe-store-page-only", "--probe-library-only", "--probe-bitwarden-only",
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
         "--probe-private-window", "--probe-session-recovery",
@@ -336,7 +342,14 @@ final class EngineProbe {
         "--probe-devtools-route-only",
         "--probe-measure-tabs",
       ]
-      guard externalAppConsentMode == noLaunchGuard,
+      guard !(libraryOnlyMode && bitwardenOnlyMode),
+        !libraryOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-library-only" }).contains(
+            where: arguments.contains),
+        !bitwardenOnlyMode
+          || !conflictingFlags.filter({ $0 != "--probe-bitwarden-only" }).contains(
+            where: arguments.contains),
+        externalAppConsentMode == noLaunchGuard,
         !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains),
         !privateWindowMode
           || !conflictingFlags.filter({ $0 != "--probe-private-window" }).contains(
@@ -392,6 +405,7 @@ final class EngineProbe {
         root: root, fixture: fixture, phase: phase, output: output,
         includeBitwarden: includeBitwarden, storePageOnlyMode: storePageOnlyMode,
         bitwardenOnboardingControl: bitwardenOnboardingControl,
+        libraryOnlyMode: libraryOnlyMode, bitwardenOnlyMode: bitwardenOnlyMode,
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
@@ -751,6 +765,36 @@ final class EngineProbe {
       let firstA = try await snapshot(tabA)
       bootstrapStage = .readingBeta
       let firstB = try await snapshot(tabB)
+      if libraryOnlyMode {
+        guard let browserEngine else {
+          throw ProbeFailure("Library-only engine is missing.")
+        }
+        fixtureStage = "Extension"
+        checks += try await ExtensionProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
+        fixtureStage = "Library"
+        checks += try await LibraryProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
+      if bitwardenOnlyMode {
+        guard let browserEngine else {
+          throw ProbeFailure("Bitwarden-only engine is missing.")
+        }
+        fixtureStage = "Bitwarden"
+        checks += try await BitwardenProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       if devModeOnly {
         guard let browserEngine else { throw ProbeFailure("Dev Mode engine is missing.") }
         bootstrapStage = .ready
@@ -1621,6 +1665,8 @@ final class EngineProbe {
 
   private var probeMode: String {
     if storePageOnlyMode { return "web-store-page-only" }
+    if libraryOnlyMode { return "library-only" }
+    if bitwardenOnlyMode { return "bitwarden-only" }
     if basicBrowsingMode { return "basic-browsing" }
     if localExtensionInstallMode { return "local-extension-install-only" }
     if reloadWindowMode { return "reload-window" }
@@ -1704,6 +1750,8 @@ final class EngineProbe {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "probeMode": probeMode,
+      "libraryOnly": libraryOnlyMode,
+      "bitwardenOnly": bitwardenOnlyMode,
       "reloadWindowOnly": reloadWindowMode,
       "localExtensionInstallOnly": localExtensionInstallMode,
       "devModeOnly": devModeOnly,

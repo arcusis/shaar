@@ -23,6 +23,15 @@ TEST(ShaarJavaScriptDialogTest, SuppressedDialogsUseSafeDefaults) {
   EXPECT_FALSE(SuppressedDialogAccepted(content::JAVASCRIPT_DIALOG_TYPE_PROMPT));
 }
 
+TEST(ShaarJavaScriptDialogTest, BeforeUnloadReplyRemainsBoundToLiveOwnedTab) {
+  EXPECT_TRUE(DialogReplyMayBeAccepted(true, true, false));
+  EXPECT_TRUE(DialogReplyMayBeAccepted(true, true, true));
+  EXPECT_FALSE(DialogReplyMayBeAccepted(true, false, false));
+  EXPECT_FALSE(DialogReplyMayBeAccepted(true, false, true));
+  EXPECT_FALSE(DialogReplyMayBeAccepted(false, true, false));
+  EXPECT_TRUE(DialogReplyMayBeAccepted(false, true, true));
+}
+
 TEST(ShaarJavaScriptDialogTest, RegistersTheTypedReplyOperation) {
   ShaarModuleRegistry registry;
   Register(&registry);

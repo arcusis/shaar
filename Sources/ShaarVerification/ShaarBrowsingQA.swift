@@ -1379,18 +1379,14 @@ import os
     prompted: Bool, dialogRequestQueued: Bool, dialogSheetPresented: Bool, cancelled: Bool,
     sawVisibleDialog: Bool
   ) {
-    var prompted = false
     for _ in 0..<40 {
       HiddenDialogRenderSurface.concealAttachedSheet(of: context.window)
-      if !windowsHidden() { return (prompted, false, false, false, true) }
+      if !windowsHidden() { return (false, false, false, false, true) }
       if context.store.session.page(forTabID: tab) == nil {
-        return (prompted, false, false, false, false)
+        return (false, false, false, false, false)
       }
-      let flag = await evaluate(
-        runtime, tab: tab, script: "document.documentElement.dataset.prompted==='1'?1:0")
-      if flag == "1" { prompted = true }
       if case .javascriptDialog(let request) = context.store.sheet,
-        request.kind == .beforeUnload, request.tabID == tab, prompted
+        request.kind == .beforeUnload, request.tabID == tab
       {
         for _ in 0..<20 where context.window.attachedSheet == nil {
           try? await Task.sleep(for: .milliseconds(50))
@@ -1399,15 +1395,21 @@ import os
         let sheetPresented = context.window.attachedSheet != nil
         context.store.resolveJavaScriptDialog(request.id, accepted: false, input: nil)
         try? await Task.sleep(for: .milliseconds(250))
+        // Evaluating page JavaScript while the dialog is active waits for the
+        // modal response and can miss the sheet entirely. Read the marker only
+        // after cancelling the prompt, when the renderer can answer again.
+        let flag = await evaluate(
+          runtime, tab: tab, script: "document.documentElement.dataset.prompted==='1'?1:0")
+        let prompted = flag == "1"
         let cancelled = context.store.sheet?.id != request.sheetID
           && context.store.session.page(forTabID: tab) != nil
-        return (true, true, sheetPresented, cancelled, false)
+        return (prompted, true, sheetPresented, cancelled, false)
       }
       try? await Task.sleep(for: .milliseconds(100))
     }
     HiddenDialogRenderSurface.concealAttachedSheet(of: context.window)
-    if !windowsHidden() { return (prompted, false, false, false, true) }
-    return (prompted, false, false, false, false)
+    if !windowsHidden() { return (false, false, false, false, true) }
+    return (false, false, false, false, false)
   }
 
   static func beforeUnloadStatus(

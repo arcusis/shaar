@@ -79,6 +79,33 @@ struct JavaScriptDialogTests {
     #expect(store.sheet?.id == request.sheetID)
   }
 
+  @Test func cancellingBeforeUnloadAllowsAnotherCloseAttempt() throws {
+    let store = openedStore()
+    let request = try request(store, kind: .beforeUnload)
+    var closeAttempts = 0
+    store.onCloseTab = { _ in closeAttempts += 1 }
+
+    store.closeTab(request.tabID)
+    #expect(closeAttempts == 1)
+    #expect(store.requestJavaScriptDialog(request))
+    store.resolveJavaScriptDialog(request.id, accepted: false, input: nil)
+    store.closeTab(request.tabID)
+    #expect(closeAttempts == 2)
+  }
+
+  @Test func engineDismissedBeforeUnloadAllowsAnotherCloseAttempt() throws {
+    let store = openedStore()
+    let request = try request(store, kind: .beforeUnload)
+    var closeAttempts = 0
+    store.onCloseTab = { _ in closeAttempts += 1 }
+
+    store.closeTab(request.tabID)
+    #expect(store.requestJavaScriptDialog(request))
+    store.dismissJavaScriptDialog(request.id)
+    store.closeTab(request.tabID)
+    #expect(closeAttempts == 2)
+  }
+
   @Test func rejectsMalformedDialogPayload() throws {
     let store = openedStore()
     let request = try request(store)

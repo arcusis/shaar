@@ -38,6 +38,7 @@ struct PendingDialog {
   std::string tab_id;
   content::JavaScriptDialogManager::DialogClosedCallback callback;
   content::JavaScriptDialogType type;
+  bool before_unload;
 };
 
 std::map<std::string, PendingDialog>& Pending() {
@@ -55,7 +56,8 @@ bool IsActiveOwnedTab(shaar_engine* engine, content::WebContents* contents,
       : windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
   const bool regular_profile = contents && contents->GetBrowserContext() &&
       !contents->GetBrowserContext()->IsOffTheRecord();
-  if (!DialogMayBePresented(selected.has_value(), regular_profile, before_unload))
+  if (!DialogMayBePresented(selected.has_value(), regular_profile,
+                            before_unload))
     return false;
   *identity = std::move(*selected);
   return true;
@@ -86,7 +88,7 @@ bool Start(shaar_engine* engine, content::WebContents* contents,
     return false;
   auto [it, inserted] = Pending().emplace(
       id, PendingDialog{engine, contents, identity.profile_id, identity.window_id, identity.tab_id,
-                        std::move(*callback), type});
+                        std::move(*callback), type, before_unload});
   if (!inserted)
     return false;
   const auto emitted = EmitEvent(
@@ -163,6 +165,11 @@ bool DialogMayBePresented(bool is_selected_tab, bool is_regular_profile,
   // must resolve an owned tab before Start uses its identity.
   (void)before_unload;
   return is_selected_tab && is_regular_profile;
+}
+
+bool DialogReplyMayBeAccepted(bool before_unload, bool is_owned_tab,
+                              bool is_selected_tab) {
+  return is_owned_tab && (before_unload || is_selected_tab);
 }
 
 bool SuppressedDialogAccepted(content::JavaScriptDialogType type) {
@@ -258,9 +265,13 @@ shaar_error_code HandleJavaScriptDialogOperation(
       pending->second.contents != contents || pending->second.tab_id !=
           shaar::windows_tabs::Registry().TabID(engine, window, tab))
     return Fail(error, SHAAR_NOT_FOUND);
-  const bool allow = *accepted &&
+  const bool is_owned_tab =
+      shaar::windows_tabs::Registry().FindRegularTab(engine, contents).has_value();
+  const bool is_selected_tab =
       shaar::windows_tabs::Registry().FindSelectedRegularTab(engine, contents)
           .has_value();
+  const bool allow = *accepted && DialogReplyMayBeAccepted(
+      pending->second.before_unload, is_owned_tab, is_selected_tab);
   Finish(*id, allow, allow ? base::UTF8ToUTF16(*input) : std::u16string());
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ReplyLater, request_id, reply, reply_context));

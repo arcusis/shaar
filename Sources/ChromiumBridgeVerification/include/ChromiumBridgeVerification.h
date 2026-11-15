@@ -49,6 +49,8 @@ FOUNDATION_EXPORT BOOL ARCProbeNativeHoldAuditVisible(
 FOUNDATION_EXPORT BOOL ARCProbeTrustedClickElementAllowed(NSString * _Nullable elementID);
 /// Trusted wheel input is limited to the authored infinite-scroll fixture.
 FOUNDATION_EXPORT BOOL ARCProbeTrustedScrollElementAllowed(NSString * _Nullable elementID);
+/// Trusted typing is restricted to fixed fields in the hidden save-prompt fixture.
+FOUNDATION_EXPORT BOOL ARCProbeTrustedTextFieldAllowed(NSString * _Nullable elementID);
 
 @interface ARCShaarRuntime (TrustedProbeClick)
 /// Trusted click on an authored fixture element. Requires testing mode and a hidden window.
@@ -60,6 +62,15 @@ FOUNDATION_EXPORT BOOL ARCProbeTrustedScrollElementAllowed(NSString * _Nullable 
 /// Trusted wheel scroll over an authored fixture element. Requires testing mode and hidden windows.
 - (void)submitTrustedProbeScrollInTabID:(NSString *)tabID elementID:(NSString *)elementID
                             completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+@end
+
+@interface ARCShaarRuntime (TrustedProbeText)
+/// Focuses an authored hidden-probe input and commits text through Chromium's IME path.
+- (void)submitTrustedProbeTextInTabID:(NSString *)tabID
+                            elementID:(NSString *)elementID
+                                 text:(NSString *)text
+                           completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion
+    NS_SWIFT_UI_ACTOR;
 @end
 
 @interface ARCShaarRuntime (DeviceChooserProbe)

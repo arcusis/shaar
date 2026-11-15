@@ -103,6 +103,26 @@ TEST(ShaarDevToolsTest, ProbeInputPolicyAndPayloads) {
   EXPECT_EQ("feed", element_id);
   EXPECT_FALSE(ParseProbeScrollArguments(
       Bytes(R"({"schemaVersion":1,"x":20,"y":30})"), &element_id));
+  std::string text;
+  for (const char* field : {"username", "password", "card-name", "card-number",
+                            "card-exp-month", "card-exp-year", "address-name",
+                            "address-street", "address-city", "address-region",
+                            "address-postal", "address-country", "address-email"}) {
+    const std::string payload =
+        std::string(R"({"schemaVersion":1,"elementID":")") + field +
+        R"(","text":"fixture"})";
+    EXPECT_TRUE(ParseProbeTextArguments(Bytes(payload), &element_id, &text));
+    EXPECT_EQ(field, element_id);
+    EXPECT_EQ("fixture", text);
+  }
+  for (const std::string invalid : {
+           R"({"schemaVersion":1,"elementID":"parity-action","text":"x"})",
+           R"({"schemaVersion":1,"elementID":"password","text":""})",
+           R"({"schemaVersion":1,"elementID":"password","text":"x\ny"})",
+           R"({"schemaVersion":1,"elementID":"password","text":"x","extra":true})",
+           R"({"schemaVersion":2,"elementID":"password","text":"x"})"}) {
+    EXPECT_FALSE(ParseProbeTextArguments(Bytes(invalid), &element_id, &text));
+  }
   for (const std::string invalid : {
            R"({"schemaVersion":1,"x":-1,"y":2})",
            R"({"schemaVersion":1,"x":20,"y":8192})",

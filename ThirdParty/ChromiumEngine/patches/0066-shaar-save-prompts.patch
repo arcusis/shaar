@@ -9,7 +9,7 @@ diff --git a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc b/chr
  #include "base/functional/bind.h"
  #include "base/memory/raw_ptr.h"
  #include "base/memory/weak_ptr.h"
-@@ -119,6 +120,22 @@
+@@ -119,6 +120,25 @@
  
  int ManagePasswordsUIController::save_fallback_timeout_in_seconds_ = 90;
  
@@ -18,6 +18,9 @@ diff --git a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc b/chr
 +}
 +
 +namespace shaar::save_prompts {
++
++extern "C" void shaar_save_prompt_diagnostic(const char* stage)
++    __attribute__((weak_import));
 +
 +// Decisions are 1 save, 2 dismiss, and 3 never for a new password.
 +bool OfferSavePrompt(content::WebContents* contents,
@@ -32,7 +35,7 @@ diff --git a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc b/chr
  namespace {
  
  using Logger = autofill::SavePasswordProgressLogger;
-@@ -1570,6 +1587,56 @@
+@@ -1570,6 +1587,58 @@
  }
  
  void ManagePasswordsUIController::ShowBubble() {
@@ -42,6 +45,8 @@ diff --git a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc b/chr
 +      state == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
 +  if ((is_save || is_update) &&
 +      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (shaar_save_prompt_diagnostic)
++      shaar_save_prompt_diagnostic("hook:password");
 +    auto decision = base::BindOnce(
 +        [](base::WeakPtr<ManagePasswordsUIController> controller, bool update,
 +           int choice) {
@@ -101,7 +106,7 @@ diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_imp
  #include "base/logging.h"
  #include "base/strings/string_util.h"
  #include "base/strings/utf_string_conversions.h"
-@@ -59,6 +61,23 @@
+@@ -59,6 +61,26 @@
  #include "ui/base/resource/resource_bundle.h"
  #include "ui/base/window_open_disposition.h"
  
@@ -111,6 +116,9 @@ diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_imp
 +}
 +
 +namespace shaar::save_prompts {
++
++extern "C" void shaar_save_prompt_diagnostic(const char* stage)
++    __attribute__((weak_import));
 +
 +// Decisions are 1 save, 2 dismiss, and 3 never for a new password.
 +bool OfferSavePrompt(content::WebContents* contents,
@@ -125,11 +133,13 @@ diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_imp
  namespace autofill {
  
  namespace {
-@@ -115,6 +134,38 @@
+@@ -115,6 +134,40 @@
      payments::PaymentsAutofillClient::SaveCreditCardOptions options,
      payments::PaymentsAutofillClient::LocalSaveCardPromptCallback
          save_card_prompt_callback) {
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (shaar_save_prompt_diagnostic)
++      shaar_save_prompt_diagnostic("hook:card");
 +    if (current_bubble_type_ == PaymentsBubbleType::kUploadComplete)
 +      HideBubble(/*initiated_by_bubble_manager=*/false);
 +    const std::string detail =
@@ -167,7 +177,7 @@ diff --git a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_imp
 diff --git a/chrome/browser/ui/autofill/chrome_autofill_client.cc b/chrome/browser/ui/autofill/chrome_autofill_client.cc
 --- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
 +++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
-@@ -250,7 +250,24 @@
+@@ -250,7 +250,27 @@
  #include "chrome/browser/compose/chrome_compose_client.h"
  #include "components/compose/core/browser/compose_manager.h"
  #endif
@@ -178,6 +188,9 @@ diff --git a/chrome/browser/ui/autofill/chrome_autofill_client.cc b/chrome/brows
 +}
  
 +namespace shaar::save_prompts {
++
++extern "C" void shaar_save_prompt_diagnostic(const char* stage)
++    __attribute__((weak_import));
 +
 +// Decisions are 1 save, 2 dismiss, and 3 never for a new password.
 +bool OfferSavePrompt(content::WebContents* contents,
@@ -192,12 +205,14 @@ diff --git a/chrome/browser/ui/autofill/chrome_autofill_client.cc b/chrome/brows
  namespace autofill {
  
  namespace {
-@@ -863,6 +880,44 @@
+@@ -863,6 +880,46 @@
            : SaveUpdateAddressProfilePromptMode::kSaveNewProfile,
        std::move(callback));
  #else
 +  if (save_address_bubble_type != SaveAddressBubbleType::kMigrateToAccount &&
 +      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    if (shaar_save_prompt_diagnostic)
++      shaar_save_prompt_diagnostic("hook:address");
 +    std::string detail;
 +    auto append_field = [&](FieldType type) {
 +      const std::string part =

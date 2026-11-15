@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "179e39f1d83547e50d0e11f9029da52c0f8f645cc96a144cccbd2a13b6576dbb",
+    "sha256": "92bb8c4a5c02668f124a2a4a3537782de2e087c7ad06851916b470c5cdb120cc",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "e9c8b825803a7a8ee8459603876e65edbd6a9e88be88d127ce4f93f83fd521af",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -58,12 +58,12 @@
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_unittest.cc": "01301adddd0c3f0a5226efcfaf5a080df3a0423e94a9392e401a8327487bd377",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.cc": "3d511dc53a49c68c5357892cb4edc1fda57a30fdd1212907669f0a1f07911a9b",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.h": "5afbf3d57001d0c1dd3ab08068b9bbb18a3cecce326b7c0d25ba2852d5675600",
-      "chrome/browser/shaar/devtools/shaar_devtools.cc": "f43be8f0c3cbb29b2fcabe0c6e7d2461b81e9caf40dc5a98152240f1ff4876b2",
-      "chrome/browser/shaar/devtools/shaar_devtools.h": "9a236b582788d795bd50d115a244c9c02e77f3598f97e4c6f10e3a103b83bf84",
+      "chrome/browser/shaar/devtools/shaar_devtools.cc": "9aeab39e90defb14a6b694b7d3e93aa8af8790a091830026a9d3176ba7ebf9dd",
+      "chrome/browser/shaar/devtools/shaar_devtools.h": "150ad57250e6bcc83a47b090d85108f9bc822b70868ef84f460260234cd268be",
       "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "63eccec832a9bb00669aa7bd610a86752c71a857eb2119f8a2fc9cff97641dfb",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "8bda65f814fa3c74f3880c134475ac0927aa29f1a665da52096ff0d5ab02fe24",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.h": "d926559cb85df4b6f8259275198b3faf1b2c2d77bff8ea3fdf6b065a59dbf9f2",
-      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "0440199728d30fee83a8ef817630fa15fc546c2d4ab96cd81cf979f09f067f3b",
+      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "a65f8387923c477158527dfc8818774e3061cd85398afc777e46d8e570f014ff",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.cc": "962917acc421f701cf23590454637ee5a6a97c8a7927c9afaf38b36fd5003341",
       "chrome/browser/shaar/devtools/shaar_devtools_viewports.h": "cf85d27c8520d63b230bdce4ca850bc28250743d624d1aa19d64969f5d1a2e4c",
       "chrome/browser/shaar/downloads/shaar_downloads.cc": "cd79207b4e768b8af221caee99ebd638a1a5fc3fbd734c97614dcd268f18896d",
@@ -133,12 +133,12 @@
       "chrome/browser/shaar/profiles/shaar_profiles.cc": "8143e1139422ed31eb0ee04c8ee8b4800196b1407da1ffde8e52b972438769f3",
       "chrome/browser/shaar/profiles/shaar_profiles.h": "fc2300fed284da4823f358896e2bd30312779d1f3ed27b62b7b3b77d6c6c8d3e",
       "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "e164e43b5685e19bd74150b8a7a69405e30c3ba478d290a77070a8821ae6a251",
-      "chrome/browser/shaar/public/shaar_engine.h": "369b39b986aa66d85bb1ffad672e6b7a1a64ad7162c59b5902b70d4f88c6d099",
+      "chrome/browser/shaar/public/shaar_engine.h": "eb07d76cc0641c234932c903265b4ae24c04159f1c348cda2ca1b1564be22318",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe.h": "d82634ea53ea7a21100b28e8b7a756542f50f0c62f14164fa3430654d324b13b",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe.mm": "9671f0dd818c18b7ddcf79494711ebc8eb4899db5ed82265219574d0e822f511",
       "chrome/browser/shaar/quit_probe/shaar_quit_probe_unittest.cc": "03c3dbbdfe2b0c6e3887ab84f54d8150e9353fb50e78bcac4f5703c81bdf276d",
-      "chrome/browser/shaar/save_prompts/shaar_save_prompts.cc": "1c3c735aa9c8e21a25aa836081ca898a6fce5a0681e8c333d4385e77385e5037",
-      "chrome/browser/shaar/save_prompts/shaar_save_prompts.h": "7d23db716ea8f450f455a00a3807a9fa7f8a22d0e5a56bdc787ce5b315eacdcd",
+      "chrome/browser/shaar/save_prompts/shaar_save_prompts.cc": "557bcb0e0f28f38a28d8164bd5c2b6a737f03b475c03a75fd8cc2c0a8b7be011",
+      "chrome/browser/shaar/save_prompts/shaar_save_prompts.h": "e6852817e07cf4d2ce65f3a2127f8564d012a2328d256949a353c33faf6aca2a",
       "chrome/browser/shaar/save_prompts/shaar_save_prompts_unittest.cc": "a16188895afd9139d09887a75de348aaac75e7bb98c460bea573246e330e0cdb",
       "chrome/browser/shaar/shaar_engine.exports": "93635eef3d640a9662b17aa8ea9ec7a8494fb34750102762a1326c3236035b2c",
       "chrome/browser/shaar/shaar_engine_quit_probe.exports": "aca39ad95d928184db4325be2ac96bb0a3bd174765986c669c61e49340c5e8a8",
@@ -513,7 +513,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0066-shaar-save-prompts.patch",
-      "sha256": "33d111990e8de140bac8983e1e6352836087761f0a17e53dcd45311e3d605bc1"
+      "sha256": "1423409a65c0cd39675a86c041cef3d5d58caa8eac512d178fa2c579e45d2262"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0068-shaar-bluetooth-gate.patch",
@@ -899,7 +899,7 @@
       "moduleID": 1202,
       "operationRange": [
         1000,
-        1092
+        1099
       ],
       "layerFiles": [
         "chrome/browser/shaar/BUILD.gn",
@@ -915,7 +915,8 @@
         "chrome/browser/shaar/devtools/shaar_devtools_viewports.h",
         "chrome/browser/shaar/engine/shaar_engine_context.cc",
         "chrome/browser/shaar/engine/shaar_engine_context.h",
-        "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc"
+        "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc",
+        "chrome/browser/shaar/public/shaar_engine.h"
       ]
     },
     "media": {

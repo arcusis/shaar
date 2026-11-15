@@ -45,6 +45,9 @@ GURL CleanPageURLForSavePrompt(const GURL& url);
 bool SavePromptAllowedForContext(bool has_browser_context,
                                  bool off_the_record);
 
+// Emits redacted hook diagnostics only for the disposable verification process.
+extern "C" void shaar_save_prompt_diagnostic(const char* stage);
+
 }  // namespace shaar::save_prompts
 
 shaar_error_code HandleSavePromptOperation(

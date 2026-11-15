@@ -94,13 +94,16 @@ enum ShaarVerificationMain {
     if CommandLine.arguments.contains("--save-prompt-probe") {
       let arguments = CommandLine.arguments
       guard let index = arguments.firstIndex(of: "--save-prompt-probe"),
-        arguments.indices.contains(index + 2),
+        arguments.indices.contains(index + 3),
         let frameworks = Bundle.main.privateFrameworksURL
       else { exit(2) }
       let framework = frameworks.appending(path: "Chromium Framework.framework")
       let output = URL(fileURLWithPath: arguments[index + 1])
       let page = URL(string: arguments[index + 2])
-      exit(ShaarSavePromptProbe.run(frameworkURL: framework, outputURL: output, pageURL: page))
+      let neverPage = URL(string: arguments[index + 3])
+      exit(
+        ShaarSavePromptProbe.run(
+          frameworkURL: framework, outputURL: output, pageURL: page, neverPageURL: neverPage))
     }
     if CommandLine.arguments.contains("--inspector-idle-smoke") {
       let arguments = CommandLine.arguments

@@ -16,6 +16,15 @@ SPEC.loader.exec_module(PROBE)
 
 
 class PlatformParityReportTests(unittest.TestCase):
+    def test_widevine_probe_only_reports_playing_after_time_advances(self):
+        body, content_type, _ = PROBE.Handler.route(
+            PROBE.Handler, "/widevine-playback", {}, "http://localhost")
+        self.assertEqual(content_type, "text/html; charset=utf-8")
+        self.assertIn("const playbackThreshold = 0.5", body)
+        self.assertIn("video.currentTime >= playbackThreshold ? 'playing'", body)
+        self.assertIn("visibilityState:document.visibilityState", body)
+        self.assertIn("decodedFrameCount:video.webkitDecodedFrameCount", body)
+
     def test_setup_rows_do_not_count_as_checks(self):
         rows = [
             {"item": "Setup", "result": "fail"},

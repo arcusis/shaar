@@ -8,6 +8,14 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct PlatformParityProbeConfigurationTests {
+  @Test func invisibleRenderingSurfaceMustBeTransparentAndClickThrough() {
+    #expect(PlatformParityRenderSurfacePolicy.presentsFrames(forPath: "/widevine-playback"))
+    #expect(!PlatformParityRenderSurfacePolicy.presentsFrames(forPath: "/eme"))
+    #expect(PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: true))
+    #expect(!PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: false))
+    #expect(!PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 1, ignoresMouseEvents: true))
+  }
+
   @Test func httpFixtureMustBeLoopbackHttpWithAnExplicitPort() {
     let invalid: [URL?] = [
       nil,

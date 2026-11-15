@@ -173,10 +173,11 @@ document.getElementById("blank").addEventListener("change", async function () {
   document.documentElement.dataset.fileUpload = file.name + "|" + await file.text();
 });
 document.getElementById("performance-input").addEventListener("click", function () {
-  window.addEventListener("beforeunload", function (event) {
+  window.__edgeBeforeUnload = function (event) {
     event.preventDefault();
     event.returnValue = "leave";
-  });
+  };
+  window.addEventListener("beforeunload", window.__edgeBeforeUnload);
   document.documentElement.dataset.armed = "1";
 });
 </script>""")

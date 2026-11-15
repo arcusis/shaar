@@ -1047,10 +1047,14 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     }
     let isArmed = armSnap["armed"] as? String == "1"
     let before = dialogs.snapshot().count
-    guard let away = url(page, "/find") else {
+    guard let away = url(page, "/find"), let target = stamped(away),
+      let armedTab = selectedID(context)
+    else {
       return makeRow("beforeunload", false, "Could not build the next URL", proven: false)
     }
-    let navigation = Task { await open(context, runtime, away, path: "/find", marker: nil) }
+    // Navigate the armed tab itself. `open` creates another tab and leaves the
+    // beforeunload handler alive for the final Quit.
+    let navigationSent = context.engine.navigateCurrentPage(to: target)
     let surfaced = await wait(seconds: 4) {
       if case .javascriptDialog(let request)? = context.store.sheet {
         return request.kind == .beforeUnload && request.matches(context.store.session)
@@ -1061,19 +1065,25 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       try? await Task.sleep(for: .milliseconds(150))
       context.store.resolveJavaScriptDialog(request.id, accepted: true, input: nil)
     }
-    _ = await navigation.value
+    let left = await wait(seconds: 20) {
+      guard let current = context.engine.siteControlTarget else { return false }
+      return current.tabID == armedTab && current.url.path == "/find"
+        && context.engine.pages[armedTab]?.loading == false
+    }
     let fresh = dialogNotes(Array(dialogs.snapshot().dropFirst(before)))
-    let snap = await snapshot(runtime, context)
-    let left =
-      (snap["ready"] as? String) == "find" || (snap["href"] as? String ?? "").contains("/find")
-    let exercised = clicked && isArmed
+    // A failed or cancelled navigation must not poison the probe's final Quit.
+    _ = await evaluate(
+      runtime, tab: armedTab,
+      script: "if(window.__edgeBeforeUnload){removeEventListener('beforeunload',window.__edgeBeforeUnload);delete window.__edgeBeforeUnload} 'cleared'",
+      seconds: 2)
+    let exercised = clicked && isArmed && navigationSent
     let hidden = windowsHidden()
     let passed = beforeUnloadProbePassed(
       exercised: exercised && surfaced, dialogCount: fresh.count, navigated: left,
       windowsHidden: hidden)
     return makeRow(
       "beforeunload", passed,
-      "clicked \(clicked), armed \(isArmed), sheet \(surfaced), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
+      "clicked \(clicked), armed \(isArmed), sent \(navigationSent), sheet \(surfaced), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
       proven: exercised)
   }
 

@@ -616,6 +616,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0152-shaar-chromium-157-layer-compile.patch",
       "sha256": "c8bb59d271d610d54655eb7ad2ce481d29ef9671897d8fd562128de8b80fc43e"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0153-shaar-private-otr-pref-isolation.patch",
+      "sha256": "2c7a53eeffea7e8772f81e4fe31ccceb452f18db14a3e928351e3c12d4d04350"
     }
   ],
   "devtoolsFrontend157": {

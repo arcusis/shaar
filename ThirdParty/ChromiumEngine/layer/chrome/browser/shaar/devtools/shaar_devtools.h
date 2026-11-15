@@ -81,6 +81,10 @@ bool TrustedInputProbeWindowAllowed(bool testing, bool owned_root,
 bool TrustedWebStoreClickAllowed(bool testing, bool owned_root,
                                  bool selected, bool never_shown,
                                  const GURL& url, std::string_view element_id);
+bool MapTrustedWebStorePoint(int css_x, int css_y,
+                             int viewport_width, int viewport_height,
+                             int widget_width, int widget_height,
+                             int* widget_x, int* widget_y);
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open);

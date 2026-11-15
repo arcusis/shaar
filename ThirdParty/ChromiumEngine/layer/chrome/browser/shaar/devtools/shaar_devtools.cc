@@ -489,9 +489,11 @@ class ProbeTrustedInput final
           "const e=[...document.querySelectorAll('button')].find(b=>"
           "b.innerText.trim().toLowerCase()==='add to chrome'&&!b.disabled&&"
           "b.getAttribute('aria-disabled')!=='true');if(!e)return null;"
+          "e.scrollIntoView({block:'center',inline:'center',behavior:'instant'});"
           "const r=e.getBoundingClientRect();if(!r.width||!r.height)return null;"
           "return {x:Math.round(r.left+r.width/2),"
-          "y:Math.round(r.top+r.height/2)};})()"
+          "y:Math.round(r.top+r.height/2),"
+          "viewportWidth:innerWidth,viewportHeight:innerHeight};})()"
         : "(()=>{const e=document.getElementById('" + element_id_ +
           "');if(!e)return null;" +
           (text_.empty()
@@ -512,15 +514,33 @@ class ProbeTrustedInput final
     const base::DictValue* point = result.GetIfDict();
     const std::optional<int> x = point ? point->FindInt("x") : std::nullopt;
     const std::optional<int> y = point ? point->FindInt("y") : std::nullopt;
+    const std::optional<int> viewport_width =
+        point ? point->FindInt("viewportWidth") : std::nullopt;
+    const std::optional<int> viewport_height =
+        point ? point->FindInt("viewportHeight") : std::nullopt;
     auto* contents = contents_.get();
     auto* view = contents ? contents->GetRenderWidgetHostView() : nullptr;
-    if (!x || !y || *x < 0 || *y < 0 || !view ||
-        *x >= view->GetViewBounds().width() ||
-        *y >= view->GetViewBounds().height() || !Activate()) {
+    int widget_x = x.value_or(-1);
+    int widget_y = y.value_or(-1);
+    const bool store_target = element_id_ == "webstore-add-to-chrome";
+    bool valid_point = false;
+    if (view && x && y) {
+      if (store_target && viewport_width && viewport_height) {
+        valid_point = MapTrustedWebStorePoint(
+            *x, *y, *viewport_width, *viewport_height,
+            view->GetViewBounds().width(), view->GetViewBounds().height(),
+            &widget_x, &widget_y);
+      } else if (!store_target) {
+        valid_point = *x >= 0 && *y >= 0 &&
+                      *x < view->GetViewBounds().width() &&
+                      *y < view->GetViewBounds().height();
+      }
+    }
+    if (!valid_point || !Activate()) {
       Fail();
       return;
     }
-    Dispatch(*x, *y);
+    Dispatch(widget_x, widget_y);
   }
 
   void Dispatch(int x, int y) {
@@ -1615,6 +1635,25 @@ bool TrustedWebStoreClickAllowed(bool testing, bool owned_root,
          element_id == "webstore-add-to-chrome" && url.SchemeIs("https") &&
          url.host() == "chromewebstore.google.com" &&
          url.EffectiveIntPort() == 443;
+}
+
+bool MapTrustedWebStorePoint(int css_x, int css_y,
+                             int viewport_width, int viewport_height,
+                             int widget_width, int widget_height,
+                             int* widget_x, int* widget_y) {
+  if (!widget_x || !widget_y || viewport_width <= 0 || viewport_height <= 0 ||
+      widget_width <= 0 || widget_height <= 0 || css_x < 0 || css_y < 0 ||
+      css_x >= viewport_width || css_y >= viewport_height)
+    return false;
+  const int64_t mapped_x =
+      (int64_t{css_x} * widget_width + viewport_width / 2) / viewport_width;
+  const int64_t mapped_y =
+      (int64_t{css_y} * widget_height + viewport_height / 2) / viewport_height;
+  if (mapped_x >= widget_width || mapped_y >= widget_height)
+    return false;
+  *widget_x = static_cast<int>(mapped_x);
+  *widget_y = static_cast<int>(mapped_y);
+  return true;
 }
 
 void EmitFrontendStateEvent(shaar_engine* engine,

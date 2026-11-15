@@ -1989,7 +1989,7 @@ def main(argv=None):
     try:
         phases = ((options.probe_phase,) if split_phase else
                   ("initial",) if options.basic_browsing or options.reload_window or options.dev_mode
-                  or options.local_extension_install or options.library_only
+                  or options.local_extension_install
                   else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
@@ -2069,6 +2069,8 @@ def main(argv=None):
                     'Chrome and Safari import fixtures preview their bookmarks and history',
                     'Chrome import submits bookmarks and history',
                     'Safari import submits bookmarks and history',
+                    'Chrome and Safari imported Library rows stay in their selected profile',
+                } if phase == 'initial' else {
                     'Chrome and Safari imported bookmarks and history persist after restart',
                 }
                 checks = evidence.get('checks') if isinstance(evidence, dict) else None

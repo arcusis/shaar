@@ -46,13 +46,14 @@ final class LibraryProbe {
   let root: URL
   let fixture: URL
   let phase: String
+  let importOnly: Bool
   private var checks: [String] = []
   private var previewWindow: NSWindow?
   private var popupWindow: NSWindow?
 
   init(
     runtime: ARCChromiumRuntime, engine: BrowserEngine, store: BrowserStore, root: URL,
-    fixture: URL, phase: String
+    fixture: URL, phase: String, importOnly: Bool = false
   ) {
     self.runtime = runtime
     self.engine = engine
@@ -60,6 +61,7 @@ final class LibraryProbe {
     self.root = root
     self.fixture = fixture
     self.phase = phase
+    self.importOnly = importOnly
   }
 
   func run() async throws -> [String] {
@@ -177,6 +179,10 @@ final class LibraryProbe {
           && self.hasHistory(safariHistory, in: b)
       }
       try expect(true, "Chrome and Safari imported bookmarks and history persist after restart")
+    }
+    if importOnly {
+      try store.flushSaves()
+      return
     }
     try expect(
       store.library.watchNotices.isEmpty, "native bookmark/history watchers register successfully")

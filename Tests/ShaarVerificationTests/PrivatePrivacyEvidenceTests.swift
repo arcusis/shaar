@@ -207,10 +207,11 @@ import Testing
     #expect(ARCProbeNativeHoldAuditVisible(true, true))
   }
 
-  @Test func trustedClickAllowlistIncludesTheQuitActivationButton() {
+  @Test func trustedClickAllowlistIncludesThePasswordFillFieldAndQuitActivationButton() {
     #expect(ARCProbeTrustedClickElementAllowed("blank"))
     #expect(ARCProbeTrustedClickElementAllowed("popup"))
     #expect(ARCProbeTrustedClickElementAllowed("plain"))
+    #expect(ARCProbeTrustedClickElementAllowed("username"))
     #expect(ARCProbeTrustedClickElementAllowed("performance-input"))
     #expect(ARCProbeTrustedClickElementAllowed("arcusis-download-probe"))
     #expect(ARCProbeTrustedClickElementAllowed("window-client-download"))

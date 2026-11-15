@@ -103,7 +103,8 @@ enum ShaarVerificationMain {
       let neverPage = URL(string: arguments[index + 3])
       exit(
         ShaarSavePromptProbe.run(
-          frameworkURL: framework, outputURL: output, pageURL: page, neverPageURL: neverPage))
+          frameworkURL: framework, outputURL: output, pageURL: page, neverPageURL: neverPage,
+          passwordOnly: arguments.contains("--password-only")))
     }
     if CommandLine.arguments.contains("--inspector-idle-smoke") {
       let arguments = CommandLine.arguments

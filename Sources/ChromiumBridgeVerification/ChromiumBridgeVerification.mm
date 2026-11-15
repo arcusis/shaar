@@ -1613,6 +1613,7 @@ static NSDictionary *ProbePopupOwner(ARCShaarRuntime *runtime, NSString *popupID
 extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
   NSSet<NSString *> *allowed = [NSSet setWithArray:@[
     @"blank", @"popup", @"plain", @"performance-input",
+    @"username",
     @"arcusis-download-probe", @"window-client-download",
     @"external-consent-probe", @"arcusis-private-quit-activation", @"engine-window-request",
     @"engine-window-create", @"parity-action", @"webstore-add-to-chrome"]];

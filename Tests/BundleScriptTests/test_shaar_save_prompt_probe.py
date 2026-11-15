@@ -3,6 +3,7 @@
 import http.client
 import importlib.util
 from pathlib import Path
+import sqlite3
 import threading
 import tempfile
 import unittest
@@ -135,6 +136,42 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
                 "autofillProfileEnabled": False,
                 "autofillCreditCardEnabled": True,
             }])
+
+    def test_profile_receipt_detects_only_the_matching_saved_fixture_login(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "Chromium"
+            profile_id = "00000000-0000-0000-0000-000000000001"
+            for name, username in [
+                ("Default", "parity-user"),
+                (f"Profile {profile_id}", "parity-user"),
+            ]:
+                profile = root / name
+                profile.mkdir(parents=True)
+                database = sqlite3.connect(profile / "Login Data")
+                database.execute(
+                    "CREATE TABLE logins (origin_url TEXT, username_value TEXT, "
+                    "blacklisted_by_user INTEGER, password_value BLOB)"
+                )
+                database.executemany(
+                    "INSERT INTO logins VALUES (?, ?, ?, ?)",
+                    [
+                        ("http://127.0.0.1:8000/password", username, 0, b"secret"),
+                        ("http://127.0.0.1:8001/", username, 0, b"secret"),
+                        ("http://127.0.0.1:8000/", "blocked-user", 1, b"secret"),
+                    ],
+                )
+                database.commit()
+                database.close()
+
+            evidence = PROBE.profile_password_evidence(
+                root, "parity-user", "http://127.0.0.1:8000/", profile_id
+            )
+
+            self.assertEqual([entry["matchesSaveProfile"] for entry in evidence],
+                             [False, True])
+            self.assertTrue(PROBE.saved_in_profile(evidence, profile_id))
+            self.assertFalse(PROBE.saved_in_profile(evidence, "different-profile"))
+            self.assertNotIn("secret", repr(evidence))
 
 
 if __name__ == "__main__":

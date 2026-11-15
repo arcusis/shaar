@@ -10,7 +10,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import plistlib
+import re
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -231,6 +234,92 @@ def profile_autofill_preferences(data_root):
     return evidence
 
 
+def profile_password_evidence(data_root, username, origin, profile_id=None):
+    """Report whether Chromium persisted the fixture login without exposing secrets."""
+    evidence = []
+    for path in sorted(data_root.rglob("Login Data")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        row = {
+            "profile": str(path.parent.relative_to(data_root)),
+            "databasePresent": True,
+            "fixtureCredentialStored": False,
+            "matchesSaveProfile": bool(profile_id) and path.parent.name.lower()
+            == f"profile {profile_id.lower()}",
+        }
+        try:
+            connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1)
+            try:
+                entries = connection.execute(
+                    "SELECT origin_url, username_value, blacklisted_by_user, password_value "
+                    "FROM logins WHERE origin_url LIKE ?",
+                    (origin.rstrip("/") + "%",),
+                ).fetchall()
+                row["fixtureCredentialStored"] = any(
+                    stored_username == username
+                    and urlsplit(stored_origin).scheme == urlsplit(origin).scheme
+                    and urlsplit(stored_origin).netloc == urlsplit(origin).netloc
+                    and not blacklisted and bool(password)
+                    for stored_origin, stored_username, blacklisted, password in entries
+                )
+                row["fixtureOriginLoginCount"] = len(entries)
+                row["fixtureUsernameMatchCount"] = sum(
+                    stored_username == username for _, stored_username, _, _ in entries
+                )
+                row["fixtureSecretPresent"] = any(
+                    stored_username == username and bool(password)
+                    for _, stored_username, _, password in entries
+                )
+                row["loginTableAvailable"] = True
+            finally:
+                connection.close()
+        except (OSError, sqlite3.Error):
+            row["loginTableAvailable"] = False
+        evidence.append(row)
+    return evidence
+
+
+def saved_in_profile(evidence, profile_id):
+    if not profile_id:
+        return False
+    expected_profile = f"profile {profile_id.lower()}"
+    return any(
+        entry.get("profile", "").lower() == expected_profile
+        and entry.get("fixtureCredentialStored")
+        for entry in evidence
+    )
+
+
+def storage_diagnostics(output):
+    evidence = []
+    pattern = re.compile(r"oscrypt|safe storage|keychain|password.?store|addlogin|login data", re.I)
+    for line in output.splitlines():
+        if pattern.search(line):
+            line = line.replace("parity-secret", "<fixture-secret>")
+            line = line.replace("parity-user", "<fixture-user>")
+            evidence.append(line[:500])
+    return evidence
+
+
+def verification_keychain_evidence(app):
+    try:
+        with (app / "Contents/Info.plist").open("rb") as stream:
+            mock_requested = plistlib.load(stream).get("ShaarUseMockKeychain") is True
+    except (OSError, plistlib.InvalidFileException):
+        mock_requested = False
+    try:
+        keychain_item = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-s", "Shaar Safe Storage",
+             "-a", "Shaar"], capture_output=True, timeout=3, check=False,
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        keychain_item = False
+    return {
+        "verificationBundleRequestsMockKeychain": mock_requested,
+        "hostShaarSafeStorageItemAvailable": keychain_item,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
@@ -239,6 +328,10 @@ def main():
         "--locale", choices=("en", "he"),
         default=os.environ.get("SHAAR_V02_PROOF_LOCALE", "en"),
     )
+    parser.add_argument(
+        "--password-only", action="store_true",
+        help="Run only the password-save and revisit scenario.",
+    )
     options = parser.parse_args()
     executable = options.app / "Contents/MacOS/ShaarVerification"
     if not executable.is_file():
@@ -246,6 +339,8 @@ def main():
     before = crash_names()
     screenshots = {}
     autofill_preferences = []
+    password_evidence = []
+    keychain_evidence = verification_keychain_evidence(options.app)
     with FixtureServer(("127.0.0.1", 0), Fixture) as server, FixtureServer(
         ("127.0.0.1", 0), Fixture
     ) as never_server:
@@ -273,6 +368,8 @@ def main():
                 "--probe-data-dir", str(root),
                 "--save-prompt-probe", str(report_path), page, never_page,
             ]
+            if options.password_only:
+                command.append("--password-only")
             if options.locale == "he":
                 command.extend(["-AppleLanguages", "(he)"])
             else:
@@ -296,6 +393,11 @@ def main():
                 root, screenshot_directory(options.receipt, options.locale)
             )
             autofill_preferences = profile_autofill_preferences(root / "Chromium")
+            password_evidence = profile_password_evidence(
+                root / "Chromium", "parity-user",
+                f"http://127.0.0.1:{server.server_address[1]}/",
+                (report.get("rows") or [{}])[0].get("saveProfileID"),
+            )
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
         never_server.shutdown()
@@ -309,24 +411,40 @@ def main():
             for path, count in instance.submission_counts().items():
                 submission_counts[path] = submission_counts.get(path, 0) + count
     crashes = sorted(crash_names() - before)
+    expected_submissions = {"/password"} if options.password_only else EXPECTED_SUBMISSIONS
     receipt = {
         "verificationExecutable": str(executable), "exitCode": result.returncode,
         "locale": options.locale,
+        "passwordOnly": options.password_only,
         "allWindowsHidden": report.get("allWindowsHidden"),
         "windowsOnScreen": report.get("windowsOnScreen"),
         "renderSurface": report.get("renderSurface"),
         "rows": report.get("rows", []), "submittedForms": submitted_forms,
         "trustedTextDiagnostics": safe_trusted_text_diagnostics(report),
+        "storageDiagnostics": storage_diagnostics(combined_output),
         "autofillPreferences": autofill_preferences,
+        "passwordStoreEvidence": password_evidence,
+        "passwordSaveStoredInSaveProfile": saved_in_profile(
+            password_evidence, (report.get("rows") or [{}])[0].get("saveProfileID")
+        ),
+        "keychainEvidence": keychain_evidence,
         "submissionCounts": submission_counts,
         "diagnosticStages": diagnostics,
         "trustedInputFailures": trusted_input_failures,
         "screenshots": screenshots,
         "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True
-        and set(submitted_forms) == EXPECTED_SUBMISSIONS
-        and submission_counts == {"/password": 4, "/card": 2, "/address": 2}
-        and set(screenshots) == set(PROMPT_NAMES)
+        and set(submitted_forms) == expected_submissions
+        and submission_counts == (
+            {"/password": 1} if options.password_only
+            else {"/password": 4, "/card": 2, "/address": 2}
+        )
+        and set(screenshots) == (
+            {"password-save"} if options.password_only else set(PROMPT_NAMES)
+        )
+        and saved_in_profile(
+            password_evidence, (report.get("rows") or [{}])[0].get("saveProfileID")
+        )
         and not crashes,
     }
     options.receipt.parent.mkdir(parents=True, exist_ok=True)

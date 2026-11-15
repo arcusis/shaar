@@ -658,7 +658,17 @@ class ProbeTrustedInput final
       Fail("target unavailable before text commit");
       return;
     }
-    widget->ImeCommitText(base::UTF8ToUTF16(text_), {}, gfx::Range::InvalidRange(), 0);
+    widget->Focus();
+    widget->GetWidgetInputHandler()->ImeCommitText(
+        base::UTF8ToUTF16(text_), std::vector<ui::ImeTextSpan>(),
+        gfx::Range::InvalidRange(), 0, blink::DOMNodeIdType(),
+        base::BindOnce(&ProbeTrustedInput::OnTextCommitted,
+                       base::WrapRefCounted(this)));
+  }
+
+  void OnTextCommitted() {
+    if (finished_)
+      return;
     CompleteSuccess();
   }
 

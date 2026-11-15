@@ -27,7 +27,10 @@ EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
 DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "
 TRUSTED_INPUT_FAILURE_PREFIX = "trusted input failed at "
 TRUSTED_INPUT_FAILURE_STAGES = {
-    "capture lease unavailable", "target unavailable at start",
+    "invalid fixture text request", "render surface unavailable",
+    "engine request rejected", "engine reply not submitted",
+    "tab ownership unavailable", "capture lease wait timed out",
+    "target unavailable while waiting for capture lease", "target unavailable at start",
     "target unavailable before snapshot", "forced snapshot was empty",
     "tab disappeared after snapshot", "target unavailable after snapshot",
     "main frame unavailable after snapshot",

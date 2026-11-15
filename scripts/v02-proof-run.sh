@@ -63,19 +63,21 @@ report="$run_root/report.md"
 declare -a labels=() results=() details=()
 overall=0
 
-crash_dirs=("$HOME/Library/Logs/DiagnosticReports" "$HOME/Library/Logs/DiagnosticReports/Retired")
+crash_root="$HOME/Library/Logs/DiagnosticReports"
+crash_snapshots="$run_root/crash-snapshots"
+mkdir -p "$crash_snapshots"
+crashes_before="$run_root/crashes-before.json"
+crashes_after="$run_root/crashes-after.json"
+crash_delta="$run_root/crash-delta.json"
+probe_sequence=0
+declare -a crash_scan_failures=()
 crash_snapshot() {
-  local dir
-  for dir in "${crash_dirs[@]}"; do
-    [[ -d "$dir" ]] || continue
-    find "$dir" -maxdepth 1 -type f \( -name 'Shaar*.ips' -o -name 'Shaar*.crash' -o \
-      -name 'ArcusisBrowser*.ips' -o -name 'ArcusisBrowser*.crash' -o \
-      -name 'Chromium*.ips' -o -name 'Chromium*.crash' \) -print
-  done | sort -u
+  python3 scripts/v02_crash_reports.py snapshot "$crash_root"
 }
-crashes_before="$run_root/crashes-before.txt"
-crashes_after="$run_root/crashes-after.txt"
-crash_snapshot > "$crashes_before"
+if ! crash_snapshot > "$crashes_before"; then
+  echo 'Unable to snapshot DiagnosticReports before the proof run.' >&2
+  exit 1
+fi
 
 record() {
   labels+=("$1") results+=("$2") details+=("$3")
@@ -118,6 +120,17 @@ run_step() {
     return 0
   fi
   local logfile="$logs/${#labels[@]}-${label//[^A-Za-z0-9_.-]/_}.log"
+  probe_sequence=$((probe_sequence + 1))
+  local step_crash_dir="$crash_snapshots/step-$probe_sequence-${label//[^A-Za-z0-9_.-]/_}"
+  local step_before="$step_crash_dir/before.json"
+  local step_after="$step_crash_dir/after.json"
+  local step_delta="$step_crash_dir/delta.json"
+  mkdir -p "$step_crash_dir"
+  if ! crash_snapshot > "$step_before"; then
+    record "$label" FAIL 'could not snapshot DiagnosticReports before this step'
+    crash_scan_failures+=("$label: pre-step snapshot failed")
+    return 0
+  fi
   echo "[v02-proof] $label"
   if "$@" >"$logfile" 2>&1; then
     record "$label" PASS "log: ${logfile#"$PWD"/}"
@@ -125,6 +138,25 @@ run_step() {
     local status=$?
     record "$label" FAIL "exit $status; log: ${logfile#"$PWD"/}"
   fi
+  if ! crash_snapshot > "$step_after"; then
+    crash_scan_failures+=("$label: post-step snapshot failed")
+    overall=1
+    return 0
+  fi
+  local delta_status=0
+  python3 scripts/v02_crash_reports.py delta "$step_before" "$step_after" \
+    > "$step_delta" || delta_status=$?
+  case $delta_status in
+    0) ;;
+    1)
+      crash_scan_failures+=("$label: ${step_delta#"$PWD"/}")
+      overall=1
+      ;;
+    *)
+      crash_scan_failures+=("$label: could not compare crash snapshots")
+      overall=1
+      ;;
+  esac
 }
 run_engine_fixture() {
   SHAAR_VERIFICATION_APP="$PWD/build/Shaar Verification.app" \
@@ -324,11 +356,26 @@ else
   [[ $locale == he ]] && record 'Hebrew UI locale pass' SKIP 'shipping or verification bundle build did not pass'
 fi
 
-crash_snapshot > "$crashes_after"
-if diff -u "$crashes_before" "$crashes_after" > "$run_root/crash-delta.diff"; then
-  record 'New Shaar crash reports' PASS 'none'
+# ReportCrash can publish an .ips after the verification process exits. Keep the
+# final run-wide window open long enough to catch the delayed reports seen in QA.
+crash_report_settle_seconds=75
+echo "[v02-proof] Waiting ${crash_report_settle_seconds}s for DiagnosticReports to settle"
+sleep "$crash_report_settle_seconds"
+if ! crash_snapshot > "$crashes_after"; then
+  record 'New Shaar crash reports' FAIL 'could not snapshot DiagnosticReports after the proof run'
 else
-  record 'New Shaar crash reports' FAIL "see ${run_root#"$PWD"/}/crash-delta.diff"
+  delta_status=0
+  python3 scripts/v02_crash_reports.py delta "$crashes_before" "$crashes_after" \
+    > "$crash_delta" || delta_status=$?
+  if [[ $delta_status == 0 && ${#crash_scan_failures[@]} == 0 ]]; then
+    record 'New Shaar crash reports' PASS 'none'
+  elif [[ $delta_status == 1 ]]; then
+    record 'New Shaar crash reports' FAIL \
+      "see ${crash_delta#"$PWD"/}; per-step issues: ${crash_scan_failures[*]}"
+  else
+    record 'New Shaar crash reports' FAIL \
+      "snapshot/compare failure; per-step issues: ${crash_scan_failures[*]}"
+  fi
 fi
 
 {

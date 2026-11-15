@@ -135,7 +135,8 @@ struct BrowserSidebar: View {
       profileFavorites
         .id(
           sidebarReduceMotion
-            ? SidebarLayoutIdentity.layout(sidebarLayoutKey) : .constant("favorites"))
+            ? SidebarLayoutIdentity.layout(sidebarLayoutKey) : .constant("favorites")
+        )
         .transition(.opacity)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {
@@ -168,7 +169,8 @@ struct BrowserSidebar: View {
         tabList(space)
           .id(
             sidebarReduceMotion
-              ? SidebarLayoutIdentity.layout(sidebarLayoutKey) : .constant("tabs"))
+              ? SidebarLayoutIdentity.layout(sidebarLayoutKey) : .constant("tabs")
+          )
           .transition(.opacity)
       }
       Spacer(minLength: 0)
@@ -585,9 +587,9 @@ struct BrowserSidebar: View {
     let profileID = store.session.selectedSpace.profileID
     let downloads = store.engine?.downloads
     let epoch = recentDownloads.epoch
-    let isActive = store.isPrivate ? store.libraryDrawerSection == .spaces : recentDownloads.isOpen
+    let isActive = store.libraryDrawerSection != nil || recentDownloads.isOpen
     let controlLabel = store.isPrivate ? ShellL10n.string("Spaces") : ShellL10n.string("Downloads")
-    return Button(action: toggleRecentDownloadsFromButton) {
+    return Button(action: openLibraryDrawerFromButton) {
       Image(systemName: store.isPrivate ? "square.grid.2x2" : "archivebox")
         .font(.system(size: 16))
         .foregroundStyle(Color.primary.opacity(isActive ? 0.9 : 0.55))
@@ -600,12 +602,14 @@ struct BrowserSidebar: View {
       if store.isPrivate {
         Button(ShellL10n.string("Spaces")) { _ = store.toggleLibraryDrawer() }
       } else {
+        Button(ShellL10n.string("Show recent downloads")) {
+          toggleRecentDownloadsFromMenu()
+        }
         Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }
         Button(ShellL10n.string("History…")) { store.showLibrary(.history) }
       }
     }
     .accessibilityLabel(controlLabel)
-    .accessibilityHint(store.isPrivate ? "" : ShellL10n.string("Show recent downloads"))
     .help(controlLabel)
     .buttonStyle(.plain)
     .overlay(alignment: .bottomLeading) {
@@ -779,16 +783,17 @@ struct BrowserSidebar: View {
     store.session.selectedSpace.profileID == profileID
   }
 
-  private func toggleRecentDownloadsFromButton() {
-    guard !store.isPrivate else {
-      _ = store.toggleLibraryDrawer()
-      return
-    }
-    guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
-      return
-    }
+  private func toggleRecentDownloadsFromMenu() {
+    guard !store.isPrivate, store.libraryDrawerSection == nil,
+      !store.commandIsOpen, store.sheet == nil
+    else { return }
     recentDownloads.toggle(
       profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
+  }
+
+  func openLibraryDrawerFromButton() {
+    closeRecentDownloadsPreview()
+    _ = store.toggleLibraryDrawer()
   }
 
   private func closeRecentDownloadsPreview() {

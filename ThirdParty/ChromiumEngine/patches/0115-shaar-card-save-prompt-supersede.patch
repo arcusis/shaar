@@ -1,15 +1,16 @@
 --- a/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
 +++ b/chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc
-@@ -67,6 +67,8 @@
- }
+@@ -71,6 +71,9 @@
+ extern "C" void shaar_save_prompt_diagnostic(const char* stage)
+     __attribute__((weak_import));
  
- namespace shaar::save_prompts {
 +void SupersedeSavePrompts(content::WebContents* contents)
 +    __attribute__((weak_import));
- 
++
  // Decisions are 1 save, 2 dismiss, and 3 never for a new password.
  bool OfferSavePrompt(content::WebContents* contents,
-@@ -139,6 +141,8 @@
+                      const char* prompt,
+@@ -144,6 +147,8 @@
        HideBubble(/*initiated_by_bubble_manager=*/false);
      const std::string detail =
          base::UTF16ToUTF8(card.NetworkAndLastFourDigits());

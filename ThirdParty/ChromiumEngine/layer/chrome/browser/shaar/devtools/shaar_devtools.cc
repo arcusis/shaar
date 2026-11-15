@@ -653,12 +653,21 @@ class ProbeTrustedInput final
   void CommitText() {
     if (finished_)
       return;
-    auto* widget = Activate();
-    if (!widget) {
-      Fail("target unavailable before text commit");
+    auto* contents = contents_.get();
+    auto* focused_frame = contents ? contents->GetFocusedFrame() : nullptr;
+    auto* focused_widget = focused_frame
+        ? content::RenderWidgetHostImpl::From(
+              focused_frame->GetRenderWidgetHost())
+        : nullptr;
+    if (!focused_widget || !focused_widget->input_router()) {
+      Fail("focused frame widget unavailable before text commit");
       return;
     }
-    widget->ImeCommitText(base::UTF8ToUTF16(text_), {}, gfx::Range::InvalidRange(), 0);
+    focused_widget->input_router()->MakeActive();
+    focused_widget->GetWidgetInputHandler()->SetFocus(
+        blink::mojom::FocusState::kFocused);
+    focused_widget->ImeCommitText(base::UTF8ToUTF16(text_), {},
+                                  gfx::Range::InvalidRange(), 0);
     CompleteSuccess();
   }
 

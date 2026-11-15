@@ -12,7 +12,8 @@ TEST(ShaarJavaScriptDialogTest, SuppressesBackgroundAndPrivateTabs) {
   EXPECT_FALSE(DialogMayBePresented(false, true));
   EXPECT_FALSE(DialogMayBePresented(true, false));
   EXPECT_TRUE(DialogMayBePresented(true, true));
-  EXPECT_TRUE(DialogMayBePresented(false, true, true));
+  EXPECT_FALSE(DialogMayBePresented(false, true, true));
+  EXPECT_TRUE(DialogMayBePresented(true, true, true));
   EXPECT_FALSE(DialogMayBePresented(false, false, true));
 }
 

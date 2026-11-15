@@ -159,7 +159,10 @@ shaar_error_code Fail(shaar_error* error, shaar_error_code code) {
 
 bool DialogMayBePresented(bool is_selected_tab, bool is_regular_profile,
                           bool before_unload) {
-  return (is_selected_tab || before_unload) && is_regular_profile;
+  // Before-unload may come from a background tab, but FindRegularTab still
+  // must resolve an owned tab before Start uses its identity.
+  (void)before_unload;
+  return is_selected_tab && is_regular_profile;
 }
 
 bool SuppressedDialogAccepted(content::JavaScriptDialogType type) {

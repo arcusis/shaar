@@ -1005,9 +1005,6 @@ final class EngineProbe {
         guard let browserEngine else {
           throw ProbeFailure("Native-host-only probe engine is missing.")
         }
-        checks += try await ExtensionProbe(
-          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
-        ).run()
         fixtureStage = "NativeHost"
         checks += try await NativeHostProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase

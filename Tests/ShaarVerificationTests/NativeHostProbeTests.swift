@@ -9,10 +9,22 @@ import Testing
 
 @Suite
 struct NativeHostProbeTests {
+  @Test func closedWindowOnlyModeStopsAfterItsRecoveryEvidence() {
+    #expect(
+      NativeHostProbeScope.stopsAfterClosedWindowRecovery(
+        environment: ["SHAAR_CLOSED_WINDOW_REOPEN_ONLY": "1"]))
+    #expect(
+      !NativeHostProbeScope.stopsAfterClosedWindowRecovery(
+        environment: ["SHAAR_CLOSED_WINDOW_REOPEN_ONLY": "0"]))
+    #expect(!NativeHostProbeScope.stopsAfterClosedWindowRecovery(environment: [:]))
+  }
+
   @Test func closedWindowRecoveryEvidenceRequiresAReopenedLiveSelectedPage() throws {
     let closed = UUID()
     let restored = UUID()
-    let expectedURL = "http://127.0.0.1:49152/host-second-temporary"
+    let fixture = try #require(URL(string: "http://127.0.0.1:49152/account"))
+    let expectedURL = NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
+      fixture: fixture).absoluteString
     let evidence = NativeHostClosedWindowRecoveryEvidence(
       closedWindowID: closed, restoredWindowID: restored,
       closedWindowWasRemoved: true, reopenCommandWasEnabled: true,
@@ -22,6 +34,13 @@ struct NativeHostProbeTests {
     #expect(evidence.passed)
     let encoded = try JSONEncoder().encode(evidence)
     #expect(try JSONDecoder().decode(NativeHostClosedWindowRecoveryEvidence.self, from: encoded) == evidence)
+  }
+
+  @Test func closedWindowReopensTheMostRecentlyNavigatedSelectedPage() throws {
+    let fixture = try #require(URL(string: "http://127.0.0.1:49152/account"))
+    #expect(
+      NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(fixture: fixture)
+        == URL(string: "http://127.0.0.1:49152/account/host-second-navigation-target"))
   }
 
   @Test func closedWindowRecoveryEvidenceRejectsMissingReopenBehavior() {

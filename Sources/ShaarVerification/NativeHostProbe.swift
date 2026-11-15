@@ -9,6 +9,12 @@ import SwiftUI
 
 @testable import ArcusisBrowser
 
+enum NativeHostProbeScope {
+  static func stopsAfterClosedWindowRecovery(environment: [String: String]) -> Bool {
+    environment["SHAAR_CLOSED_WINDOW_REOPEN_ONLY"] == "1"
+  }
+}
+
 private struct HostProbeSelection: Codable, Equatable {
   let space: UUID
   let tab: UUID?
@@ -182,6 +188,10 @@ struct NativeHostClosedWindowRecoveryEvidence: Codable, Equatable {
   let selectedTabWasLive: Bool
   let recoverySnapshotWasConsumed: Bool
 
+  static func expectedReopenedPage(fixture: URL) -> URL {
+    fixture.appending(path: "host-second-navigation-target")
+  }
+
   var passed: Bool {
     closedWindowID != restoredWindowID && closedWindowWasRemoved && reopenCommandWasEnabled
       && selectedURL == expectedURL && selectedURL.hasPrefix("http://127.0.0.1:")
@@ -332,7 +342,8 @@ final class NativeHostProbe {
           && manager.workspace.window(secondID) == nil,
         reopenCommandWasEnabled: commandWasEnabled,
         selectedURL: restoredTab.url.absoluteString,
-        expectedURL: fixture.appending(path: "host-second-temporary").absoluteString,
+        expectedURL: NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
+          fixture: fixture).absoluteString,
         selectedTabWasLive: primary.runtime.view(forTabID: restoredTab.id.uuidString) != nil,
         recoverySnapshotWasConsumed: host.lastClosedWindowSnapshot == nil)
       let evidenceData = try JSONEncoder().encode(evidence)
@@ -341,8 +352,16 @@ final class NativeHostProbe {
         options: .atomic)
       try expect(
         evidence.passed
-          && restoredTab.url == fixture.appending(path: "host-second-temporary"),
+          && restoredTab.url == NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
+            fixture: fixture),
         "History reopens the last closed window with its selected page live")
+      if NativeHostProbeScope.stopsAfterClosedWindowRecovery(
+        environment: ProcessInfo.processInfo.environment)
+      {
+        host.detach()
+        self.host = nil
+        return
+      }
       focus(restoredWindowID)
       try send(.closeWindow)
       try await wait("reopened host window closure") { host.contexts[restoredWindowID] == nil }

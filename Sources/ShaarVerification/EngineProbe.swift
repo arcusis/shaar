@@ -1094,6 +1094,11 @@ final class EngineProbe {
       try renderShell(name: "\(phase)-command.png")
       store.dismissCommand()
       if let browserEngine {
+        fixtureStage = "Extension"
+        checks += try await ExtensionProbe(
+          runtime: runtime, engine: browserEngine, store: store,
+          root: root, phase: phase
+        ).run()
         fixtureStage = "Reopen"
         checks += try await ReopenProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
@@ -1101,11 +1106,6 @@ final class EngineProbe {
         fixtureStage = "LocalExtensionInstall"
         checks += try await LocalExtensionInstallProbe(
           runtime: runtime, store: store, root: root, phase: phase
-        ).run()
-        fixtureStage = "Extension"
-        checks += try await ExtensionProbe(
-          runtime: runtime, engine: browserEngine, store: store,
-          root: root, phase: phase
         ).run()
         fixtureStage = "PageFind"
         checks += try await PageFindProbe(

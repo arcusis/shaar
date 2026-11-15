@@ -28,7 +28,7 @@ enum WebsitePermissionProbeVerdict {
   static let websitePrompts = ["geolocation", "notifications", "midi", "protocol"]
 
   static func passed(
-    error: String?, mediaPrompted: Bool, mediaTracks: Bool, hidden: Bool,
+    error: String?, mediaPrompted: Bool, mediaTracks: Bool, mediaDenied: Bool, hidden: Bool,
     unexpectedSurfaces: [String], promptedNames: [String],
     rememberedKinds: [String] = [], openedProtocols: Set<String> = []
   ) -> Bool {
@@ -36,7 +36,8 @@ enum WebsitePermissionProbeVerdict {
     let remembered = ["geolocation", "notifications", "midi"].allSatisfy {
       rememberedKinds.contains($0)
     }
-    return error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
+    return error == nil && mediaPrompted && mediaTracks && mediaDenied && hidden
+      && unexpectedSurfaces.isEmpty
       && appeared && remembered
       && openedProtocols.contains("web+shaarparity")
   }
@@ -57,8 +58,10 @@ final class WebsitePermissionPromptProbe {
   private let fixture: URL
   private var finished = false
   private var passed = false
-  private var mediaPrompted = false
+  private var mediaAllowPrompted = false
+  private var mediaDenyPrompted = false
   private var mediaTracks = false
+  private var mediaDenied = false
   private var unexpectedSurfaces: [String] = []
   private var openedProtocols: Set<String> = []
   private var checks: [Check] = []
@@ -100,7 +103,7 @@ final class WebsitePermissionPromptProbe {
       let browser = workspace.stores[window.id]
     else { throw Failure("The fresh workspace has no browser window.") }
     store = browser
-    let first = fixture.appending(path: "media")
+    let first = fixture.appending(path: "media-allow")
     store.perform(.open(first))
     guard let id = store.session.selectedSpace.selectedTabID else {
       throw Failure("The fresh workspace did not create its first tab.")
@@ -198,8 +201,19 @@ final class WebsitePermissionPromptProbe {
 
   private func run(_ page: FixturePage) async -> Check {
     var check = Check(name: page.name, kind: page.kind)
-    let url = fixture.appending(path: page.path)
-    if page.path != "media" {
+    var url = fixture.appending(path: page.path)
+    if page.name == "media-deny", var components = URLComponents(
+      url: url, resolvingAgainstBaseURL: false)
+    {
+      // A distinct origin forces a fresh device-consent decision after Allow.
+      components.host = "localhost"
+      guard let alternateOrigin = components.url else {
+        check.outcome = "could not create a distinct media-consent origin"
+        return check
+      }
+      url = alternateOrigin
+    }
+    if page.path != "media-allow" {
       guard engine?.navigateCurrentPage(to: url) == true else {
         check.outcome = "navigation rejected"
         return check
@@ -241,9 +255,15 @@ final class WebsitePermissionPromptProbe {
       }
       await pause(100)
     }
-    if page.name == "media" {
-      mediaPrompted = check.kinds.contains("camera") && check.kinds.contains("microphone")
+    let prompted = check.captured && check.kinds.contains("camera")
+      && check.kinds.contains("microphone")
+    if page.name == "media-allow" {
+      mediaAllowPrompted = prompted
       mediaTracks = mediaTracksReady(check.result)
+    } else if page.name == "media-deny" {
+      mediaDenyPrompted = prompted
+      mediaDenied = check.result["outcome"] as? String == "rejected"
+        && check.result["name"] as? String == "NotAllowedError"
     }
     return check
   }
@@ -389,7 +409,8 @@ final class WebsitePermissionPromptProbe {
   }
 
   private func screenshotName(for page: FixturePage) -> String {
-    if page.name == "media" { return "before-camera-microphone-consent.png" }
+    if page.name == "media-allow" { return "camera-microphone-allow-consent.png" }
+    if page.name == "media-deny" { return "camera-microphone-deny-consent.png" }
     if page.name == "protocol" { return "after-protocol-handler-consent.png" }
     return "\(page.name)-consent.png"
   }
@@ -418,7 +439,8 @@ final class WebsitePermissionPromptProbe {
       prompts.contains($0)
     }
     passed = WebsitePermissionProbeVerdict.passed(
-      error: error, mediaPrompted: mediaPrompted, mediaTracks: mediaTracks, hidden: hidden,
+      error: error, mediaPrompted: mediaAllowPrompted && mediaDenyPrompted,
+      mediaTracks: mediaTracks, mediaDenied: mediaDenied, hidden: hidden,
       unexpectedSurfaces: unexpectedSurfaces, promptedNames: prompts,
       rememberedKinds: checks.filter(\.remembered).map(\.name),
       openedProtocols: openedProtocols)
@@ -427,8 +449,11 @@ final class WebsitePermissionPromptProbe {
       "probeMode": "website-permission-prompt",
       "passed": passed,
       "websitePromptsAppeared": websitePromptsAppeared,
-      "mediaPrompted": mediaPrompted,
+      "mediaPrompted": mediaAllowPrompted && mediaDenyPrompted,
+      "mediaAllowPrompted": mediaAllowPrompted,
+      "mediaDenyPrompted": mediaDenyPrompted,
       "mediaTracks": mediaTracks,
+      "mediaDenied": mediaDenied,
       "allWindowsHidden": hidden,
       "unexpectedSurfaces": unexpectedSurfaces,
       "prompts": prompts,
@@ -469,7 +494,8 @@ final class WebsitePermissionPromptProbe {
     var verifyRemembered = false
 
     static let checks = [
-      FixturePage(name: "media", path: "media", kind: nil, allow: true, wait: 8),
+      FixturePage(name: "media-allow", path: "media-allow", kind: nil, allow: true, wait: 8),
+      FixturePage(name: "media-deny", path: "media-deny", kind: nil, allow: false, wait: 8),
       FixturePage(
         name: "geolocation", path: "geolocation", kind: "location", allow: true, wait: 7,
         verifyRemembered: true),
@@ -500,7 +526,9 @@ final class WebsitePermissionPromptProbe {
     var result: [String: Any] = [:]
 
     var prompted: Bool {
-      if name == "media" { return kinds.contains("camera") && kinds.contains("microphone") }
+      if name.hasPrefix("media-") {
+        return kinds.contains("camera") && kinds.contains("microphone")
+      }
       if name == "protocol" { return kinds.contains("protocolHandler") }
       guard let kind else { return false }
       return kinds.contains(kind)

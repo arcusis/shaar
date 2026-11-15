@@ -22,7 +22,7 @@ import Testing
       unexpectedSurfaces: [],
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
       rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: ["web+shaarparity", "mailto"])
+      openedProtocols: ["web+shaarparity"])
     #expect(complete)
   }
 
@@ -48,17 +48,17 @@ import Testing
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol", "clipboard"]
         .filter { $0 != "midi" },
       rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: ["web+shaarparity", "mailto"])
+      openedProtocols: ["web+shaarparity"])
     #expect(!result)
   }
 
-  @Test func passedRequiresBothRegisteredProtocolRoutes() {
+  @Test func passedRequiresShaarWebProtocolRegistration() {
     #expect(!WebsitePermissionProbeVerdict.passed(
       error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
       unexpectedSurfaces: [],
       promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
       rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: ["web+shaarparity"]))
+      openedProtocols: []))
   }
 
   @Test(arguments: ["geolocation", "notifications", "midi"])
@@ -70,7 +70,7 @@ import Testing
         error: nil, mediaPrompted: true, mediaTracks: true, hidden: true,
         unexpectedSurfaces: [], promptedNames: prompted,
         rememberedKinds: ["geolocation", "notifications", "midi"],
-        openedProtocols: ["web+shaarparity", "mailto"]))
+        openedProtocols: ["web+shaarparity"]))
   }
 
   @Test(arguments: ["geolocation", "notifications", "midi"])
@@ -82,7 +82,7 @@ import Testing
         unexpectedSurfaces: [],
         promptedNames: ["media", "geolocation", "notifications", "midi", "protocol"],
         rememberedKinds: remembered,
-        openedProtocols: ["web+shaarparity", "mailto"]))
+        openedProtocols: ["web+shaarparity"]))
 
   }
 }

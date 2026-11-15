@@ -1436,6 +1436,20 @@ def validate_external_app_consent_report(root, phase, report, exit_code):
         raise RuntimeError('External-app consent report has invalid run identity') from error
     checks = evidence.get('checks')
     cleanup = evidence.get('cleanup')
+    failed_checks = [key for key in EXTERNAL_APP_CONSENT_BOOLEAN_FIELDS
+                     if evidence.get(key) is not True]
+    if (exit_code != 0 or report.get('passed') is not True
+            or report.get('error') is not None or evidence.get('passed') is not True):
+        cleanup_summary = {
+            key: cleanup.get(key) for key in (
+                'engineClosed', 'primaryWindowClosed', 'routerClientCount', 'pendingRequests', 'passed')
+        } if isinstance(cleanup, dict) else cleanup
+        raise RuntimeError(
+            f'{phase} external-app consent probe did not complete: '
+            f'engineError={report.get("error")!r}, failedChecks={failed_checks}, '
+            f'approvedRequests={evidence.get("approvedRequests")!r}, '
+            f'launchCount={evidence.get("launchCount")!r}, '
+            f'deniedRequests={evidence.get("deniedRequests")!r}, cleanup={cleanup_summary!r}')
     if (exit_code != 0 or report.get('phase') != phase
             or report.get('probeMode') != EXTERNAL_APP_CONSENT_MODE
             or report.get('externalAppConsentOnly') is not True

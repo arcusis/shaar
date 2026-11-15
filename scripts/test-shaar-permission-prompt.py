@@ -14,6 +14,7 @@ Launch through shaar-heavy.
 """
 
 import argparse
+import errno
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 
 CRASHES = Path.home() / "Library/Logs/DiagnosticReports"
 BUTTON = (
@@ -147,6 +149,22 @@ def evidence_directory(value: str) -> Path:
     return path
 
 
+def remove_probe_root(path: Path, *, attempts: int = 40, delay: float = 0.05) -> None:
+    """Retry transient ENOTEMPTY races while Chromium helper processes finish writes."""
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError as error:
+            if error.errno not in {errno.ENOTEMPTY, errno.EEXIST, errno.EBUSY}:
+                raise
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(delay)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path)
@@ -159,8 +177,8 @@ def main():
     with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        with tempfile.TemporaryDirectory(prefix="shaar-permission-") as temporary:
-            root = Path(temporary)
+        root = Path(tempfile.mkdtemp(prefix="shaar-permission-"))
+        try:
             data = root / "arcusis-engine-probe-permission"
             data.mkdir(mode=0o700)
             marker = data / ".arcusis-probe"
@@ -228,14 +246,20 @@ def main():
                 and not payload.get("error") and payload.get("passed") is True
                 and not missing_prompts and not missing_remembered)
             opened_protocols = set(payload.get("openedProtocols") or [])
-            expected_protocols = {"web+shaarparity", "mailto"}
+            # Chromium auto-allows mailto to the system handler before Shaar's
+            # custom protocol consent delegate; only web+shaarparity is evidence
+            # for the permission prompt exercised here.
+            expected_protocols = {"web+shaarparity"}
             if not completed:
                 raise SystemExit(1)
             if dishonest_protocol(payload.get("checks") or []):
                 raise SystemExit(1)
             if expected_protocols - opened_protocols:
                 raise SystemExit(2)
-        server.shutdown()
+        finally:
+            remove_probe_root(root)
+            server.shutdown()
+            thread.join(timeout=5)
 
 
 if __name__ == "__main__":

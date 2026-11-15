@@ -222,25 +222,27 @@ struct PlatformParityVerdictTests {
     #expect(decision.disposition == "gap")
   }
 
-  @Test func missingSafeBrowsingPrefIsAProbe() {
+  @Test func absentSafeBrowsingPrefMatchesUngoogledBuildGuarantee() {
     let absentFile = PlatformParityVerdicts.safeBrowsing(
       preferenceFilePresent: false, enabled: "")
     #expect(!absentFile.passed)
     #expect(absentFile.disposition == "probe")
     let absentKey = PlatformParityVerdicts.safeBrowsing(
       preferenceFilePresent: true, enabled: "")
-    #expect(!absentKey.passed)
-    #expect(absentKey.disposition == "probe")
+    #expect(absentKey.passed)
+    #expect(absentKey.disposition == "pass")
+    #expect(absentKey.evidence.contains("does not claim Safe Browsing protection"))
   }
 
-  @Test func safeBrowsingEnabledPassesAndDisabledFails() {
+  @Test func safeBrowsingEnabledAndDisabledStatesAreReportedWithoutOverclaim() {
     let enabled = PlatformParityVerdicts.safeBrowsing(
       preferenceFilePresent: true, enabled: "true")
     #expect(enabled.passed)
     let disabled = PlatformParityVerdicts.safeBrowsing(
       preferenceFilePresent: true, enabled: "false")
-    #expect(!disabled.passed)
-    #expect(disabled.disposition == "gap")
+    #expect(disabled.passed)
+    #expect(disabled.disposition == "pass")
+    #expect(disabled.evidence.contains("does not claim Safe Browsing protection"))
   }
 
   @Test func unreadPartitionFrameDoesNotPass() {

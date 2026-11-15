@@ -38,7 +38,7 @@ enum WebsitePermissionProbeVerdict {
     }
     return error == nil && mediaPrompted && mediaTracks && hidden && unexpectedSurfaces.isEmpty
       && appeared && remembered
-      && Set(["web+shaarparity", "mailto"]).isSubset(of: openedProtocols)
+      && openedProtocols.contains("web+shaarparity")
   }
 }
 
@@ -162,9 +162,10 @@ final class WebsitePermissionPromptProbe {
   }
 
   private func verifyRegisteredHandlerLinks() async {
+    // Chromium auto-allows mailto to the system handler before Shaar's custom
+    // protocol consent delegate. Only the web+ scheme proves this prompt path.
     for (scheme, registrationPath, target) in [
       ("web+shaarparity", "protocol", "web+shaarparity:hello"),
-      ("mailto", "mailto", "mailto:probe@example.invalid"),
     ] {
       let source = fixture.appending(path: registrationPath)
       guard engine?.navigateCurrentPage(to: source) == true,

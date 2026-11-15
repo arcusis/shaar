@@ -154,11 +154,23 @@ sign() { codesign --force --options runtime --timestamp --sign "$sign_identity" 
 
 # Chromium's GPU and renderer helpers need com.apple.security.cs.allow-jit under the hardened
 # runtime. Grant each helper exactly what the pinned upstream signature grants it.
+needs_jit() {
+  case "$(basename "$1")" in
+    *"Renderer).app"|*"GPU).app") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 sign_like_upstream() {
   local target="$1" upstream="$2"
   local entitlements
   entitlements="$out/entitlements/$(basename "$target").plist"
   codesign -d --entitlements - --xml "$upstream" > "$entitlements"
+  # Unsigned engine archives carry no entitlements, but V8 still needs JIT under the
+  # hardened runtime: renderer and GPU helpers fall back to the repository JIT grant.
+  if [[ ! -s "$entitlements" ]] && needs_jit "$target"; then
+    cp ThirdParty/ChromiumEngine/signing/jit.entitlements "$entitlements"
+  fi
   # Helpers such as app_mode_loader carry no entitlements upstream; codesign rejects an
   # empty entitlements file, so sign those without one.
   if [[ -s "$entitlements" ]]; then

@@ -1015,7 +1015,8 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let returned = dialogReplyPassed(name: name, result: object(from: json))
     if json == nil { await recover(context, runtime) }
     let hidden = windowsHidden()
-    let passed = surfaced && !fresh.isEmpty && returned && hidden
+    let passed = dialogFlowPassed(
+      sheetPresented: surfaced, rendererReplied: returned, windowsHidden: hidden)
     return makeRow(
       name, passed,
       "sheet \(surfaced), dialog \(fresh.count), reply \(returned), hidden \(hidden), \(describe(fresh))"
@@ -1074,13 +1075,13 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     // A failed or cancelled navigation must not poison the probe's final Quit.
     _ = await evaluate(
       runtime, tab: armedTab,
-      script: "if(window.__edgeBeforeUnload){removeEventListener('beforeunload',window.__edgeBeforeUnload);delete window.__edgeBeforeUnload} 'cleared'",
+      script:
+        "if(window.__edgeBeforeUnload){removeEventListener('beforeunload',window.__edgeBeforeUnload);delete window.__edgeBeforeUnload} 'cleared'",
       seconds: 2)
     let exercised = clicked && isArmed && navigationSent
     let hidden = windowsHidden()
     let passed = beforeUnloadProbePassed(
-      exercised: exercised && surfaced, dialogCount: fresh.count, navigated: left,
-      windowsHidden: hidden)
+      exercised: exercised, sheetPresented: surfaced, navigated: left, windowsHidden: hidden)
     return makeRow(
       "beforeunload", passed,
       "clicked \(clicked), armed \(isArmed), sent \(navigationSent), sheet \(surfaced), dialog \(fresh.count), navigated \(left), hidden \(hidden), \(describe(fresh))",
@@ -1115,7 +1116,9 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     let text = pageText(snap, context)
     let authenticated = text.contains("edge-auth-ok")
     return makeRow(
-      "Auth prompt", surfaced && !fresh.isEmpty && authenticated && windowsHidden(),
+      "Auth prompt",
+      dialogFlowPassed(
+        sheetPresented: surfaced, rendererReplied: authenticated, windowsHidden: windowsHidden()),
       "sheet \(surfaced), dialogs \(fresh.count), authenticated \(authenticated), hidden \(windowsHidden()), \(describe(fresh))"
     )
   }
@@ -1643,9 +1646,15 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
   }
 
   nonisolated static func beforeUnloadProbePassed(
-    exercised: Bool, dialogCount: Int, navigated: Bool, windowsHidden: Bool
+    exercised: Bool, sheetPresented: Bool, navigated: Bool, windowsHidden: Bool
   ) -> Bool {
-    exercised && dialogCount > 0 && navigated && windowsHidden
+    exercised && sheetPresented && navigated && windowsHidden
+  }
+
+  nonisolated static func dialogFlowPassed(
+    sheetPresented: Bool, rendererReplied: Bool, windowsHidden: Bool
+  ) -> Bool {
+    sheetPresented && rendererReplied && windowsHidden
   }
 
   nonisolated static func crashRecoveryPassed(

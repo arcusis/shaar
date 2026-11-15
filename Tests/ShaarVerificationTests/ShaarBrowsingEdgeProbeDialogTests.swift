@@ -105,16 +105,31 @@ import Testing
   @Test func beforeUnloadRequiresNavigationAfterTheDialog() {
     #expect(
       ShaarBrowsingEdgeProbe.beforeUnloadProbePassed(
-        exercised: true, dialogCount: 1, navigated: true, windowsHidden: true))
+        exercised: true, sheetPresented: true, navigated: true, windowsHidden: true))
     #expect(
       !ShaarBrowsingEdgeProbe.beforeUnloadProbePassed(
-        exercised: true, dialogCount: 1, navigated: false, windowsHidden: true))
+        exercised: true, sheetPresented: true, navigated: false, windowsHidden: true))
     #expect(
       !ShaarBrowsingEdgeProbe.beforeUnloadProbePassed(
-        exercised: true, dialogCount: 0, navigated: true, windowsHidden: true))
+        exercised: true, sheetPresented: false, navigated: true, windowsHidden: true))
     #expect(
       !ShaarBrowsingEdgeProbe.beforeUnloadProbePassed(
-        exercised: true, dialogCount: 1, navigated: true, windowsHidden: false))
+        exercised: true, sheetPresented: true, navigated: true, windowsHidden: false))
+  }
+
+  @Test func dialogFlowsRequireAShaarSheetRendererReplyAndHiddenWindows() {
+    #expect(
+      ShaarBrowsingEdgeProbe.dialogFlowPassed(
+        sheetPresented: true, rendererReplied: true, windowsHidden: true))
+    #expect(
+      !ShaarBrowsingEdgeProbe.dialogFlowPassed(
+        sheetPresented: false, rendererReplied: true, windowsHidden: true))
+    #expect(
+      !ShaarBrowsingEdgeProbe.dialogFlowPassed(
+        sheetPresented: true, rendererReplied: false, windowsHidden: true))
+    #expect(
+      !ShaarBrowsingEdgeProbe.dialogFlowPassed(
+        sheetPresented: true, rendererReplied: true, windowsHidden: false))
   }
 
   @Test @MainActor func dialogReplyNeedsTheValueReturnedByTheRenderer() {

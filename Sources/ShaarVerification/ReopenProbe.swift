@@ -89,7 +89,9 @@ final class ReopenProbe {
       let bulkReopened = store.session.selectedSpace.selectedTabID!
       _ = try await document(bulkReopened)
       try expect(
-        runtime.nativeTabID(forID: bulkReopened.uuidString) >= 0,
+        Self.hasFreshNativeView(
+          reopenedID: bulkReopened, closedIDs: Set(bulkTabs),
+          hasNativeView: runtime.view(forTabID: bulkReopened.uuidString) != nil),
         "bulk-close recovery binds the reopened tab to a fresh native tab")
       try await close(bulkReopened)
       guard store.removeSpace(bulkSpace) else {
@@ -307,6 +309,12 @@ final class ReopenProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw RecoveryFailure("Recovery fixture document was not ready.")
+  }
+
+  nonisolated static func hasFreshNativeView(
+    reopenedID: UUID, closedIDs: Set<UUID>, hasNativeView: Bool
+  ) -> Bool {
+    hasNativeView && !closedIDs.contains(reopenedID)
   }
 
   private func capture<V: View>(_ view: V, size: NSSize, name: String, scheme: ColorScheme)

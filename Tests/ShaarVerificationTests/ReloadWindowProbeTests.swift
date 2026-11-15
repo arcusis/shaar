@@ -38,14 +38,44 @@ import Testing
         candidateOwnerID: otherOwner, ownerID: owner, requiresNewTab: true))
   }
 
+  @Test func plainLinkReusesItsSourceAndPopupGestureCreatesOneNewTab() {
+    let source = UUID()
+    let destination = UUID()
+    #expect(
+      ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "plain", createdTabs: [], source: source, destination: source))
+    #expect(
+      !ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "plain", createdTabs: [destination], source: source, destination: destination))
+    #expect(
+      !ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "plain", createdTabs: [], source: source, destination: destination))
+    #expect(
+      ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "target blank", createdTabs: [destination], source: source,
+        destination: destination))
+    #expect(
+      !ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "target blank", createdTabs: [source, destination], source: source,
+        destination: destination))
+  }
+
   @Test func aPopupGestureMustCreateExactlyOneDestinationTab() {
     let destination = UUID()
-    #expect(ReloadWindowProbe.hasSingleDestinationTab([destination], destination: destination))
-    #expect(!ReloadWindowProbe.hasSingleDestinationTab([], destination: destination))
     #expect(
-      !ReloadWindowProbe.hasSingleDestinationTab(
-        [destination, UUID()], destination: destination))
-    #expect(!ReloadWindowProbe.hasSingleDestinationTab([UUID()], destination: destination))
+      ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "target blank", createdTabs: [destination], source: UUID(),
+        destination: destination))
+    #expect(
+      !ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "target blank", createdTabs: [], source: UUID(), destination: destination))
+    #expect(
+      !ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "target blank", createdTabs: [destination, UUID()], source: UUID(),
+        destination: destination))
+    #expect(
+      !ReloadWindowProbe.hasExpectedDestinationTabCount(
+        name: "target blank", createdTabs: [UUID()], source: UUID(), destination: destination))
   }
 
   @Test func newWindowNavigationRequiresASeparateDestinationAndRetainedSource() {

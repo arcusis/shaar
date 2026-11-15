@@ -21,4 +21,18 @@ struct ReopenProbeTests {
       alphaClosed: values[3], betaClosed: values[3])
     #expect(!duplicate.hasDistinctIDs)
   }
+
+  @Test func bulkCloseRecoveryRequiresANativeViewWithAFreshIdentity() {
+    let closed = UUID()
+    let reopened = UUID()
+    #expect(
+      ReopenProbe.hasFreshNativeView(
+        reopenedID: reopened, closedIDs: [closed], hasNativeView: true))
+    #expect(
+      !ReopenProbe.hasFreshNativeView(
+        reopenedID: closed, closedIDs: [closed], hasNativeView: true))
+    #expect(
+      !ReopenProbe.hasFreshNativeView(
+        reopenedID: reopened, closedIDs: [closed], hasNativeView: false))
+  }
 }

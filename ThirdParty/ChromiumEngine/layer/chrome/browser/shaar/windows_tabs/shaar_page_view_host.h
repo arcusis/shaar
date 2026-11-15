@@ -9,9 +9,11 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
+class NavigationHandle;
 class WebContents;
 }
 
@@ -19,7 +21,7 @@ namespace shaar::windows_tabs {
 
 // UI-thread AppKit owner. Chromium owns the tab view; this class only borrows it
 // while selected. The window and its content view live until the ABI window closes.
-class PageViewHost final {
+class PageViewHost final : public content::WebContentsObserver {
  public:
   explicit PageViewHost(NSRect frame, NSWindow* window = nil);
   ~PageViewHost();
@@ -36,6 +38,7 @@ class PageViewHost final {
   bool Focus(NSView* tab_view);
   void SetSelectedWebContents(content::WebContents* contents);
   void RefreshVisibility();
+  void DidFinishNavigation(content::NavigationHandle* navigation_handle) override;
   void SetDevToolsView(NSView* frontend);
   void SetDevToolsContents(content::WebContents* frontend);
   void SetDevToolsPageBounds(const gfx::Rect& bounds);

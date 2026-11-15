@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "92bb8c4a5c02668f124a2a4a3537782de2e087c7ad06851916b470c5cdb120cc",
+    "sha256": "b0c2c95f8bcd053d5c3f1d089b932f5e197f733792d9d27e85c386a917e3e3e8",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "e9c8b825803a7a8ee8459603876e65edbd6a9e88be88d127ce4f93f83fd521af",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -161,9 +161,9 @@
       "chrome/browser/shaar/webshare/shaar_webshare.h": "43b2e7a399143b1df8597dfa205029eca14cd33459a3d79261a07877a3db0061",
       "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h": "41177ab917b6f53e36e72fa738c03d8dceabb0b87d566cdec738cb86d54b5b1a",
       "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.mm": "8a6d76eb408e18cf2e62f36219eb3c6ca59b4cab5177c2aea5f1fc7511868674",
-      "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h": "1cb0ec265ead91970848e83c2c5c3ea63b20b7ea1150c99058dc0af74e8820c5",
-      "chrome/browser/shaar/windows_tabs/shaar_page_view_host.mm": "b556efd560a9bf13154abf0e5102b45701d560176581eb95198c507ed867bd93",
-      "chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm": "c1a56dccfd0d355ada68bf92441ad3c294683a4ff9c91f67bb2c21e4cde37764",
+      "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h": "5a3e891308a4132654c9a0fa8ddd5db275612634147bc3255d9b942a72855859",
+      "chrome/browser/shaar/windows_tabs/shaar_page_view_host.mm": "532566f1bdc68802fe6912e0b7f36d4e2a30b0a47954be9db2ebb4251b0856d4",
+      "chrome/browser/shaar/windows_tabs/shaar_page_view_host_unittest.mm": "058f4e1471b81c70e3059d335c8263532f93793a8f745d9a961a81a52e5c3bd0",
       "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc": "09aae78398660d825155012b4e27e80d1d22c350c3ddcddf1db53f4f126e0717",
       "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h": "06bc28bea9919d57d816f234ec814928190ce7dfac53ea362498dcdb2cbffdc1",
       "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_context.h": "c45a963d74382c2ba51708ed6a23ea75aa336153db50d7d93957e27e3ac9df37",

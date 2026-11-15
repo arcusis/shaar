@@ -44,9 +44,12 @@ struct JavaScriptDialogRequest: Identifiable, Equatable {
   var sheetID: String { "javascript-dialog-\(id)" }
 
   func matches(_ session: BrowserSession) -> Bool {
-    session.selectedSpace.profileID == profileID
-      && session.selectedPage?.tab.id == tabID
-      && session.selectedPage?.tab.url == pageURL
-      && session.profileID(forTabID: tabID) == profileID
+    guard session.selectedSpace.profileID == profileID,
+      let selectedPage = session.selectedPage, selectedPage.tab.id == tabID,
+      session.profileID(forTabID: tabID) == profileID
+    else { return false }
+    // A beforeunload request belongs to the outgoing document. The session's URL
+    // can already be the destination by the time Chromium delivers the request.
+    return kind == .beforeUnload || selectedPage.tab.url == pageURL
   }
 }

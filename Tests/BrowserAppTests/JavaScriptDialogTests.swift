@@ -49,6 +49,25 @@ struct JavaScriptDialogTests {
     _ = JavaScriptDialogSheet(request: request, store: store).body
   }
 
+  @Test func beforeUnloadDialogMatchesItsOutgoingTabDuringNavigation() throws {
+    let store = openedStore()
+    let request = try request(store, kind: .beforeUnload)
+    let destination = URL(string: "https://destination.example/next")!
+    var session = store.session
+    let didUpdate = session.updateTab(request.tabID, url: destination, title: "Next")
+    #expect(didUpdate)
+    store.session = session
+    #expect(request.matches(store.session))
+
+    var decision: (String, Bool, String?)?
+    store.onJavaScriptDialogDecision = { decision = ($0, $1, $2) }
+    #expect(store.requestJavaScriptDialog(request))
+    #expect(store.sheet?.id == request.sheetID)
+    store.resolveJavaScriptDialog(request.id, accepted: true, input: nil)
+    #expect(decision?.0 == request.id)
+    #expect(decision?.1 == true)
+  }
+
   @Test func rejectsMalformedDialogPayload() throws {
     let store = openedStore()
     let request = try request(store)

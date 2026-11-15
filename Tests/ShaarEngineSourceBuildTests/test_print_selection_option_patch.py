@@ -34,7 +34,7 @@ class PrintSelectionOptionPatchTests(unittest.TestCase):
         files = [entry["file"] for entry in manifest["patches"]]
         self.assertIn(relative, files)
         self.assertGreater(files.index(relative), files.index(
-            "ThirdParty/ChromiumEngine/patches/0078-shaar-trusted-click-layout.patch"
+            "ThirdParty/ChromiumEngine/patches/0079-shaar-testing-switches.patch"
         ))
         matching = [entry for entry in manifest["patches"] if entry["file"] == relative]
         self.assertEqual(len(matching), 1)

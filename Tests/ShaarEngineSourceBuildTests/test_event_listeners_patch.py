@@ -21,7 +21,7 @@ class EventListenersPatchTests(unittest.TestCase):
         self.assertIn("DOMDebugger.getEventListeners", source)
         self.assertIn('"DOMDebugger.getEventListeners", true, false', source)
         self.assertIn("SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS = 80", source)
-        self.assertIn("id > 80", source)
+        self.assertIn("id <= SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS", source)
         self.assertIn("CallArgumentsAreValid", source)
         self.assertIn('"command":81', source)
         self.assertIn("unknown DevTools capability or command", source)

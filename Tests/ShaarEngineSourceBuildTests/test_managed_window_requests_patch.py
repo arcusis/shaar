@@ -19,17 +19,19 @@ LAYER = ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar"
 class ManagedWindowRequestPatchTests(unittest.TestCase):
     def test_patch_routes_both_chromium_window_entry_points(self):
         source = PATCH.read_text()
-        self.assertIn("AdoptPageWebContents", source)
+        adoption = (ROOT / "ThirdParty/ChromiumEngine/patches/0047-shaar-tab-adoption.patch").read_text()
+        self.assertIn("AdoptPageWebContents", adoption)
         self.assertIn("user_gesture", source)
         self.assertIn("engine_requested", source)
         self.assertIn("SetEngineRequestedWindowHandler", source)
 
-    def test_patch_checks_window_creation_before_dereferencing(self):
+    def test_patch_fails_closed_without_a_gesture_or_handler(self):
         source = PATCH.read_text()
-        null_check = source.index("if (!new_window) {")
-        weak_ptr = source.index("new_window->GetWeakPtr()")
-        self.assertLess(null_check, weak_ptr)
-        self.assertIn("return Error(ExtensionTabUtil::kNoCurrentWindowError);", source)
+        guard = source.index("if (!create_params.from_user_gesture || handler.is_null())")
+        callback = source.index("return handler.Run(")
+        self.assertLess(guard, callback)
+        self.assertIn("return nullptr;", source[guard:callback])
+        self.assertIn('if (!base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder"))', source)
 
     def test_layer_requires_gesture_and_rejects_local_file_navigation(self):
         lifecycle = (LAYER / "windows_tabs/shaar_windows_tabs_lifecycle.cc").read_text()

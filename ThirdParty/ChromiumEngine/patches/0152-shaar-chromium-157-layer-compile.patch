@@ -1,0 +1,259 @@
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -866,7 +866,7 @@
+           "-Wl,-rpath,@loader_path/../../../../../../../../../..",
+         ]
+       } else if (_is_aperitif_helper) {
+-        ldflags += [ "-Wcrl,installnametool,-change,@executable_path/../Frameworks/$chrome_framework_name.framework/Versions/$chrome_version_full/Libraries/libaperitif.dylib,@executable_path/../../../../Libraries/libaperitif.dylib,-change,@executable_path/../Frameworks/$chrome_framework_name.framework/Versions/$chrome_version_full/$chrome_framework_name,@executable_path/../../../../$chrome_framework_name" ]
++        ldflags += [ "-Wcrl,installnametool,-change,@executable_path/../Frameworks/$chrome_product_full_name Framework.framework/Versions/$chrome_version_full/Libraries/libaperitif.dylib,@executable_path/../../../../Libraries/libaperitif.dylib,-change,@executable_path/../Frameworks/$chrome_framework_name.framework/Versions/$chrome_version_full/$chrome_framework_name,@executable_path/../../../../$chrome_framework_name" ]
+       }
+ 
+       if (enable_stripping) {
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -2125,7 +2125,7 @@
+     if (!popup || !popup->GetRenderWidgetHostView() ||
+         !popup->GetRenderWidgetHostView()->GetRenderWidgetHost())
+       return Fail(error, SHAAR_NOT_READY, "popup click target is unavailable");
+-    base::MakeRefCounted<ProbeTrustedClick>(
++    base::MakeRefCounted<ProbeTrustedInput>(
+         ReplyContext{request_id, reply, reply_context}, 0, 0,
+         std::move(element_id))->Start(popup);
+     return SHAAR_OK;
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -699,9 +699,6 @@
+     result->id = SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CLOSED;
+     PutString(&data, "requestID", params.FindString("requestId"),
+               &result->truncated);
+-    CopyHeaders(&data, "requestHeaders",
+-                request ? request->FindDict("headers") : nullptr,
+-                &result->truncated);
+   } else if (method == "Network.requestWillBeSentExtraInfo") {
+     result->id = SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT;
+     PutString(&data, "requestID", params.FindString("requestId"),
+@@ -2158,6 +2155,7 @@
+     }
+   }
+ 
++  struct PendingRules {
+     ReplyTarget reply;
+     int command_id;
+     std::vector<NetworkRule> previous;
+diff --git a/chrome/browser/shaar/find/shaar_page_zoom.cc b/chrome/browser/shaar/find/shaar_page_zoom.cc
+--- a/chrome/browser/shaar/find/shaar_page_zoom.cc
++++ b/chrome/browser/shaar/find/shaar_page_zoom.cc
+@@ -17,6 +17,7 @@
+ #include "base/location.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/task/sequenced_task_runner.h"
++#include "base/values.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -39,7 +40,7 @@
+                      [](shaar_reply_fn callback, void *callback_context,
+                         shaar_request_id request, shaar_error_code status,
+                         double zoom_level) {
+-                       base::Value::Dict payload;
++                       base::DictValue payload;
+                        payload.Set("kind", "pageZoom");
+                        payload.Set("schemaVersion", 1);
+                        payload.Set("zoomLevel", zoom_level);
+@@ -96,7 +97,7 @@
+ void EmitZoom(shaar_engine *engine, std::string_view profile,
+               std::string_view session, std::string_view window,
+               std::string_view tab, double level) {
+-  base::Value::Dict payload;
++  base::DictValue payload;
+   payload.Set("kind", "changed");
+   payload.Set("schemaVersion", 1);
+   payload.Set("zoomLevel", level);
+diff --git a/chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc b/chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc
+--- a/chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc
++++ b/chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc
+@@ -20,12 +20,14 @@
+ #include "base/time/time.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/uuid.h"
++#include "base/values.h"
+ #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+ #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+ #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/web_contents.h"
++#include "url/origin.h"
+ 
+ namespace shaar::javascript_dialogs {
+ namespace {
+@@ -67,7 +69,7 @@
+       !IsActiveOwnedTab(engine, contents, &identity) || Pending().size() >= 8)
+     return false;
+   const std::string id = base::Uuid::GenerateRandomV4().AsLowercaseString();
+-  base::Value::Dict payload;
++  base::DictValue payload;
+   payload.Set("schemaVersion", 1);
+   payload.Set("kind", "javascriptDialogRequested");
+   payload.Set("id", id);
+@@ -75,7 +77,8 @@
+       type == content::JAVASCRIPT_DIALOG_TYPE_ALERT ? "alert" :
+       type == content::JAVASCRIPT_DIALOG_TYPE_CONFIRM ? "confirm" : "prompt");
+   payload.Set("pageURL", contents->GetLastCommittedURL().spec());
+-  payload.Set("origin", contents->GetLastCommittedURL().GetOrigin().spec());
++  payload.Set("origin",
++              url::Origin::Create(contents->GetLastCommittedURL()).Serialize());
+   payload.Set("message", before_unload ? "" : base::UTF16ToUTF8(message));
+   payload.Set("defaultPrompt", before_unload ? "" : base::UTF16ToUTF8(default_prompt));
+   std::string json;
+@@ -114,7 +117,7 @@
+ void EmitDismiss(const std::string& id, const PendingDialog& pending) {
+   if (!lifecycle::EngineIsReady(pending.engine))
+     return;
+-  base::Value::Dict payload;
++  base::DictValue payload;
+   payload.Set("schemaVersion", 1);
+   payload.Set("kind", "javascriptDialogDismissed");
+   payload.Set("id", id);
+diff --git a/chrome/browser/shaar/login/shaar_login.cc b/chrome/browser/shaar/login/shaar_login.cc
+--- a/chrome/browser/shaar/login/shaar_login.cc
++++ b/chrome/browser/shaar/login/shaar_login.cc
+@@ -61,7 +61,7 @@
+       return;
+     const Pending& pending = found->second;
+     if (lifecycle::EngineIsReady(pending.engine)) {
+-      base::Value::Dict payload;
++      base::DictValue payload;
+       payload.Set("schemaVersion", 1);
+       payload.Set("kind", "httpAuthDismissed");
+       payload.Set("id", id_);
+@@ -157,7 +157,7 @@
+   auto callback = std::move(found->second.callback);
+   Requests().erase(found);
+   std::move(callback).Run(credentials);
+-  base::Value::Dict result;
++  base::DictValue result;
+   result.Set("schemaVersion", 1);
+   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE, base::BindOnce(&DeliverReply, request_id, reply, reply_context,
+@@ -170,7 +170,7 @@
+ std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
+     const net::AuthChallengeInfo& auth_info,
+     content::WebContents* web_contents,
+-    content::LoginAuthRequiredCallback callback) {
++    content::LoginDelegate::LoginAuthRequiredCallback callback) {
+   shaar_engine* engine = lifecycle::ActiveEngine();
+   if (!web_contents || !callback || !lifecycle::EngineIsReady(engine))
+     return nullptr;
+@@ -182,7 +182,7 @@
+     return nullptr;
+ 
+   const std::string id = std::to_string(++NextID());
+-  base::Value::Dict payload;
++  base::DictValue payload;
+   payload.Set("schemaVersion", 1);
+   payload.Set("kind", "httpAuthRequested");
+   payload.Set("id", id);
+diff --git a/chrome/browser/shaar/media/shaar_desktop_capture.cc b/chrome/browser/shaar/media/shaar_desktop_capture.cc
+--- a/chrome/browser/shaar/media/shaar_desktop_capture.cc
++++ b/chrome/browser/shaar/media/shaar_desktop_capture.cc
+@@ -26,6 +26,7 @@
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "content/public/browser/media_stream_request.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_media_capture_id.h"
+ #include "url/origin.h"
+@@ -197,7 +198,7 @@
+   }
+   media_id->type = content::DesktopMediaID::TYPE_WEB_CONTENTS;
+   media_id->web_contents_id = content::WebContentsMediaCaptureId(
+-      main_frame->GetProcess()->GetID(), main_frame->GetRoutingID());
++      main_frame->GetProcess()->GetID().value(), main_frame->GetRoutingID());
+   return true;
+ }
+ 
+diff --git a/chrome/browser/shaar/printing/shaar_print.cc b/chrome/browser/shaar/printing/shaar_print.cc
+--- a/chrome/browser/shaar/printing/shaar_print.cc
++++ b/chrome/browser/shaar/printing/shaar_print.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+@@ -133,7 +134,7 @@
+       request_id,
+       PendingPrint{engine, contents, identity->window, identity->tab,
+                    identity->profile_id, identity->window_id, identity->tab_id,
+-                   page_url, origin, frame_id, frame->GetProcess()->GetID(),
++                   page_url, origin, frame_id, frame->GetProcess()->GetID().value(),
+                    frame->GetRoutingID(), frame->GetNavigationId(),
+                    std::move(decision)});
+   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+diff --git a/chrome/browser/shaar/webshare/shaar_webshare.cc b/chrome/browser/shaar/webshare/shaar_webshare.cc
+--- a/chrome/browser/shaar/webshare/shaar_webshare.cc
++++ b/chrome/browser/shaar/webshare/shaar_webshare.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+@@ -82,7 +83,7 @@
+          frame->GetLastCommittedOrigin() == pending.origin;
+ }
+ 
+-void Expire(std::string id) { Finish(id, blink::mojom::ShareError::CANCELLED); }
++void Expire(std::string id) { Finish(id, blink::mojom::ShareError::CANCELED); }
+ 
+ } // namespace
+ 
+@@ -136,7 +137,7 @@
+       id, PendingShare{engine, contents, identity->window, identity->tab,
+                        identity->profile_id, identity->window_id,
+                        identity->tab_id, page_url, origin,
+-                       frame->GetProcess()->GetID(), frame->GetRoutingID(),
++                       frame->GetProcess()->GetID().value(), frame->GetRoutingID(),
+                        frame->GetNavigationId(), std::move(callback)});
+   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+       FROM_HERE, base::BindOnce(&Expire, id), base::Minutes(2));
+@@ -157,11 +158,11 @@
+   if (found == Pending().end())
+     return SHAAR_NOT_FOUND;
+   if (found->second.engine != engine || !IsCurrent(found->second)) {
+-    Finish(request_id, blink::mojom::ShareError::CANCELLED);
++    Finish(request_id, blink::mojom::ShareError::CANCELED);
+     return SHAAR_CANCELLED;
+   }
+   Finish(request_id, shared ? blink::mojom::ShareError::OK
+-                            : blink::mojom::ShareError::CANCELLED);
++                            : blink::mojom::ShareError::CANCELED);
+   return SHAAR_OK;
+ }
+ 
+diff --git a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+--- a/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
++++ b/chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc
+@@ -1040,10 +1040,10 @@
+       browser->GetTabStripModel()->GetActiveWebContents() != contents) {
+     return Result(SHAAR_NOT_READY, error);
+   }
+-  auto* manager = PrintViewManager::FromWebContents(contents);
++  auto* manager = printing::PrintViewManager::FromWebContents(contents);
+   if (!manager) {
+-    PrintViewManager::CreateForWebContents(contents);
+-    manager = PrintViewManager::FromWebContents(contents);
++    printing::PrintViewManager::CreateForWebContents(contents);
++    manager = printing::PrintViewManager::FromWebContents(contents);
+   }
+   content::RenderFrameHost* main_frame = contents->GetPrimaryMainFrame();
+   if (!manager || !main_frame || !manager->BasicPrint(main_frame))

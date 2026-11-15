@@ -21,7 +21,7 @@ class ProfilerEnablePatchTests(unittest.TestCase):
         self.assertIn("Profiler.enable", source)
         self.assertIn('"Profiler.enable", false, true', source)
         self.assertIn("SHAAR_DEVTOOLS_PROFILER_ENABLE = 81", source)
-        self.assertIn("id > 81", source)
+        self.assertIn("id <= SHAAR_DEVTOOLS_PROFILER_ENABLE", source)
         self.assertIn('"command":82', source)
         self.assertIn("unknown DevTools capability or command", source)
         self.assertIn("ProfilerEnableIsDeveloperOnlyAndCommand81", source)

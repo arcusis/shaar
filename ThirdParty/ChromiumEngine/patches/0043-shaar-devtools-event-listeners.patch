@@ -1,7 +1,6 @@
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -399,7 +399,8 @@
+@@ -449,7 +449,8 @@
    SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING = 76,
    SHAAR_DEVTOOLS_HEAP_PROFILER_TAKE_HEAP_SNAPSHOT = 77,
    SHAAR_DEVTOOLS_HEAP_PROFILER_START_TRACKING_HEAP_OBJECTS = 78,
@@ -11,22 +10,22 @@ diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/p
  } shaar_devtools_command;
  typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
  // END devtools command and module IDs.
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -271,6 +271,8 @@
+@@ -257,6 +257,8 @@
       "HeapProfiler.startTrackingHeapObjects", false, true},
      {SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS,
       "HeapProfiler.stopTrackingHeapObjects", false, true},
 +    {SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS,
 +     "DOMDebugger.getEventListeners", true, false},
- };
- 
- struct ReplyContext {
-@@ -603,6 +605,30 @@
-     if (*seen)
-       return false;
-     *seen = true;
+     {SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES, "DOM.requestChildNodes", true, false},
+     {SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE, "DOM.setAttributeValue", true, false},
+     {SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE, "DOM.removeAttribute", true, false},
+@@ -641,6 +643,30 @@
+   for (const auto key : keys) {
+     const base::Value* value = params.Find(key);
+     if (value && !value->is_bool())
++      return false;
 +  }
 +  return true;
 +}
@@ -50,11 +49,10 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
 +    return false;
 +  for (const base::Value& item : *arguments) {
 +    if (!item.is_dict() || !CallArgumentIsValid(item.GetDict()))
-+      return false;
+       return false;
    }
    return true;
- }
-@@ -675,9 +701,11 @@
+@@ -751,9 +777,11 @@
      case SHAAR_DEVTOOLS_OVERLAY_HIGHLIGHT_NODE:
        return ParamsHaveOnly(params, {"highlightConfig", "nodeId"});
      case SHAAR_DEVTOOLS_RUNTIME_CALL_FUNCTION_ON:
@@ -68,7 +66,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
      case SHAAR_DEVTOOLS_DOM_REQUEST_NODE:
        return ParamsHaveOnly(params, {"objectId"});
      case SHAAR_DEVTOOLS_DOM_GET_BOX_MODEL:
-@@ -799,6 +827,16 @@
+@@ -865,6 +893,16 @@
        return OptionalBooleanParams(
            params, {"reportProgress", "treatGlobalObjectsAsRoots",
                     "captureNumericValue", "exposeInternals"});
@@ -82,42 +80,30 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
 +        return false;
 +      return OptionalBoolean(params, "pierce");
 +    }
-   }
-   return false;
- }
-@@ -956,6 +994,8 @@
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return ParamsHaveOnly(params, {"urls"});
+     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+@@ -1017,6 +1055,8 @@
               HasRequiredBoolean(params, "isScreenUnlocked");
      case SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE:
        return true;
 +    case SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS:
 +      return HasRequiredString(params, "objectId");
-     default:
-       return true;
-   }
-@@ -1356,7 +1396,7 @@
-   }
-   const int cap = *root.FindInt("capability");
-   const int id = *root.FindInt("command");
--  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 79) {
-+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 80) {
-     *reason = "unknown DevTools capability or command";
-     return SHAAR_INVALID_ARGUMENT;
-   }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
---- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-+++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -499,8 +499,8 @@
-       Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"nodeId":1}})"),
-       61, &output, &reason)) << reason;
-   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
--      Bytes(R"({"schemaVersion":1,"capability":2,"command":80,"params":{}})"),
--      80, &output, &reason));
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":81,"params":{}})"),
-+      81, &output, &reason));
-   EXPECT_EQ("unknown DevTools capability or command", reason);
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return !params.Find("urls") || params.FindList("urls") != nullptr;
+     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+@@ -1400,7 +1440,7 @@
+ };
+ 
+ bool KnownDevToolsCommand(int id) {
+-  return id >= 1 && id <= SHAAR_DEVTOOLS_HEAP_PROFILER_STOP_TRACKING_HEAP_OBJECTS;
++  return id >= 1 && id <= SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS;
  }
  
-@@ -608,8 +608,8 @@
+ shaar_error_code DecodeOperation(shaar_operation operation,
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -624,8 +624,8 @@
        Bytes(R"({"schemaVersion":1,"capability":1,"command":66,"params":{"result":true}})"),
        66, &output, &reason));
    EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
@@ -128,7 +114,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
    EXPECT_EQ("unknown DevTools capability or command", reason);
  }
  
-@@ -632,7 +632,7 @@
+@@ -648,7 +648,7 @@
             R"({"schemaVersion":1,"capability":1,"command":69,"params":{"cacheDisabled":true}})",
             R"({"schemaVersion":1,"capability":2,"command":69,"params":{}})",
             R"({"schemaVersion":1,"capability":2,"command":69,"params":{"cacheDisabled":true,"extra":1}})",
@@ -137,7 +123,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
      std::string rejected;
      std::string rejectReason;
      EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &rejected, &rejectReason));
-@@ -689,8 +689,8 @@
+@@ -703,8 +703,8 @@
        Bytes(R"({"schemaVersion":1,"capability":1,"command":70,"params":{"isUserActive":true,"isScreenUnlocked":true}})"),
        70, &output, &reason));
    EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
@@ -148,72 +134,27 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
    EXPECT_EQ("unknown DevTools capability or command", reason);
  }
  
-@@ -746,8 +746,8 @@
-       Bytes(R"({"schemaVersion":1,"capability":2,"command":73,"params":{"extra":true}})"),
-       73, &output, &reason));
-   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
--      Bytes(R"({"schemaVersion":1,"capability":2,"command":80,"params":{}})"),
--      80, &output, &reason));
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":81,"params":{}})"),
-+      81, &output, &reason));
-   EXPECT_EQ("unknown DevTools capability or command", reason);
- }
- 
-@@ -1510,7 +1510,57 @@
-   EXPECT_FALSE(ProjectPhase2EventForTesting(
-       R"({"method":"Network.getCookies","params":{}})",
-       "https://example.test", 42, &output));
+@@ -796,6 +796,23 @@
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 77, &output, &reason))
+         << args;
+   }
 +}
 +
-+
-+TEST(ShaarDevToolsTest, EventListenersAreInspectorOnlyAndCommand80) {
++TEST(ShaarDevToolsTest, EventListenersAreInspectorOnlyAndBounded) {
 +  std::string output;
 +  std::string reason;
 +  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":"node-1"}})"),
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":"node-1","depth":1}})"),
 +      80, &output, &reason)) << reason;
 +  EXPECT_NE(std::string::npos, output.find("DOMDebugger.getEventListeners"));
++  EXPECT_EQ(nullptr, ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                                    SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS));
++  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":""}})"),
++      80, &output, &reason));
 +  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":"node-1","depth":1,"pierce":false}})"),
-+      80, &output, &reason)) << reason;
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":1,"command":60,"params":{"objectId":"node-1","functionDeclaration":"function(){return 1;}","returnByValue":true}})"),
-+      60, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("Runtime.callFunctionOn"));
-+  const char* kRemove =
-+      R"({"schemaVersion":1,"capability":1,"command":60,"params":{"objectId":"node-1","functionDeclaration":"function(type, listener, useCapture){this.removeEventListener(type, listener, useCapture);}","returnByValue":true,"arguments":[{"value":"click"},{"objectId":"handler-1"},{"value":false}]}})";
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(kRemove), 60, &output, &reason))
-+      << reason;
-+  EXPECT_NE(std::string::npos, output.find("handler-1"));
-+  EXPECT_STREQ("DOMDebugger.getEventListeners",
-+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
-+                              SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS));
-+  EXPECT_EQ(nullptr,
-+            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
-+                           SHAAR_DEVTOOLS_DOM_DEBUGGER_GET_EVENT_LISTENERS));
-+  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":1,"command":81,"params":{}})"),
-+      81, &output, &reason));
-+  EXPECT_EQ("unknown DevTools capability or command", reason);
-+  const std::string long_id(513, 'a');
-+  const std::string long_request =
-+      std::string(R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":")") +
-+      long_id + R"("}})";
-+  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(long_request), 80, &output, &reason));
-+  for (const std::string args : {
-+           R"({"schemaVersion":1,"capability":2,"command":80,"params":{"objectId":"node-1"}})",
-+           R"({"schemaVersion":1,"capability":1,"command":80,"params":{}})",
-+           R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":""}})",
-+           R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":"node-1","depth":"1"}})",
-+           R"({"schemaVersion":1,"capability":1,"command":80,"params":{"objectId":"node-1","extra":true}})",
-+           R"({"schemaVersion":1,"capability":1,"command":60,"params":{"objectId":"node-1","functionDeclaration":"function(){}","arguments":[{"value":1}]}})",
-+           R"({"schemaVersion":1,"capability":1,"command":60,"params":{"objectId":"node-1","functionDeclaration":"function(){}","arguments":[{"value":true},{"value":true},{"value":true},{"value":true},{"value":true},{"value":true}]}})",
-+       }) {
-+    EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 80, &output, &reason))
-+        << args;
-+  }
++      Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"objectId":"node-1","functionDeclaration":"function(type, listener, useCapture){this.removeEventListener(type, listener, useCapture);}","arguments":[{"value":"click"},{"objectId":"handler-1"},{"value":false}]}})"),
++      61, &output, &reason)) << reason;
  }
  
-+
- }  // namespace
- }  // namespace shaar::devtools
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {

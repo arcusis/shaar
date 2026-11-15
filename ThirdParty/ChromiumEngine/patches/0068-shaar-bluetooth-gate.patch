@@ -76,15 +76,6 @@ index 8940cda1ea..192223da05 100644
  #import <IOBluetooth/objc/IOBluetoothDevice.h>
  #import <IOBluetooth/objc/IOBluetoothHostController.h>
  #include <IOKit/IOKitLib.h>
-@@ -48,7 +54,7 @@
- // Using this API has the same effect as turning Bluetooth on or off using the
- // macOS System Preferences [4], and will effect all adapters.
- //
--// [1] https://goo.gl/Gbjm1x
-+// [1] https://goo.gl.qjz9zk/Gbjm1x
- // [2] http://www.frederikseiffert.de/blueutil/
- // [3] https://pqrs.org/osx/karabiner/
- // [4] https://support.apple.com/kb/PH25091
 @@ -70,10 +76,12 @@ @interface BluetoothDevicesConnectListener : NSObject {
    //    have drained before the Bridge (and this Listener) are deallocated.
    raw_ptr<device::BluetoothDevicesConnectListenerBridge> _bridge;
@@ -743,7 +734,7 @@ index 995445144e..752aa82c93 100644
  
  #include "base/containers/span.h"
  #include "base/functional/bind.h"
-@@ -18,11 +19,12 @@
+@@ -18,6 +19,7 @@
  #include "components/device_event_log/device_event_log.h"
  #include "device/bluetooth/bluetooth_adapter_mac.h"
  #include "device/bluetooth/bluetooth_socket_mac.h"
@@ -751,12 +742,6 @@ index 995445144e..752aa82c93 100644
  #include "device/bluetooth/public/cpp/bluetooth_address.h"
  #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
  
- // Undocumented API for accessing the Bluetooth transmit power level.
--// Similar to the API defined here [ http://goo.gl/20Q5vE ].
-+// Similar to the API defined here [ http://goo.gl.qjz9zk/20Q5vE ].
- @interface IOBluetoothHostController (UndocumentedAPI)
- - (IOReturn)
-     BluetoothHCIReadTransmitPowerLevel:(BluetoothConnectionHandle)connection
 @@ -43,6 +45,7 @@ @interface BluetoothDeviceDisconnectListener : NSObject {
  }
  
@@ -894,15 +879,6 @@ index 995445144e..752aa82c93 100644
  }
  
  bool BluetoothClassicDeviceMac::IsGattConnected() const {
-@@ -284,7 +323,7 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
- 
-   connection_info.rssi = [device_ rawRSSI];
-   // The API guarantees that +127 is returned in case the RSSI is not readable:
--  // http://goo.gl/bpURYv
-+  // http://goo.gl.qjz9zk/bpURYv
-   if (connection_info.rssi == 127)
-     connection_info.rssi = kUnknownPower;
- 
 @@ -362,6 +401,8 @@ BluetoothUUID ExtractUuid(IOBluetoothSDPDataElement* service_class_data) {
  
  int BluetoothClassicDeviceMac::GetHostTransmitPower(

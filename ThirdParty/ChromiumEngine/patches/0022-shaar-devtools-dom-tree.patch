@@ -1,12 +1,9 @@
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -264,7 +264,16 @@
-   SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_REGISTRATION = 16,
+@@ -328,6 +328,15 @@
    SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_VERSION = 17,
    SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_ERROR = 18,
--  SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE = 19
-+  SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE = 19,
+   SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE = 19,
 +  SHAAR_DEVTOOLS_PANEL_DOM_DOCUMENT_UPDATED = 20,
 +  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_INSERTED = 21,
 +  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_REMOVED = 22,
@@ -15,43 +12,42 @@ diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/p
 +  SHAAR_DEVTOOLS_PANEL_DOM_CHILDREN_SET = 25,
 +  SHAAR_DEVTOOLS_PANEL_DOM_SHADOW_ROOT_PUSHED = 26,
 +  SHAAR_DEVTOOLS_PANEL_DOM_SHADOW_ROOT_POPPED = 27,
-+  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28
- } shaar_devtools_panel_event_id;
- typedef enum {
-   SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS = 1,
-@@ -336,7 +345,24 @@
-   SHAAR_DEVTOOLS_NETWORK_GET_COOKIES = 41,
++  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28,
+   SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CREATED = 31,
+   SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_HANDSHAKE = 32,
+   SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_SENT = 33,
+@@ -405,7 +414,24 @@
    SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
    SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43,
--  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44
-+  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44,
-+  SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES = 45,
-+  SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE = 46,
-+  SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE = 47,
-+  SHAAR_DEVTOOLS_DOM_SET_NODE_VALUE = 48,
-+  SHAAR_DEVTOOLS_DOM_REMOVE_NODE = 49,
-+  SHAAR_DEVTOOLS_DOM_SET_OUTER_HTML = 50,
-+  SHAAR_DEVTOOLS_DOM_MOVE_TO = 51,
-+  SHAAR_DEVTOOLS_DOM_MARK_UNDOABLE_STATE = 52,
-+  SHAAR_DEVTOOLS_DOM_UNDO = 53,
-+  SHAAR_DEVTOOLS_DOM_PERFORM_SEARCH = 54,
-+  SHAAR_DEVTOOLS_DOM_GET_SEARCH_RESULTS = 55,
-+  SHAAR_DEVTOOLS_DOM_DISCARD_SEARCH_RESULTS = 56,
-+  SHAAR_DEVTOOLS_OVERLAY_HIGHLIGHT_NODE = 57,
-+  SHAAR_DEVTOOLS_OVERLAY_HIDE_HIGHLIGHT = 58,
-+  SHAAR_DEVTOOLS_DOM_RESOLVE_NODE = 59,
-+  SHAAR_DEVTOOLS_RUNTIME_CALL_FUNCTION_ON = 60,
-+  SHAAR_DEVTOOLS_DOM_GET_OUTER_HTML = 61
+   SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44,
+-  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 45
++  SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 45,
++  SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES = 46,
++  SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE = 47,
++  SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE = 48,
++  SHAAR_DEVTOOLS_DOM_SET_NODE_VALUE = 49,
++  SHAAR_DEVTOOLS_DOM_REMOVE_NODE = 50,
++  SHAAR_DEVTOOLS_DOM_SET_OUTER_HTML = 51,
++  SHAAR_DEVTOOLS_DOM_MOVE_TO = 52,
++  SHAAR_DEVTOOLS_DOM_MARK_UNDOABLE_STATE = 53,
++  SHAAR_DEVTOOLS_DOM_UNDO = 54,
++  SHAAR_DEVTOOLS_DOM_PERFORM_SEARCH = 55,
++  SHAAR_DEVTOOLS_DOM_GET_SEARCH_RESULTS = 56,
++  SHAAR_DEVTOOLS_DOM_DISCARD_SEARCH_RESULTS = 57,
++  SHAAR_DEVTOOLS_OVERLAY_HIGHLIGHT_NODE = 58,
++  SHAAR_DEVTOOLS_OVERLAY_HIDE_HIGHLIGHT = 59,
++  SHAAR_DEVTOOLS_DOM_RESOLVE_NODE = 60,
++  SHAAR_DEVTOOLS_RUNTIME_CALL_FUNCTION_ON = 61,
++  SHAAR_DEVTOOLS_DOM_GET_OUTER_HTML = 62
  } shaar_devtools_command;
  typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
  // END devtools command and module IDs.
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -204,6 +204,23 @@
-      true},
-     {SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE,
+@@ -223,6 +223,23 @@
       "Emulation.setSafeAreaInsetsOverride", false, true},
+     {SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG,
+      "Page.handleJavaScriptDialog", false, true},
 +    {SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES, "DOM.requestChildNodes", true, false},
 +    {SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE, "DOM.setAttributeValue", true, false},
 +    {SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE, "DOM.removeAttribute", true, false},
@@ -72,7 +68,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
  };
  
  struct ReplyContext {
-@@ -387,9 +404,46 @@
+@@ -611,9 +628,46 @@
      case SHAAR_DEVTOOLS_EMULATION_CLEAR_GEOLOCATION_OVERRIDE:
      case SHAAR_DEVTOOLS_PERFORMANCE_ENABLE:
      case SHAAR_DEVTOOLS_PERFORMANCE_GET_METRICS:
@@ -119,7 +115,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
      case SHAAR_DEVTOOLS_DOM_REQUEST_NODE:
        return ParamsHaveOnly(params, {"objectId"});
      case SHAAR_DEVTOOLS_DOM_GET_BOX_MODEL:
-@@ -515,6 +569,37 @@
+@@ -741,6 +795,37 @@
               HasRequiredString(params, "objectId");
      case SHAAR_DEVTOOLS_DOM_REQUEST_NODE:
        return HasRequiredString(params, "objectId");
@@ -157,19 +153,18 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
      case SHAAR_DEVTOOLS_CSS_GET_MATCHED_STYLES_FOR_NODE:
      case SHAAR_DEVTOOLS_CSS_GET_PLATFORM_FONTS_FOR_NODE:
      case SHAAR_DEVTOOLS_CSS_GET_BACKGROUND_COLORS:
-@@ -825,7 +910,7 @@
+@@ -1055,7 +1140,7 @@
    }
    const int cap = *root.FindInt("capability");
    const int id = *root.FindInt("command");
--  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 44) {
-+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 61) {
+-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 45) {
++  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 62) {
      *reason = "unknown DevTools capability or command";
      return SHAAR_INVALID_ARGUMENT;
    }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -153,6 +153,31 @@
+@@ -188,6 +188,31 @@
    return text;
  }
  
@@ -201,7 +196,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  struct Projection {
    shaar_devtools_panel_event_id id;
    base::DictValue data;
-@@ -170,7 +195,73 @@
+@@ -205,7 +230,73 @@
      if (!request_id || request_id->empty() || request_id->size() > 128)
        return false;
    }
@@ -276,17 +271,19 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      result->id = SHAAR_DEVTOOLS_PANEL_CONSOLE_API_CALLED;
      PutString(&data, "level", params.FindString("type"), &result->truncated);
      data.Set("text", ConsoleText(params.FindList("args"), &result->truncated));
-@@ -955,4 +1046,5 @@
+@@ -1017,7 +1108,8 @@
+         R"({"id":-7,"method":"DOMStorage.enable"})",
+         R"({"id":-8,"method":"IndexedDB.enable"})",
          R"({"id":-9,"method":"ServiceWorker.enable"})",
 -        R"({"id":-10,"method":"PerformanceTimeline.enable","params":{"eventTypes":["largest-contentful-paint","layout-shift"]}})"};
 +        R"({"id":-10,"method":"PerformanceTimeline.enable","params":{"eventTypes":["largest-contentful-paint","layout-shift"]}})",
 +        R"({"id":-11,"method":"DOM.enable"})"};
      for (const char* command : commands) {
        host_->DispatchProtocolMessage(this, base::as_byte_span(std::string_view(command)));
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+     }
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -809,6 +809,18 @@
+@@ -927,6 +927,18 @@
    EXPECT_NE(nullptr, registry.FindModule(SHAAR_MODULE_DEVTOOLS));
  }
  

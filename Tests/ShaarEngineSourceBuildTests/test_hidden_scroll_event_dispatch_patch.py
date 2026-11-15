@@ -29,6 +29,7 @@ class HiddenScrollEventDispatchPatchTests(unittest.TestCase):
             patch,
         )
         self.assertIn("TaskType::kDOMManipulation", patch)
+        self.assertIn('+#include "third_party/blink/public/platform/task_type.h"', patch)
         self.assertIn("event_type_names::kScrollend", patch)
         self.assertIn("HiddenDocumentScrollEventsDispatchWithoutAnimationFrame", patch)
         self.assertIn("HiddenDocumentElementScrollEventsDispatchWithoutAnimationFrame", patch)

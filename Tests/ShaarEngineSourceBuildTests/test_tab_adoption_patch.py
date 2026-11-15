@@ -40,13 +40,15 @@ class TabAdoptionPatchTests(unittest.TestCase):
 
     def test_page_open_becomes_a_shaar_tab(self):
         source = PATCH.read_text()
-        self.assertIn("SHAAR_ENGINE_ABI_MINOR 9u", source)
-        self.assertIn("shaar_tab_find", source)
-        self.assertIn("_shaar_tab_find", source)
         self.assertIn("AdoptPageWebContents", source)
+        self.assertIn("user_gesture", source)
+        layer = ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar"
+        self.assertIn("SHAAR_ENGINE_ABI_MINOR 17u", (layer / "public/shaar_engine.h").read_text())
+        self.assertIn("shaar_tab_find", (layer / "windows_tabs/shaar_windows_tabs_lifecycle.cc").read_text())
+        self.assertIn("_shaar_tab_find", (layer / "shaar_engine.exports").read_text())
+        source = (layer / "windows_tabs/shaar_windows_tabs_lifecycle.cc").read_text()
         self.assertIn('payload.Set("kind", "opened")', source)
         self.assertIn("ToUpperASCII", source)
-        self.assertIn("HasSwitch(\"shaar-embedder\")", source)
 
     def test_patch_is_pinned_in_source_build(self):
         manifest = json.loads(MANIFEST.read_text())

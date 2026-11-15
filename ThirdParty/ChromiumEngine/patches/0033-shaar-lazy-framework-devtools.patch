@@ -1,8 +1,6 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
-index 4f04e8d..b521033 100644
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -1879,6 +1879,13 @@ shaar_error_code HandleDevToolsOperation(
+@@ -2206,6 +2206,13 @@
        DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
    if (operation == SHAAR_OP_DEVTOOLS_UI_SHOW) {
      // Shaar owns the frontend dock, including non-primary OTR profiles.
@@ -16,21 +14,17 @@ index 4f04e8d..b521033 100644
      if (!DevToolsWindow::GetInstanceForInspectedWebContents(contents))
        DevToolsSettings(Profile::FromBrowserContext(contents->GetBrowserContext()))
            .Set("currentDockState", "\"right\"");
-diff --git a/chrome/browser/shaar/extensions/shaar_extensions.cc b/chrome/browser/shaar/extensions/shaar_extensions.cc
-index 6bd24d7..bd0c187 100644
 --- a/chrome/browser/shaar/extensions/shaar_extensions.cc
 +++ b/chrome/browser/shaar/extensions/shaar_extensions.cc
-@@ -362,6 +362,8 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
-       return Fail(SHAAR_POLICY_BLOCKED, "component audit requires testing mode", error);
+@@ -387,6 +387,8 @@
      if (!HasOnlyKeys(input, {"schemaVersion"}))
-       return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema", error);
+       return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema",
+                   error);
 +    std::string failure;
 +    shaar::extensions_host::RegisterBundledFrameworkDevTools(profile, &failure);
      auto* loader = extensions::ComponentLoader::Get(profile);
      base::ListValue entries;
      for (std::string_view name : {"react", "vue", "angular"}) {
-diff --git a/chrome/browser/shaar/profiles/shaar_profiles.cc b/chrome/browser/shaar/profiles/shaar_profiles.cc
-index 4fc1983..60f3370 100644
 --- a/chrome/browser/shaar/profiles/shaar_profiles.cc
 +++ b/chrome/browser/shaar/profiles/shaar_profiles.cc
 @@ -17,7 +17,6 @@
@@ -41,7 +35,7 @@ index 4fc1983..60f3370 100644
  #include "base/strings/string_util.h"
  #include "base/strings/utf_string_conversions.h"
  #include "base/task/bind_post_task.h"
-@@ -31,7 +30,6 @@
+@@ -37,7 +36,6 @@
  #include "chrome/browser/profiles/profile_metrics.h"
  #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
  #include "chrome/browser/shaar/engine/shaar_engine_context.h"
@@ -49,13 +43,9 @@ index 4fc1983..60f3370 100644
  #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
  #include "chrome/browser/shaar/engine/shaar_module_registry.h"
  #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
-@@ -195,19 +193,10 @@ void OnProfileReady(shaar_profile* handle,
-     shaar::profiles::ApplyApplicationLocale(
-         profile, g_browser_process->local_state(), handle->engine->locale);
+@@ -283,17 +281,7 @@
+     return;
    }
-+  // Component framework DevTools start workers that are restored on the next
-+  // launch. That restored set crashes quit, so load them only for DevTools.
-   handle->native = profile;
    handle->ready = true;
 -  std::string framework_failure;
 -  if (!shaar::extensions_host::RegisterBundledFrameworkDevTools(
@@ -68,6 +58,7 @@ index 4fc1983..60f3370 100644
 -                     {handle->id.data(), handle->id.size()}, {}, {}, {},
 -                     {framework_payload.data(), framework_payload.size()});
 -  }
++  // Load framework DevTools only when DevTools opens; restored workers break quit.
    const std::string payload = "{\"kind\":\"loaded\",\"schemaVersion\":1}";
    shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
                     {handle->id.data(), handle->id.size()}, {}, {},

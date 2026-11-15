@@ -82,8 +82,10 @@ class TabLifecyclePatchTests(unittest.TestCase):
     def test_patch_is_not_applied_twice(self):
         manifest = json.loads(MANIFEST.read_text())
         listed = [entry["file"] for entry in manifest["patches"]]
-        self.assertEqual(listed.count(str(PATCH.relative_to(ROOT))), 1)
+        self.assertEqual(listed.count(str(PATCH.relative_to(ROOT))), 0)
         self.assertNotIn("0061-shaar-tab-lifecycle.patch", "\n".join(listed))
+        self.assertIn("SHAAR_OP_TAB_DISCARD = 208",
+                      (LAYER / "chrome/browser/shaar/public/shaar_engine.h").read_text())
 
     def test_layer_hashes_match_the_files(self):
         manifest = json.loads(MANIFEST.read_text())

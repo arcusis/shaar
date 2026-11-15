@@ -19,7 +19,7 @@
  }
  
  // DevToolsWindow::Throttle ------------------------------------------
-@@ -805,6 +808,13 @@
+@@ -806,6 +809,13 @@
  
    std::string type = agent_host->GetType();
    if (type == "node") {
@@ -33,7 +33,7 @@
      // Direct node targets will always open using ToT front-end.
      window = Create(profile, nullptr, kFrontendV8, std::string(), false,
                      std::string(), std::string(), agent_host->IsAttached(),
-@@ -835,7 +845,15 @@
+@@ -836,7 +846,15 @@
  // static
  DevToolsWindow* DevToolsWindow::OpenNodeFrontendWindow(
      Profile* profile,
@@ -50,10 +50,10 @@
    for (DevToolsWindow* window : GetDevToolsWindowInstances()) {
      if (window->frontend_type_ == kFrontendNode) {
        window->ActivateWindow();
-@@ -1552,6 +1570,12 @@
+@@ -1566,6 +1584,12 @@
      base::OnceCallback<void(content::NavigationHandle&)>
          navigation_handle_callback) {
-   DCHECK(source == main_web_contents_);
+   CHECK(source == main_web_contents_, base::NotFatalUntil::M161);
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder") &&
 +      !params.url.SchemeIs(content::kChromeDevToolsScheme)) {
 +    shaar::windows_tabs::RouteDevToolsOpenURL(GetInspectedWebContents(),
@@ -63,7 +63,7 @@
    if (!params.url.SchemeIs(content::kChromeDevToolsScheme)) {
      // TODO(https://crbug.com/40275094): Plumb the `navigation_handle_callback`.
      return OpenURLFromInspectedTab(params);
-@@ -1616,6 +1640,13 @@
+@@ -1630,6 +1654,13 @@
    }
  
    WebContents* inspected_web_contents = GetInspectedWebContents();
@@ -77,21 +77,21 @@
    if (inspected_web_contents) {
      inspected_web_contents->GetDelegate()->AddNewContents(
          source, std::move(new_contents), target_url, disposition,
-@@ -1891,6 +1922,11 @@
+@@ -1904,6 +1935,11 @@
+   if (!content::ChildProcessSecurityPolicy::GetInstance()->CanRequestURL(
            child_id, fixed_url)) {
      fixed_url = GURL(url::kAboutBlankURL);
-   }
++  }
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
 +    shaar::windows_tabs::RouteDevToolsOpenURL(inspected_web_contents,
 +                                               profile_, fixed_url);
 +    return;
-+  }
+   }
    content::OpenURLParams params =
        content::OpenURLParams::CreateBrowserInitiated(
-           fixed_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
 --- a/chrome/browser/devtools/devtools_window.h
 +++ b/chrome/browser/devtools/devtools_window.h
-@@ -197,7 +197,8 @@
+@@ -205,7 +205,8 @@
    // Node frontend is always undocked.
    static DevToolsWindow* OpenNodeFrontendWindow(
        Profile* profile,
@@ -111,7 +111,7 @@
  
  #include <stddef.h>
  
-@@ -253,6 +254,13 @@
+@@ -254,6 +255,13 @@
  }
  
  void DefaultBindingsDelegate::OpenInNewTab(const std::string& url) {
@@ -125,7 +125,7 @@
    content::OpenURLParams params =
        content::OpenURLParams::CreateBrowserInitiated(
            GURL(url), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-@@ -274,6 +282,18 @@
+@@ -271,6 +279,18 @@
  
  void DefaultBindingsDelegate::OpenSearchResultsInNewTab(
      const std::string& query) {
@@ -141,10 +141,10 @@
 +    }
 +    return;
 +  }
- #if BUILDFLAG(IS_ANDROID)
-   NOTIMPLEMENTED();
- #else
-@@ -1421,6 +1441,9 @@
+   BrowserWindowInterface* browser =
+       GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(web_contents_);
+   if (!browser) {
+@@ -1433,6 +1453,9 @@
      gurl = GURL(url::kAboutBlankURL);
    }
  
@@ -156,7 +156,7 @@
  
 --- a/chrome/browser/ui/webui/inspect/inspect_ui.cc
 +++ b/chrome/browser/ui/webui/inspect/inspect_ui.cc
-@@ -512,8 +512,8 @@
+@@ -514,8 +514,8 @@
    if (!profile) {
      return;
    }

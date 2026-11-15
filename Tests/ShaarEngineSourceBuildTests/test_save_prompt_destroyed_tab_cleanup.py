@@ -24,7 +24,8 @@ class SavePromptDestroyedTabCleanupTests(unittest.TestCase):
         prompts = PROMPTS.read_text()
         start = prompts.index("void DismissSavePromptsForDestroyedContents(")
         end = prompts.index("int DecisionCode(", start)
-        self.assertIn("Supersede(contents);", prompts[start:end])
+        self.assertIn("SupersedeSavePrompts(contents);", prompts[start:end])
+        self.assertIn("Supersede(contents);", prompts[prompts.index("void SupersedeSavePrompts("):start])
         self.assertIn("void DismissSavePromptsForDestroyedContents(content::WebContents* contents);", HEADER.read_text())
 
 

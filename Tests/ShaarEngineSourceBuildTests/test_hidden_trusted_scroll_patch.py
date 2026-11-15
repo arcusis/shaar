@@ -28,8 +28,7 @@ class HiddenTrustedScrollPatchTests(unittest.TestCase):
         manifest = json.loads(MANIFEST.read_text())
         listed = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}
         name = str(PATCH.relative_to(ROOT))
-        self.assertIn(name, listed)
-        self.assertEqual(hashlib.sha256(PATCH.read_bytes()).hexdigest(), listed[name])
+        self.assertNotIn(name, listed)
         for path, expected in manifest["layer"]["files"].items():
             content = LAYER / path
             self.assertTrue(content.is_file(), path)
@@ -39,11 +38,12 @@ class HiddenTrustedScrollPatchTests(unittest.TestCase):
             digest.update(path.encode("utf-8") + b"\0" + expected.encode("ascii") + b"\n")
         self.assertEqual(digest.hexdigest(), manifest["layer"]["sha256"])
 
-    def test_patch_contains_wheel_dispatch_and_regression_case(self):
-        patch = PATCH.read_text()
-        self.assertIn("ForwardWheelEvent", patch)
-        self.assertIn("ParseProbeScrollArguments", patch)
-        self.assertIn("SHAAR_OP_PROBE_TRUSTED_SCROLL", patch)
+    def test_layer_contains_wheel_dispatch_and_regression_case(self):
+        source = (LAYER / "chrome/browser/shaar/devtools/shaar_devtools.cc").read_text()
+        tests = (LAYER / "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc").read_text()
+        self.assertIn("ForwardWheelEvent", source)
+        self.assertIn("ParseProbeScrollArguments", source)
+        self.assertIn("SHAAR_OP_PROBE_TRUSTED_SCROLL", tests)
 
 
 if __name__ == "__main__":

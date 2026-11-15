@@ -1,4 +1,3 @@
-diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc
 --- a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc
 +++ b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.cc
 @@ -7,6 +7,7 @@
@@ -9,20 +8,20 @@ diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.
  #include "base/functional/bind.h"
  #include "base/functional/callback_helpers.h"
  #include "base/metrics/field_trial.h"
-@@ -46,6 +47,12 @@
-     base::OnceCallback<void(const blink::mojom::StreamDevicesSet& devices,
+@@ -47,6 +48,12 @@
                              blink::mojom::MediaStreamRequestResult result,
                              std::unique_ptr<content::MediaStreamUI> ui)>;
-+
+ 
 +namespace shaar::media {
 +void RequestWebsiteMediaPermission(
 +    content::WebContents*, const content::MediaStreamRequest&,
 +    base::OnceCallback<void(bool)>) __attribute__((weak_import));
 +}  // namespace shaar::media
- 
++
  #if BUILDFLAG(IS_MAC)
  using system_permission_settings::SystemPermission;
-@@ -247,11 +254,40 @@
+ #endif
+@@ -250,8 +257,36 @@
    const content::MediaStreamRequest& request =
        it->second.begin()->second.request;
  
@@ -41,9 +40,9 @@ diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.
 +
    webrtc::MediaStreamDevicesController::RequestPermissions(
        request, MediaCaptureDevicesDispatcher::GetInstance(),
-       base::BindOnce(
-           &PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse,
-           base::Unretained(this), web_contents, request_id, request));
++      base::BindOnce(
++          &PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse,
++          weak_factory_.GetWeakPtr(), web_contents, request_id, request));
 +}
 +
 +void PermissionBubbleMediaAccessHandler::OnShaarMediaPermissionDecision(
@@ -52,18 +51,13 @@ diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.
 +    content::MediaStreamRequest request,
 +    bool allowed) {
 +  auto found = pending_requests_.find(web_contents);
-+  if (found == pending_requests_.end() ||
-+      !found->second.contains(request_id))
++  if (found == pending_requests_.end() || !found->second.contains(request_id))
 +    return;
 +  webrtc::MediaStreamDevicesController::RequestPermissionsWithShaarDecision(
 +      request, MediaCaptureDevicesDispatcher::GetInstance(), allowed,
-+      base::BindOnce(
-+          &PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse,
-+          weak_factory_.GetWeakPtr(), web_contents, request_id, request));
- }
- 
- void PermissionBubbleMediaAccessHandler::UpdateMediaRequestState(
-diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h
+       base::BindOnce(
+           &PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse,
+           weak_factory_.GetWeakPtr(), web_contents, request_id, request));
 --- a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h
 +++ b/chrome/browser/media/webrtc/permission_bubble_media_access_handler.h
 @@ -56,6 +56,11 @@
@@ -78,7 +72,6 @@ diff --git a/chrome/browser/media/webrtc/permission_bubble_media_access_handler.
    void OnMediaStreamRequestResponse(
        content::WebContents* web_contents,
        int64_t request_id,
-diff --git a/components/webrtc/media_stream_devices_controller.cc b/components/webrtc/media_stream_devices_controller.cc
 --- a/components/webrtc/media_stream_devices_controller.cc
 +++ b/components/webrtc/media_stream_devices_controller.cc
 @@ -192,6 +192,70 @@
@@ -152,7 +145,6 @@ diff --git a/components/webrtc/media_stream_devices_controller.cc b/components/w
  }
  
  MediaStreamDevicesController::~MediaStreamDevicesController() {
-diff --git a/components/webrtc/media_stream_devices_controller.h b/components/webrtc/media_stream_devices_controller.h
 --- a/components/webrtc/media_stream_devices_controller.h
 +++ b/components/webrtc/media_stream_devices_controller.h
 @@ -53,6 +53,14 @@

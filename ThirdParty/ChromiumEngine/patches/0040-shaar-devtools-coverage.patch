@@ -1,7 +1,6 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -156,7 +156,7 @@
+@@ -159,7 +159,7 @@
      {SHAAR_DEVTOOLS_DOM_GET_DOCUMENT, "DOM.getDocument", true, false},
      {SHAAR_DEVTOOLS_DOM_REQUEST_NODE, "DOM.requestNode", true, false},
      {SHAAR_DEVTOOLS_DOM_GET_BOX_MODEL, "DOM.getBoxModel", true, false},
@@ -10,7 +9,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
      {SHAAR_DEVTOOLS_CSS_GET_PLATFORM_FONTS_FOR_NODE,
       "CSS.getPlatformFontsForNode", true, false},
      {SHAAR_DEVTOOLS_CSS_GET_BACKGROUND_COLORS, "CSS.getBackgroundColors", true,
-@@ -254,6 +254,16 @@
+@@ -240,6 +240,16 @@
       false, true},
      {SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE,
       "Emulation.clearIdleOverride", false, true},
@@ -24,16 +23,28 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
 +     "CSS.startRuleUsageTracking", true, true},
 +    {SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING, "CSS.stopRuleUsageTracking",
 +     true, true},
- };
+     {SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES, "DOM.requestChildNodes", true, false},
+     {SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE, "DOM.setAttributeValue", true, false},
+     {SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE, "DOM.removeAttribute", true, false},
+@@ -650,6 +660,10 @@
+     *seen = true;
+   }
+   return true;
++}
++
++bool OptionalBoolean(const base::DictValue& params, std::string_view key) {
++  return !params.Find(key) || params.FindBool(key).has_value();
+ }
  
- struct ReplyContext {
-@@ -748,6 +758,17 @@
+ bool ValidateParams(shaar_devtools_command command,
+@@ -811,6 +825,17 @@
+     case SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE:
        return ParamsHaveOnly(params, {"isUserActive", "isScreenUnlocked"});
      case SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE:
-       return ParamsHaveOnly(params, {});
++      return ParamsHaveOnly(params, {});
 +    case SHAAR_DEVTOOLS_PROFILER_START_PRECISE_COVERAGE:
-+      return ParamsHaveOnly(
-+                 params, {"callCount", "detailed", "allowTriggeredUpdates"}) &&
++      return ParamsHaveOnly(params, {"callCount", "detailed",
++                                      "allowTriggeredUpdates"}) &&
 +             OptionalBoolean(params, "callCount") &&
 +             OptionalBoolean(params, "detailed") &&
 +             OptionalBoolean(params, "allowTriggeredUpdates");
@@ -41,45 +52,21 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/sh
 +    case SHAAR_DEVTOOLS_PROFILER_STOP_PRECISE_COVERAGE:
 +    case SHAAR_DEVTOOLS_CSS_START_RULE_USAGE_TRACKING:
 +    case SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING:
-+      return ParamsHaveOnly(params, {});
-   }
-   return false;
- }
-@@ -766,6 +787,10 @@
- bool HasRequiredBoolean(const base::DictValue& params,
-                         std::string_view key) {
-   return params.FindBool(key).has_value();
-+}
-+
-+bool OptionalBoolean(const base::DictValue& params, std::string_view key) {
-+  return !params.Find(key) || params.FindBool(key).has_value();
+       return ParamsHaveOnly(params, {});
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return ParamsHaveOnly(params, {"urls"});
+@@ -1293,7 +1318,7 @@
+ };
+ 
+ bool KnownDevToolsCommand(int id) {
+-  return id >= 1 && id <= SHAAR_DEVTOOLS_EMULATION_CLEAR_IDLE_OVERRIDE;
++  return id >= 1 && id <= SHAAR_DEVTOOLS_CSS_STOP_RULE_USAGE_TRACKING;
  }
  
- bool HasNumericValue(const base::DictValue& params,
-@@ -1247,7 +1272,7 @@
-   }
-   const int cap = *root.FindInt("capability");
-   const int id = *root.FindInt("command");
--  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 71) {
-+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 76) {
-     *reason = "unknown DevTools capability or command";
-     return SHAAR_INVALID_ARGUMENT;
-   }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+ shaar_error_code DecodeOperation(shaar_operation operation,
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -499,8 +499,8 @@
-       Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"nodeId":1}})"),
-       61, &output, &reason)) << reason;
-   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
--      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{}})"),
--      72, &output, &reason));
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
-+      77, &output, &reason));
-   EXPECT_EQ("unknown DevTools capability or command", reason);
- }
- 
-@@ -608,8 +608,8 @@
+@@ -624,8 +624,8 @@
        Bytes(R"({"schemaVersion":1,"capability":1,"command":66,"params":{"result":true}})"),
        66, &output, &reason));
    EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
@@ -90,76 +77,53 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
    EXPECT_EQ("unknown DevTools capability or command", reason);
  }
  
-@@ -689,8 +689,65 @@
+@@ -648,7 +648,7 @@
+            R"({"schemaVersion":1,"capability":1,"command":69,"params":{"cacheDisabled":true}})",
+            R"({"schemaVersion":1,"capability":2,"command":69,"params":{}})",
+            R"({"schemaVersion":1,"capability":2,"command":69,"params":{"cacheDisabled":true,"extra":1}})",
+-           R"({"schemaVersion":1,"capability":2,"command":72,"params":{"cacheDisabled":true}})"}) {
++           R"({"schemaVersion":1,"capability":2,"command":77,"params":{"cacheDisabled":true}})"}) {
+     std::string rejected;
+     std::string rejectReason;
+     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &rejected, &rejectReason));
+@@ -703,9 +703,32 @@
        Bytes(R"({"schemaVersion":1,"capability":1,"command":70,"params":{"isUserActive":true,"isScreenUnlocked":true}})"),
        70, &output, &reason));
    EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
+-      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{}})"),
 +      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
 +      77, &output, &reason));
 +  EXPECT_EQ("unknown DevTools capability or command", reason);
 +}
 +
-+TEST(ShaarDevToolsTest, CoverageCommandsAreDeveloperAllowed) {
++TEST(ShaarDevToolsTest, CoverageCommandsStayWithinCapabilities) {
 +  std::string output;
 +  std::string reason;
++  EXPECT_STREQ("CSS.enable", ProtocolMethod(
++      SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER, SHAAR_DEVTOOLS_CSS_ENABLE));
 +  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":9,"params":{}})"),
-+      9, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("CSS.enable"));
-+  EXPECT_STREQ("CSS.enable",
-+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
-+                              SHAAR_DEVTOOLS_CSS_ENABLE));
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{"detailed":true,"callCount":false}})"),
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{"detailed":true}})"),
 +      72, &output, &reason)) << reason;
 +  EXPECT_NE(std::string::npos, output.find("Profiler.startPreciseCoverage"));
 +  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-       Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{}})"),
-+      72, &output, &reason)) << reason;
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
 +      Bytes(R"({"schemaVersion":1,"capability":2,"command":73,"params":{}})"),
 +      73, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("Profiler.takePreciseCoverage"));
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":74,"params":{}})"),
-+      74, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("Profiler.stopPreciseCoverage"));
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":75,"params":{}})"),
-+      75, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("CSS.startRuleUsageTracking"));
 +  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
 +      Bytes(R"({"schemaVersion":1,"capability":1,"command":75,"params":{}})"),
 +      75, &output, &reason)) << reason;
-+  EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":76,"params":{}})"),
-+      76, &output, &reason)) << reason;
-+  EXPECT_NE(std::string::npos, output.find("CSS.stopRuleUsageTracking"));
-+  EXPECT_EQ(nullptr,
-+            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
-+                           SHAAR_DEVTOOLS_PROFILER_START_PRECISE_COVERAGE));
-+  EXPECT_STREQ("Profiler.startPreciseCoverage",
-+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
-+                              SHAAR_DEVTOOLS_PROFILER_START_PRECISE_COVERAGE));
 +  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
 +      Bytes(R"({"schemaVersion":1,"capability":1,"command":72,"params":{}})"),
        72, &output, &reason));
+-  EXPECT_EQ("unknown DevTools capability or command", reason);
 +  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{"callCount":"yes"}})"),
++      Bytes(R"({"schemaVersion":1,"capability":2,"command":72,"params":{"detailed":"yes"}})"),
 +      72, &output, &reason));
-+  EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":73,"params":{"extra":true}})"),
-+      73, &output, &reason));
-+  EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":77,"params":{}})"),
-+      77, &output, &reason));
-   EXPECT_EQ("unknown DevTools capability or command", reason);
  }
  
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -391,7 +391,12 @@
+@@ -441,7 +441,12 @@
    SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FPS_COUNTER = 68,
    SHAAR_DEVTOOLS_NETWORK_SET_CACHE_DISABLED = 69,
    SHAAR_DEVTOOLS_EMULATION_SET_IDLE_OVERRIDE = 70,

@@ -1,6 +1,6 @@
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -88,8 +88,8 @@
+@@ -87,8 +87,8 @@
      return "(() => { let s=document.getElementById('shaar-repro-mask');"
             "if(!s){s=document.createElement('style');s.id='shaar-repro-mask';"
             "document.documentElement.appendChild(s)}s.textContent=" + quoted +
@@ -11,7 +11,7 @@
    }
    return "(() => {const s=document.getElementById('shaar-repro-mask');"
           "if(!s||!s.isConnected||!s.sheet||s.textContent!==" + quoted +
-@@ -1328,12 +1328,17 @@
+@@ -1359,12 +1359,17 @@
      ResumePausedRequests();
      base::DictValue params = next.empty() ? base::DictValue()
                                            : FetchEnableParams(next);
@@ -33,7 +33,7 @@
      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
          FROM_HERE, base::BindOnce(&PanelClient::RulesTimedOut,
                                    weak_factory_.GetWeakPtr(), command_id),
-@@ -1397,22 +1402,28 @@
+@@ -1404,22 +1409,28 @@
      if (command == SHAAR_DEVTOOLS_SCREENCAST_START) {
        if (recording_ || pending_start_)
          return Fail(error, SHAAR_CONFLICT, "screencast already started");
@@ -65,7 +65,7 @@
        return Fail(error, SHAAR_NOT_READY, "screencast command unavailable");
      }
      if (command == SHAAR_DEVTOOLS_SCREENCAST_STOP) {
-@@ -1464,11 +1475,14 @@
+@@ -1523,11 +1534,14 @@
          params.Set("quality", 40);
          params.Set("maxWidth", 1280);
          params.Set("maxHeight", 720);
@@ -83,7 +83,7 @@
          return;
        }
        if (*id == start_command_id_) {
-@@ -1765,6 +1779,7 @@
+@@ -1668,6 +1682,7 @@
      params.Set("expression",
                 "document.getElementById('shaar-repro-mask')?.remove()");
      SendCommand("Runtime.evaluate", std::move(params));
@@ -91,7 +91,7 @@
    }
  
    void FailStart() {
-@@ -1795,15 +1810,17 @@
+@@ -1698,15 +1713,17 @@
      base::DictValue check;
      check.Set("expression", MaskExpression(false));
      check.Set("returnByValue", true);
@@ -112,7 +112,7 @@
            base::Seconds(1));
      }
    }
-@@ -1956,6 +1973,7 @@
+@@ -1981,6 +1998,7 @@
    int frame_mask_id_ = 0;
    int awaiting_ack_ = 0;
    bool recording_ = false;

@@ -1,77 +1,59 @@
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -384,7 +384,8 @@
-   // 45-61 belong to the DOM-tree patch. Keep these explicit so both can land.
-   SHAAR_DEVTOOLS_PAGE_DISABLE = 62,
-   SHAAR_DEVTOOLS_PAGE_HANDLE_JAVASCRIPT_DIALOG = 63,
+@@ -434,7 +434,8 @@
+   SHAAR_DEVTOOLS_RUNTIME_CALL_FUNCTION_ON = 61,
+   SHAAR_DEVTOOLS_DOM_GET_OUTER_HTML = 62,
+   SHAAR_DEVTOOLS_PAGE_DISABLE = 63,
 -  SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE = 64
 +  SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE = 64,
 +  SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED = 65
  } shaar_devtools_command;
  typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
  // END devtools command and module IDs.
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
-@@ -240,6 +240,8 @@
-      "Page.handleJavaScriptDialog", false, true},
+@@ -226,6 +226,8 @@
+     {SHAAR_DEVTOOLS_PAGE_DISABLE, "Page.disable", true, true},
      {SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE, "CSS.forcePseudoState", true,
       false},
 +    {SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED,
 +     "Emulation.setTouchEmulationEnabled", false, true},
- };
- 
- struct ReplyContext {
-@@ -721,6 +723,8 @@
+     {SHAAR_DEVTOOLS_DOM_REQUEST_CHILD_NODES, "DOM.requestChildNodes", true, false},
+     {SHAAR_DEVTOOLS_DOM_SET_ATTRIBUTE_VALUE, "DOM.setAttributeValue", true, false},
+     {SHAAR_DEVTOOLS_DOM_REMOVE_ATTRIBUTE, "DOM.removeAttribute", true, false},
+@@ -785,6 +787,8 @@
      case SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE:
        return ParamsHaveOnly(params, {"nodeId", "forcedPseudoClasses"}) &&
               ForcedPseudoClassListIsValid(params);
 +    case SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED:
 +      return ParamsHaveOnly(params, {"enabled"});
-   }
-   return false;
- }
-@@ -860,6 +864,8 @@
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return ParamsHaveOnly(params, {"urls"});
+     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+@@ -923,6 +927,8 @@
      case SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE:
        return HasRequiredInteger(params, "nodeId") &&
               params.FindList("forcedPseudoClasses") != nullptr;
 +    case SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED:
 +      return HasRequiredBoolean(params, "enabled");
-     default:
-       return true;
-   }
-@@ -1206,7 +1212,7 @@
-   }
-   const int cap = *root.FindInt("capability");
-   const int id = *root.FindInt("command");
--  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 64) {
-+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 65) {
-     *reason = "unknown DevTools capability or command";
-     return SHAAR_INVALID_ARGUMENT;
-   }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
---- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-+++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -499,8 +499,8 @@
-       Bytes(R"({"schemaVersion":1,"capability":1,"command":61,"params":{"nodeId":1}})"),
-       61, &output, &reason)) << reason;
-   EXPECT_EQ(SHAAR_INVALID_ARGUMENT, EncodeProtocolRequest(
--      Bytes(R"({"schemaVersion":1,"capability":2,"command":65,"params":{}})"),
--      65, &output, &reason));
-+      Bytes(R"({"schemaVersion":1,"capability":2,"command":66,"params":{}})"),
-+      66, &output, &reason));
-   EXPECT_EQ("unknown DevTools capability or command", reason);
+     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+       return !params.Find("urls") || params.FindList("urls") != nullptr;
+     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+@@ -1252,7 +1258,7 @@
+ };
+ 
+ bool KnownDevToolsCommand(int id) {
+-  return id >= 1 && id <= SHAAR_DEVTOOLS_CSS_FORCE_PSEUDO_STATE;
++  return id >= 1 && id <= SHAAR_DEVTOOLS_EMULATION_SET_TOUCH_EMULATION_ENABLED;
  }
  
-@@ -535,6 +535,32 @@
-            R"({"schemaVersion":1,"capability":1,"command":64,"params":{"nodeId":7,"forcedPseudoClasses":["hover"],"extra":true}})",
-            R"({"schemaVersion":1,"capability":1,"command":62,"params":{"nodeId":7,"forcedPseudoClasses":["hover"]}})"}) {
-     EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 64, &output, &reason))
-+        << args;
-+  }
-+}
-+
+ shaar_error_code DecodeOperation(shaar_operation operation,
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -559,6 +559,28 @@
+   }
+ }
+ 
 +TEST(ShaarDevToolsTest, TouchEmulationIsDeveloperOnlyAndCommand65) {
 +  std::string output;
 +  std::string reason;
@@ -94,6 +76,6 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
 +           R"({"schemaVersion":1,"capability":2,"command":65,"params":{"enabled":true,"extra":1}})",
 +           R"({"schemaVersion":1,"capability":2,"command":66,"params":{"enabled":true}})"}) {
 +    EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 65, &output, &reason))
-         << args;
-   }
- }
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
+   const std::string args =
+       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";

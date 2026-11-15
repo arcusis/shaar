@@ -1,4 +1,3 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 @@ -11,6 +11,7 @@
@@ -9,7 +8,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  #include <map>
  #include <memory>
  #include <optional>
-@@ -43,7 +44,7 @@
+@@ -42,7 +43,7 @@
  
  namespace shaar::devtools {
  namespace {
@@ -18,7 +17,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  constexpr size_t kMaxEventInputBytes = 256 * 1024;
  constexpr size_t kMaxFieldBytes = 4 * 1024;
  constexpr size_t kMaxEventBytes = 32 * 1024;
-@@ -55,6 +56,13 @@
+@@ -54,6 +55,13 @@
  constexpr size_t kMaxQueuedBytes = 2 * 1024 * 1024;
  constexpr size_t kMaxRequestIDs = 512;
  constexpr size_t kMaxPendingBodies = 16;
@@ -32,7 +31,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  constexpr size_t kMaxHeaderCount = 64;
  constexpr size_t kMaxHeaderBytes = 16 * 1024;
  constexpr size_t kMaxPhase2Rows = 50;
-@@ -786,6 +794,7 @@
+@@ -817,6 +825,7 @@
                          const std::set<std::string>& worker_scopes,
                          const std::set<std::string>& resource_urls,
                          const std::string& frame_id,
@@ -40,7 +39,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
                          base::DictValue* command) {
    base::DictValue params;
    const char* method = nullptr;
-@@ -935,6 +944,14 @@
+@@ -966,6 +975,14 @@
        params.Set("url", *args.FindString("resourceURL"));
        method = "Page.getResourceContent";
        break;
@@ -55,7 +54,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      default:
        return false;
    }
-@@ -1174,6 +1191,14 @@
+@@ -1205,6 +1222,14 @@
          return false;
        reply.Set("body", *content);
        reply.Set("base64Encoded", result.FindBool("base64Encoded").value_or(false));
@@ -70,7 +69,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
        break;
      }
      case SHAAR_DEVTOOLS_PHASE2_LONG_TASKS:
-@@ -1253,11 +1278,14 @@
+@@ -1284,11 +1309,14 @@
    }
    reply.Set("items", std::move(items));
    reply.Set("truncated", truncated);
@@ -89,7 +88,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
  }
  
  bool ProjectPhase2Event(std::string_view method, const base::DictValue& params,
-@@ -1352,6 +1380,17 @@
+@@ -1383,6 +1411,17 @@
      if (!script || !SameOriginURL(*script, origin))
        return false;
      CopyText(&data, "text", *error, "errorMessage", &projection->truncated);
@@ -107,7 +106,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    } else if (method == "PerformanceTimeline.timelineEventAdded") {
      projection->id = SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE;
      const auto* entry = params.FindDict("event");
-@@ -1427,7 +1466,8 @@
+@@ -1458,7 +1497,8 @@
          R"({"id":-7,"method":"DOMStorage.enable"})",
          R"({"id":-8,"method":"IndexedDB.enable"})",
          R"({"id":-9,"method":"ServiceWorker.enable"})",
@@ -117,7 +116,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      for (const char* command : commands) {
        host_->DispatchProtocolMessage(this, base::as_byte_span(std::string_view(command)));
      }
-@@ -1552,9 +1592,15 @@
+@@ -1627,9 +1667,15 @@
        return Fail(error, SHAAR_POLICY_BLOCKED, "phase 2 requires a web origin");
      if (pending_phase2_.size() >= kMaxPendingBodies || next_command_id_ == INT_MAX)
        return Fail(error, SHAAR_NOT_READY, "too many pending phase 2 commands");
@@ -134,7 +133,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
        return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid phase 2 command");
      const int id = next_command_id_++;
      command.Set("id", id);
-@@ -1567,6 +1613,38 @@
+@@ -1642,6 +1688,38 @@
                                    weak_factory_.GetWeakPtr(), id),
          base::Seconds(15));
      host_->DispatchProtocolMessage(this, base::as_byte_span(json));
@@ -173,7 +172,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      return SHAAR_OK;
    }
  
-@@ -1725,6 +1803,22 @@
+@@ -1756,6 +1834,22 @@
      const auto* params = root.FindDict("params");
      if (!method || !params)
        return;
@@ -196,7 +195,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      if (*method == "Fetch.requestPaused") {
        HandlePaused(*params);
        return;
-@@ -1736,7 +1830,8 @@
+@@ -1767,7 +1861,8 @@
      // DOM node IDs belong to the Inspector command session.
      if (method->rfind("DOM.", 0) == 0)
        return;
@@ -206,7 +205,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
        Drop();
        return;
      }
-@@ -1791,6 +1886,8 @@
+@@ -1822,6 +1917,8 @@
    void DidStartNavigation(content::NavigationHandle* navigation) override {
      if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument())
        return;
@@ -215,7 +214,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      document_request_ids_.clear();
      document_response_ids_.clear();
      document_methods_.clear();
-@@ -2214,6 +2311,8 @@
+@@ -2244,6 +2341,8 @@
    std::set<std::string> worker_scopes_;
    std::set<std::string> resource_urls_;
    std::string frame_id_;
@@ -224,7 +223,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
    std::unique_ptr<ReplyTarget> pending_start_;
    std::unique_ptr<PendingFrame> pending_frame_;
    int mask_setup_id_ = 0;
-@@ -2307,7 +2406,7 @@
+@@ -2337,7 +2436,7 @@
      return false;
    base::DictValue command;
    if (!BuildPhase2Command(command_id, parsed->GetDict(), std::string(origin),
@@ -233,11 +232,10 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
      return false;
    return base::JSONWriter::Write(base::Value(std::move(command)), output);
  }
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
-@@ -1555,6 +1555,19 @@
-       "https://example.test", 42, &output));
+@@ -1606,5 +1606,18 @@
+   EXPECT_EQ("unknown DevTools capability or command", reason);
  }
  
 +TEST(ShaarDevToolsPanelTest, ParsedScriptsProjectOnlyOwnedScriptIdentity) {
@@ -253,32 +251,19 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc b/chrome/b
 +      "https://example.test", 7, &output));
 +}
 +
- 
- TEST(ShaarDevToolsTest, EventListenersAreInspectorOnlyAndCommand80) {
-   std::string output;
-diff --git a/chrome/browser/shaar/public/shaar_engine.h b/chrome/browser/shaar/public/shaar_engine.h
+ }  // namespace
+ }  // namespace shaar::devtools
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -13,7 +13,7 @@
- #endif
- 
- #define SHAAR_ENGINE_ABI_MAJOR 1u
--#define SHAAR_ENGINE_ABI_MINOR 9u
-+#define SHAAR_ENGINE_ABI_MINOR 10u
- #define SHAAR_EXPORT __attribute__((visibility("default")))
- 
- typedef struct shaar_engine shaar_engine;
-@@ -292,7 +292,8 @@
-   SHAAR_DEVTOOLS_PANEL_DOM_CHILDREN_SET = 25,
+@@ -338,6 +338,7 @@
    SHAAR_DEVTOOLS_PANEL_DOM_SHADOW_ROOT_PUSHED = 26,
    SHAAR_DEVTOOLS_PANEL_DOM_SHADOW_ROOT_POPPED = 27,
--  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28
-+  SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28,
-+  SHAAR_DEVTOOLS_PANEL_SCRIPT_PARSED = 30
- } shaar_devtools_panel_event_id;
- typedef enum {
-   SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS = 1,
-@@ -312,7 +313,9 @@
+   SHAAR_DEVTOOLS_PANEL_DOM_CHILD_COUNT_UPDATED = 28,
++  SHAAR_DEVTOOLS_PANEL_SCRIPT_PARSED = 30,
+   SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_CREATED = 31,
+   SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_HANDSHAKE = 32,
+   SHAAR_DEVTOOLS_PANEL_WEB_SOCKET_FRAME_SENT = 33,
+@@ -362,7 +363,9 @@
    SHAAR_DEVTOOLS_PHASE2_RESOURCE_TREE = 15,
    SHAAR_DEVTOOLS_PHASE2_RESOURCE_CONTENT = 16,
    SHAAR_DEVTOOLS_PHASE2_LONG_TASKS = 17,

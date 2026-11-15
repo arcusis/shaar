@@ -14,9 +14,9 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0061-shaar-private-quit-renderer-activation.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0044-shaar-quit-cancellation-callback.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
-LEGACY = ROOT / "ThirdParty/ChromiumEngine/patches/0044-shaar-quit-cancellation-callback.patch"
+DUPLICATE = ROOT / "ThirdParty/ChromiumEngine/patches/0061-shaar-private-quit-renderer-activation.patch"
 LAYER = ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar"
 TAG_URL = (
     "https://chromium.googlesource.com/chromium/src/+/"
@@ -43,8 +43,8 @@ class PrivateQuitRendererActivationPatchTests(unittest.TestCase):
     def test_157_hook_is_pinned_in_the_157_patch_list(self):
         files = [entry["file"] for entry in json.loads(MANIFEST.read_text())["patches"]]
         self.assertIn(str(PATCH.relative_to(ROOT)), files)
-        self.assertIn(str(LEGACY.relative_to(ROOT)), files)
-        self.assertIn("ResetTryToCloseWindow", LEGACY.read_text())
+        self.assertNotIn(str(DUPLICATE.relative_to(ROOT)), files)
+        self.assertIn("ResetBeforeUnloadForShutdown", PATCH.read_text())
 
     def test_patch_applies_to_the_157_close_manager_tag(self):
         source = fetch_tag_close_manager()

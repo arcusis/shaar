@@ -1,6 +1,6 @@
 --- a/chrome/browser/shaar/public/shaar_engine.h
 +++ b/chrome/browser/shaar/public/shaar_engine.h
-@@ -164,6 +164,9 @@
+@@ -192,6 +192,9 @@
    SHAAR_OP_SITE_COOKIES_CLEAR = 706,
    SHAAR_OP_THIRD_PARTY_COOKIES_GET = 707,
    SHAAR_OP_THIRD_PARTY_COOKIES_SET = 708,
@@ -42,7 +42,7 @@
  #include "base/task/sequenced_task_runner.h"
  #include "base/time/time.h"
  #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
-@@ -41,9 +42,15 @@
+@@ -44,9 +45,15 @@
  #include "content/public/browser/browsing_data_remover.h"
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/navigation_entry.h"
@@ -58,7 +58,7 @@
  #include "url/gurl.h"
  #include "url/origin.h"
  
-@@ -268,6 +275,107 @@
+@@ -272,6 +279,107 @@
          observer);
    }
    return SHAAR_OK;
@@ -165,8 +165,8 @@
 +  return item;
  }
  
- }  // namespace
-@@ -505,25 +613,153 @@
+ custom_handlers::ProtocolHandlerRegistry* ProtocolHandlers(Profile* profile) {
+@@ -573,25 +681,153 @@
      GURL origin;
      if (!raw_origin || !ValidOrigin(*raw_origin, &origin))
        return Fail(error, SHAAR_INVALID_ARGUMENT, "origin must be an exact HTTP(S) origin");

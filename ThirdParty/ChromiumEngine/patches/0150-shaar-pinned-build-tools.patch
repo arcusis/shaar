@@ -1,0 +1,57 @@
+From: Shaar Chromium 157 layer port
+Subject: [PATCH] use pinned Chromium build tools on macOS
+
+diff --git a/build/config/rust.gni b/build/config/rust.gni
+--- a/build/config/rust.gni
++++ b/build/config/rust.gni
+@@ -57,7 +57,7 @@ declare_args() {
+   # using a *nightly* version of Rust toolchain (see
+   # `docs/rust/unstable_rust_feature_usage.md`) although other projects (e.g.
+   # V8) may be compatible with the stable version of Rust toolchain.
+-  rust_sysroot_absolute = "//third_party/rust-toolchain"
++  rust_sysroot_absolute = ""
+ 
+   # Directory under which to find `bin/bindgen` (a `bin` directory containing
+   # the bindgen exectuable).
+diff --git a/build/toolchain/toolchain.gni b/build/toolchain/toolchain.gni
+--- a/build/toolchain/toolchain.gni
++++ b/build/toolchain/toolchain.gni
+@@ -41,7 +41,7 @@ declare_args() {
+ }
+ 
+ declare_args() {
+-  clang_version = "23"
++  clang_version = "24"
+ }
+ 
+ # Extension for shared library files (including leading dot).
+diff --git a/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni b/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
+--- a/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
++++ b/third_party/devtools-frontend/src/scripts/build/ninja/bundle.gni
+@@ -58,7 +58,7 @@ template("bundle") {
+       inputs += [ _entrypoints_file ]
+     }
+ 
+-    _esbuild = "/opt/homebrew/bin/esbuild"
++    _esbuild = devtools_location_prepend + "third_party/esbuild/esbuild"
+     if (host_os == "win") {
+       inputs += [ _esbuild + ".exe" ]
+     } else {
+
+diff --git a/third_party/devtools-frontend/src/scripts/build/esbuild.js b/third_party/devtools-frontend/src/scripts/build/esbuild.js
+--- a/third_party/devtools-frontend/src/scripts/build/esbuild.js
++++ b/third_party/devtools-frontend/src/scripts/build/esbuild.js
+@@ -19,10 +19,9 @@
+ // esbuild module uses binary in this path.
+ const binaryName = os.type() === 'Windows_NT' ? 'esbuild.exe' : 'esbuild';
+ process.env.ESBUILD_BINARY_PATH = path.join(
+-    '/',
+-    'opt',
+-    'homebrew',
+-    'bin',
++    devtoolsRootPath(),
++    'third_party',
++    'esbuild',
+     binaryName,
+ );
+ // This needs to be after the ESBUILD_BINARY_PATH is set

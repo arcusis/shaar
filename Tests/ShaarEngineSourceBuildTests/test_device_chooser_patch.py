@@ -11,7 +11,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0125-shaar-device-chooser.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0069-shaar-device-chooser.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 
 
@@ -53,6 +53,8 @@ class DeviceChooserPatchTests(unittest.TestCase):
         digest = hashlib.sha256(PATCH.read_bytes()).hexdigest()
         self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0]["sha256"], digest)
+        self.assertFalse(any(entry["file"].endswith("0125-shaar-device-chooser.patch")
+                             for entry in manifest["patches"]))
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ class PrintViewManagerPatchTests(unittest.TestCase):
         matching = [entry for entry in entries if entry["file"] == name]
         self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
-        prior = "ThirdParty/ChromiumEngine/patches/0078-shaar-trusted-click-layout.patch"
+        prior = "ThirdParty/ChromiumEngine/patches/0079-shaar-testing-switches.patch"
         self.assertLess(
             next(i for i, entry in enumerate(entries) if entry["file"] == prior),
             next(i for i, entry in enumerate(entries) if entry["file"] == name),

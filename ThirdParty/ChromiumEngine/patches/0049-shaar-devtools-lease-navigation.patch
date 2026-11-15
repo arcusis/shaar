@@ -1,17 +1,20 @@
-diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 --- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
-@@ -1653,9 +1653,24 @@
+@@ -34,3 +34,4 @@
+ #include "content/public/browser/devtools_agent_host_client.h"
++#include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -1683,6 +1683,26 @@
+     Close();
    }
    void WebContentsDestroyed() override { Close(); }
-   void DidFinishNavigation(content::NavigationHandle* navigation) override {
--    if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame() &&
--        !navigation->IsSameDocument())
++  void DidFinishNavigation(content::NavigationHandle* navigation) override {
 +    if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
 +        navigation->IsSameDocument())
 +      return;
 +    if (!StillOwnsTarget()) {
-       Close();
++      Close();
 +      return;
 +    }
 +    // The lease belongs to the tab. A document load changes its origin and
@@ -25,6 +28,7 @@ diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/brow
 +    worker_scopes_.clear();
 +    resource_urls_.clear();
 +    frame_id_.clear();
-   }
++  }
  
   private:
+   void MaskStartTimedOut(int command_id) {

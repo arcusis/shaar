@@ -10,6 +10,7 @@
 #include "chrome/browser/shaar/navigation/shaar_navigation_context.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "url/gurl.h"
 
 struct shaar_engine;
@@ -45,6 +46,9 @@ shaar_error_code Reload(content::NavigationController* controller,
 GURL ReloadTargetURL(const GURL& pending_url, const GURL& last_committed_url);
 shaar_error_code Stop(content::WebContents* contents);
 std::string PageReadableURL(const GURL& url);
+// The Chrome Web Store accepts installs only with Chrome client hints.
+bool IsChromeWebStoreURL(const GURL& url);
+blink::UserAgentOverride ChromeWebStoreUserAgentOverride();
 
 struct Command {
   shaar_operation operation = SHAAR_OP_TAB_STOP;
@@ -118,6 +122,7 @@ class NavigationObserver final : public content::WebContentsObserver {
   std::string tab_id_;
   std::string active_navigation_id_;
   bool active_same_document_ = false;
+  bool web_store_user_agent_override_active_ = false;
   bool active_navigation_failed_or_stopped_ = false;
   uint64_t generation_ = 0;
   bool destroyed_ = false;

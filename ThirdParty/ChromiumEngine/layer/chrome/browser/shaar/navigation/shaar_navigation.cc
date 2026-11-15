@@ -17,6 +17,8 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/version_info/version_info.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -170,6 +172,23 @@ std::string PageReadableURL(const GURL& url) {
   replacements.ClearUsername();
   replacements.ClearPassword();
   return url.ReplaceComponents(replacements).spec();
+}
+
+bool IsChromeWebStoreURL(const GURL& url) {
+  return url.SchemeIs("https") && url.host() == "chromewebstore.google.com" &&
+         url.EffectiveIntPort() == 443;
+}
+
+blink::UserAgentOverride ChromeWebStoreUserAgentOverride() {
+  blink::UserAgentOverride override;
+  override.ua_string_override = embedder_support::GetUserAgent();
+  auto metadata = embedder_support::GetUserAgentMetadata();
+  metadata.brand_version_list.emplace_back(
+      "Google Chrome", std::string(version_info::GetMajorVersionNumber()));
+  metadata.brand_full_version_list.emplace_back(
+      "Google Chrome", std::string(version_info::GetVersionNumber()));
+  override.ua_metadata_override = std::move(metadata);
+  return override;
 }
 
 shaar_error_code DecodeCommand(shaar_operation operation, shaar_bytes args_json,
@@ -362,6 +381,18 @@ void NavigationObserver::EmitInitialState() {
 
 void NavigationObserver::DidStartNavigation(content::NavigationHandle* handle) {
   if (destroyed_ || !handle || !handle->IsInPrimaryMainFrame()) return;
+  if (!handle->IsSameDocument()) {
+    if (IsChromeWebStoreURL(handle->GetURL())) {
+      web_contents()->SetUserAgentOverride(ChromeWebStoreUserAgentOverride(),
+                                           false);
+      handle->SetIsOverridingUserAgent(true);
+      web_store_user_agent_override_active_ = true;
+    } else if (web_store_user_agent_override_active_) {
+      web_contents()->SetUserAgentOverride(blink::UserAgentOverride(), false);
+      handle->SetIsOverridingUserAgent(false);
+      web_store_user_agent_override_active_ = false;
+    }
+  }
   active_navigation_id_ = std::to_string(handle->GetNavigationId());
   active_same_document_ = handle->IsSameDocument();
   active_navigation_failed_or_stopped_ = false;

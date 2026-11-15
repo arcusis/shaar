@@ -4,6 +4,7 @@
 
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 
+#include <algorithm>
 #include <string>
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -139,6 +140,26 @@ TEST(ShaarNavigationHandlerTest, StopIsDispatchedAndNullBackendIsNotFound) {
   EXPECT_EQ(HandleCommand(nullptr, SHAAR_OP_TAB_STOP, Bytes(stop), &reason),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(reason, "tab_not_found");
+}
+
+TEST(ShaarNavigationHandlerTest, ChromeBrandIsScopedToWebStoreOrigin) {
+  EXPECT_TRUE(IsChromeWebStoreURL(GURL("https://chromewebstore.google.com/detail/example")));
+  EXPECT_FALSE(IsChromeWebStoreURL(GURL("http://chromewebstore.google.com/")));
+  EXPECT_FALSE(IsChromeWebStoreURL(GURL("https://chromewebstore.google.com:8443/")));
+  EXPECT_FALSE(IsChromeWebStoreURL(GURL("https://sub.chromewebstore.google.com/")));
+  EXPECT_FALSE(IsChromeWebStoreURL(GURL("https://example.com/")));
+
+  const auto override = ChromeWebStoreUserAgentOverride();
+  ASSERT_TRUE(override.ua_metadata_override.has_value());
+  const auto& metadata = *override.ua_metadata_override;
+  const auto has_chrome_brand = [](const auto& brands) {
+    return std::any_of(brands.begin(), brands.end(), [](const auto& brand) {
+      return brand.brand == "Google Chrome";
+    });
+  };
+  EXPECT_TRUE(has_chrome_brand(metadata.brand_version_list));
+  EXPECT_TRUE(has_chrome_brand(metadata.brand_full_version_list));
+  EXPECT_NE(override.ua_string_override.find("Chrome/"), std::string::npos);
 }
 
 }  // namespace

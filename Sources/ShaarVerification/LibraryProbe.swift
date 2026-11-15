@@ -16,6 +16,12 @@ enum LibraryProbeEvidence {
     Set(ids).count == ids.count
   }
 
+  @MainActor
+  static func deleteBookmarkFromLibrary(_ id: UUID, profileID: UUID, store: BrowserStore) -> Bool {
+    store.showLibrary(.bookmarks)
+    return store.deleteBookmark(id, profileID: profileID)
+  }
+
   static func fixtureDocument(_ json: String?) -> [String: Any]? {
     guard let data = json?.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -351,7 +357,8 @@ final class LibraryProbe {
         address: url("library-alpha-disposable").absoluteString), profile: a, title: "Disposable",
       address: url("library-alpha-disposable").absoluteString)
     try expect(
-      store.deleteBookmark(temporary, profileID: a), "native folder removal is acknowledged")
+      LibraryProbeEvidence.deleteBookmarkFromLibrary(temporary, profileID: a, store: store),
+      "native folder removal is acknowledged")
     try await wait("native subtree removal") {
       self.item(temporary, in: a) == nil && self.item(child, in: a) == nil
     }

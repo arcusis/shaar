@@ -26,6 +26,16 @@ class ExternalAppConsentPatchTests(unittest.TestCase):
         self.assertIn("self.onExternalAppRequest(request)", bridge)
         self.assertIn("_shaarExternalAppReply(requestID.UTF8String, accepted ? 1 : 0)", bridge)
 
+    def test_native_probe_audit_survives_engine_quit_only_after_owned_probe_authorization(self):
+        source = (LAYER / "chrome/browser/shaar/external_app/shaar_external_app.cc").read_text()
+        audit = source.split("const char* ProbeLaunchesJSON() {", 1)[1].split(
+            "}  // namespace shaar::external_app", 1
+        )[0]
+        self.assertIn("if (!ProbeMode(engine))", audit)
+        self.assertIn("ProbeAuditAuthorized() = true;", audit)
+        self.assertIn("else if (!TestingEnabled() || !ProbeAuditAuthorized())", audit)
+        self.assertIn("lifecycle::HasOwnedProbeRoot(engine)", source)
+
     def test_manifest_lists_exact_patch_and_layer_digests(self):
         manifest = json.loads(MANIFEST.read_text())
         listed = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}

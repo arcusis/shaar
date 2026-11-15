@@ -333,6 +333,34 @@ TEST_F(PrivateSessionRegistryTest, AutofillPreferencesAreDisabledOnlyInOTRProfil
   EXPECT_TRUE(registry.Close(session));
 }
 
+TEST_F(PrivateSessionRegistryTest,
+       PrivateBrowserInitializationCannotChangeNormalAutofillPreferences) {
+  TestingProfile profile;
+  constexpr const char* kAutofillPrefs[] = {
+      "credentials_enable_service", "autofill.profile_enabled",
+      "autofill.credit_card_enabled"};
+  for (const char* key : kAutofillPrefs)
+    profile.GetPrefs()->SetBoolean(key, true);
+
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-browser-init", &session),
+            SHAAR_OK);
+  ASSERT_NE(session, nullptr);
+
+  // Simulate Autofill initialization in the hidden OTR Browser, which runs
+  // after the private session has applied its initial preferences.
+  for (const char* key : kAutofillPrefs)
+    profile.GetPrefs()->SetBoolean(key, false);
+
+  EXPECT_TRUE(RestorePrivateProfileAutofillPreferences(session->otr));
+  for (const char* key : kAutofillPrefs) {
+    EXPECT_FALSE(session->otr->GetPrefs()->GetBoolean(key)) << key;
+    EXPECT_TRUE(profile.GetPrefs()->GetBoolean(key)) << key;
+  }
+  EXPECT_TRUE(registry.Close(session));
+}
+
 TEST_F(PrivateSessionRegistryTest, WebRTCAndReferrerPrefsStayPrivate) {
   TestingProfile profile;
   profile.GetPrefs()->SetBoolean(prefs::kEnableReferrers, true);

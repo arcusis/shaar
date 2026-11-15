@@ -28,6 +28,7 @@ inline bool PrivateExtensionsDisabled(const Profile* profile) {
 }
 
 shaar_error_code ConfigurePrivateProfile(Profile* otr);
+bool RestorePrivateProfileAutofillPreferences(Profile* otr);
 std::string PrivateProfilePrivacyStatus(Profile* otr);
 
 // Owns Shaar's identity and lease for Chromium's primary OTR profile. The

@@ -35,6 +35,7 @@
 #include "chrome/browser/shaar/extensions/shaar_extensions.h"
 #include "chrome/browser/shaar/media/shaar_media.h"
 #include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 #include "chrome/browser/shaar/tab_lifecycle/shaar_tab_lifecycle.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
@@ -360,6 +361,12 @@ Browser* CreateHiddenBrowser(Profile* profile) {
   params.should_trigger_session_restore = false;
   BrowserWindowInterface* created = CreateBrowserWindow(std::move(params));
   Browser* browser = static_cast<Browser*>(created);
+  if (browser && profile->IsOffTheRecord() &&
+      !shaar::RestorePrivateProfileAutofillPreferences(profile)) {
+    if (BrowserWindow* native_window = BrowserWindow::FromBrowser(browser))
+      native_window->Close();
+    return nullptr;
+  }
   if (browser) {
     Observer().ObserveTabStrip(browser);
     if (BrowserWindow* native_window = BrowserWindow::FromBrowser(browser))

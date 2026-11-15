@@ -6,6 +6,8 @@
 #include "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h"
 #include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
 
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <iterator>
 #include <map>
@@ -16,6 +18,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
+#include "base/supports_user_data.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
@@ -28,6 +31,66 @@
 #include "url/origin.h"
 
 namespace shaar {
+
+namespace {
+
+const int kPrivateAutofillPreferenceSnapshotKey = 0;
+constexpr std::array<const char*, 3> kPrivateAutofillPreferenceNames = {
+    "credentials_enable_service", "autofill.profile_enabled",
+    "autofill.credit_card_enabled"};
+
+class PrivateAutofillPreferenceSnapshot final
+    : public base::SupportsUserData::Data {
+ public:
+  explicit PrivateAutofillPreferenceSnapshot(
+      std::array<bool, kPrivateAutofillPreferenceNames.size()> values)
+      : values(std::move(values)) {}
+
+  std::array<bool, kPrivateAutofillPreferenceNames.size()> values;
+};
+
+PrivateAutofillPreferenceSnapshot* GetPrivateAutofillPreferenceSnapshot(
+    Profile* otr) {
+  auto* snapshot = static_cast<PrivateAutofillPreferenceSnapshot*>(
+      otr->GetUserData(&kPrivateAutofillPreferenceSnapshotKey));
+  if (snapshot)
+    return snapshot;
+  Profile* original = otr->GetOriginalProfile();
+  PrefService* original_prefs = original ? original->GetPrefs() : nullptr;
+  if (!original_prefs)
+    return nullptr;
+  std::array<bool, kPrivateAutofillPreferenceNames.size()> values;
+  for (size_t i = 0; i < values.size(); ++i)
+    values[i] = original_prefs->GetBoolean(kPrivateAutofillPreferenceNames[i]);
+  auto owned = std::make_unique<PrivateAutofillPreferenceSnapshot>(values);
+  snapshot = owned.get();
+  otr->SetUserData(&kPrivateAutofillPreferenceSnapshotKey, std::move(owned));
+  return snapshot;
+}
+
+bool RestoreNormalAutofillPreferences(
+    Profile* otr, const PrivateAutofillPreferenceSnapshot& snapshot) {
+  Profile* original = otr->GetOriginalProfile();
+  PrefService* original_prefs = original ? original->GetPrefs() : nullptr;
+  if (!original_prefs)
+    return false;
+  for (size_t i = 0; i < snapshot.values.size(); ++i) {
+    if (original_prefs->GetBoolean(kPrivateAutofillPreferenceNames[i]) !=
+        snapshot.values[i]) {
+      original_prefs->SetBoolean(kPrivateAutofillPreferenceNames[i],
+                                 snapshot.values[i]);
+    }
+  }
+  for (size_t i = 0; i < snapshot.values.size(); ++i) {
+    if (original_prefs->GetBoolean(kPrivateAutofillPreferenceNames[i]) !=
+        snapshot.values[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
 
 PrivateSessionRegistry::PrivateSessionRegistry(EventSink event_sink)
     : event_sink_(std::move(event_sink)) {}
@@ -218,6 +281,24 @@ shaar_error_code PrivateCookieSetting(Profile *otr, std::string_view origin,
   return SHAAR_OK;
 }
 
+bool RestorePrivateProfileAutofillPreferences(Profile* otr) {
+  if (!otr || !otr->IsOffTheRecord())
+    return false;
+  PrefService* prefs = otr->GetPrefs();
+  PrivateAutofillPreferenceSnapshot* snapshot =
+      GetPrivateAutofillPreferenceSnapshot(otr);
+  if (!prefs || !snapshot)
+    return false;
+  for (const char* key : kPrivateAutofillPreferenceNames)
+    prefs->SetBoolean(key, false);
+  return std::all_of(kPrivateAutofillPreferenceNames.begin(),
+                     kPrivateAutofillPreferenceNames.end(),
+                     [prefs](const char* key) {
+                       return !prefs->GetBoolean(key);
+                     }) &&
+         RestoreNormalAutofillPreferences(otr, *snapshot);
+}
+
 bool PrivateSessionRegistry::IsLive(const Session* session) const {
   if (!session)
     return false;
@@ -285,29 +366,12 @@ shaar_error_code ConfigurePrivateProfile(Profile* otr) {
                    "disable_non_proxied_udp");
   prefs->SetList(prefs::kWebRTCIPHandlingUrl, base::ListValue());
   prefs->SetList(prefs::kWebRtcLocalIpsAllowedUrls, base::ListValue());
-  Profile* original = otr->GetOriginalProfile();
-  PrefService* original_prefs = original ? original->GetPrefs() : nullptr;
-  constexpr const char* kAutofillPrefs[] = {
-      "credentials_enable_service", "autofill.profile_enabled",
-      "autofill.credit_card_enabled"};
-  bool original_autofill_values[std::size(kAutofillPrefs)] = {};
-  if (!original_prefs)
+  PrivateAutofillPreferenceSnapshot* snapshot =
+      GetPrivateAutofillPreferenceSnapshot(otr);
+  if (!snapshot)
     return SHAAR_NOT_READY;
-  for (size_t i = 0; i < std::size(kAutofillPrefs); ++i)
-    original_autofill_values[i] = original_prefs->GetBoolean(kAutofillPrefs[i]);
-
-  for (const char* key : kAutofillPrefs)
-    prefs->SetBoolean(key, false);
-
-  // Some Chromium pref registrations route OTR writes to the original profile.
-  // Restore any such write immediately, and fail closed below if the OTR
-  // service cannot retain its own disabled value.
-  for (size_t i = 0; i < std::size(kAutofillPrefs); ++i) {
-    if (original_prefs->GetBoolean(kAutofillPrefs[i]) !=
-        original_autofill_values[i]) {
-      original_prefs->SetBoolean(kAutofillPrefs[i], original_autofill_values[i]);
-    }
-  }
+  if (!RestorePrivateProfileAutofillPreferences(otr))
+    return SHAAR_POLICY_BLOCKED;
   const GURL probe("https://shaar-privacy.invalid/");
   return settings->GetContentSetting(probe, probe, ContentSettingsType::COOKIES) ==
                      CONTENT_SETTING_BLOCK &&
@@ -317,15 +381,10 @@ shaar_error_code ConfigurePrivateProfile(Profile* otr) {
                      "disable_non_proxied_udp" &&
                  prefs->GetList(prefs::kWebRTCIPHandlingUrl).empty() &&
                  prefs->GetList(prefs::kWebRtcLocalIpsAllowedUrls).empty() &&
-                 !prefs->GetBoolean("credentials_enable_service") &&
-                 !prefs->GetBoolean("autofill.profile_enabled") &&
-                 !prefs->GetBoolean("autofill.credit_card_enabled") &&
-                 original_prefs->GetBoolean("credentials_enable_service") ==
-                     original_autofill_values[0] &&
-                 original_prefs->GetBoolean("autofill.profile_enabled") ==
-                     original_autofill_values[1] &&
-                 original_prefs->GetBoolean("autofill.credit_card_enabled") ==
-                     original_autofill_values[2]
+                 !prefs->GetBoolean(kPrivateAutofillPreferenceNames[0]) &&
+                 !prefs->GetBoolean(kPrivateAutofillPreferenceNames[1]) &&
+                 !prefs->GetBoolean(kPrivateAutofillPreferenceNames[2]) &&
+                 RestoreNormalAutofillPreferences(otr, *snapshot)
              ? SHAAR_OK
              : SHAAR_POLICY_BLOCKED;
 }

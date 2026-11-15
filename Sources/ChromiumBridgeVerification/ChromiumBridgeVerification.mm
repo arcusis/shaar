@@ -1601,7 +1601,7 @@ extern "C" BOOL ARCProbeTrustedClickElementAllowed(NSString *elementID) {
     @"blank", @"popup", @"plain", @"performance-input",
     @"arcusis-download-probe", @"window-client-download",
     @"external-consent-probe", @"arcusis-private-quit-activation", @"engine-window-request",
-    @"engine-window-create", @"parity-action"]];
+    @"engine-window-create", @"parity-action", @"webstore-add-to-chrome"]];
   return [allowed containsObject:elementID];
 }
 

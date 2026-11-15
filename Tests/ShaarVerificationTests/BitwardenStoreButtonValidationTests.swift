@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import ChromiumBridgeVerification
 import Foundation
 import Testing
 
@@ -22,5 +23,10 @@ import Testing
       "buttons": [["text": "Open extension"]],
     ]))
     #expect(!BitwardenStoreButtonValidation.hasEnabledInstallButton(in: ["buttons": NSNull()]))
+  }
+
+  @Test func trustedStoreClickIsAnAuthoredProbeTarget() {
+    #expect(ARCProbeTrustedClickElementAllowed("webstore-add-to-chrome"))
+    #expect(!ARCProbeTrustedClickElementAllowed("webstore-add-to-chrome-other"))
   }
 }

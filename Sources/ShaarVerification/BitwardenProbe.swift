@@ -136,13 +136,15 @@ final class BitwardenProbe {
           "Chrome Web Store did not offer an enabled Add to Chrome button. See bitwarden-store-page.json."
         )
       }
-      _ = await evaluate(
-        tab,
-        """
-        (()=>{const b=[...document.querySelectorAll('button,[role="button"]')].find(b=>
-          (b.innerText || b.getAttribute('aria-label') || '').trim().toLowerCase()==='add to chrome');
-          b?.click();return {clicked:!!b};})()
-        """, userGesture: true)
+      let clicked = await withCheckedContinuation { continuation in
+        runtime.clickProbeElement(inTabID: tab, elementID: "webstore-add-to-chrome") {
+          continuation.resume(returning: $0)
+        }
+      }
+      try write(["submitted": clicked], name: "bitwarden-store-click.json")
+      guard clicked else {
+        throw BitwardenProbeFailure("Trusted Web Store click was not submitted.")
+      }
       var consent: ExtensionInstallRequest?
       for _ in 0..<120 {
         consent = store.installationRequests.first { $0.browserExtension.id == extensionID }

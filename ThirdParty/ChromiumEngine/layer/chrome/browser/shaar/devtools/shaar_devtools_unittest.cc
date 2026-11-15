@@ -192,6 +192,39 @@ TEST(ShaarDevToolsTest, PopupProbeArgumentsStayBoundToOneHiddenPopup) {
       true, &id, &expression));
 }
 
+TEST(ShaarDevToolsTest, TrustedStoreClickRequiresExactOriginAndHiddenProbe) {
+  const GURL store("https://chromewebstore.google.com/detail/example");
+  constexpr std::string_view target = "webstore-add-to-chrome";
+  EXPECT_TRUE(TrustedWebStoreClickAllowed(true, true, true, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(false, true, true, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, false, true, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, false, true, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, true, false, store, target));
+  EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, true, true, store, "other"));
+  for (const char* url : {"http://chromewebstore.google.com/",
+                          "https://chromewebstore.google.com:8443/",
+                          "https://sub.chromewebstore.google.com/",
+                          "https://example.com/"}) {
+    EXPECT_FALSE(TrustedWebStoreClickAllowed(true, true, true, true,
+                                             GURL(url), target));
+  }
+}
+
+TEST(ShaarDevToolsTest, TrustedStoreClickMapsVisibleCssPointToWidget) {
+  int x = -1;
+  int y = -1;
+  EXPECT_TRUE(MapTrustedWebStorePoint(822, 154, 984, 729, 984, 729, &x, &y));
+  EXPECT_EQ(822, x);
+  EXPECT_EQ(154, y);
+  EXPECT_TRUE(MapTrustedWebStorePoint(1103, 154, 1281, 949, 984, 729, &x, &y));
+  EXPECT_EQ(847, x);
+  EXPECT_EQ(118, y);
+  EXPECT_FALSE(MapTrustedWebStorePoint(1087, 154, 984, 729, 984, 729, &x, &y));
+  EXPECT_FALSE(MapTrustedWebStorePoint(822, 154, 0, 729, 984, 729, &x, &y));
+  EXPECT_FALSE(MapTrustedWebStorePoint(822, 154, 984, 729, 0, 729, &x, &y));
+  EXPECT_FALSE(MapTrustedWebStorePoint(-1, 154, 984, 729, 984, 729, &x, &y));
+}
+
 class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
  public:
   bool ResolveTarget(shaar_engine*, shaar_scope, shaar_window*, shaar_tab*,

@@ -25,6 +25,14 @@ BUTTON = (
     'style="position:fixed;left:8px;top:8px;width:180px;height:48px">'
 )
 EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
+DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "
+DIAGNOSTIC_STAGES = {
+    "hook:password", "hook:card", "hook:address", "offer:entered",
+    "offer:invalid-input", "offer:context-denied", "offer:no-profile-services",
+    "offer:no-selected-regular-tab", "offer:invalid-page-url",
+    "offer:serialize-failed", "offer:pending-limit", "offer:expiry-schedule-failed",
+    "offer:event-emitted", "offer:event-rejected",
+}
 
 
 class FixtureServer(ThreadingHTTPServer):
@@ -147,6 +155,13 @@ def main():
                 env=environment, capture_output=True, text=True, timeout=180, check=False,
             )
             report = json.loads(report_path.read_text()) if report_path.is_file() else {}
+            diagnostics = []
+            for line in (result.stdout + "\n" + result.stderr).splitlines():
+                if DIAGNOSTIC_PREFIX not in line:
+                    continue
+                stage = line.split(DIAGNOSTIC_PREFIX, 1)[1].strip()
+                if stage in DIAGNOSTIC_STAGES:
+                    diagnostics.append(stage)
         finally:
             shutil.rmtree(root, ignore_errors=True)
         server.shutdown()
@@ -160,7 +175,7 @@ def main():
         "allWindowsHidden": report.get("allWindowsHidden"),
         "windowsOnScreen": report.get("windowsOnScreen"),
         "rows": report.get("rows", []), "submittedForms": submitted_forms,
-        "crashReports": crashes,
+        "diagnosticStages": diagnostics, "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True
         and set(submitted_forms) == EXPECTED_SUBMISSIONS and not crashes,
     }

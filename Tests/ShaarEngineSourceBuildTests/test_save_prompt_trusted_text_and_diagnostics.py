@@ -41,6 +41,10 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         self.assertIn("offer:no-selected-regular-tab", prompt_source)
         self.assertIn('"offer:event-emitted"', prompt_source)
         self.assertIn('"offer:event-rejected"', prompt_source)
+        harness = FIXTURE.read_text()
+        self.assertIn('DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "', harness)
+        self.assertIn('"diagnosticStages": diagnostics', harness)
+        self.assertIn('if stage in DIAGNOSTIC_STAGES:', harness)
         for hook in ("password", "card", "address"):
             with self.subTest(hook=hook):
                 self.assertIn(f'"hook:{hook}"', patch)

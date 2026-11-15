@@ -7,6 +7,17 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct PrivateDiskArtifactBaselineTests {
+  @Test func onlyPrivateMarkersAreAudited() {
+    let markers = PrivateDiskArtifactBaseline.privateOnlyMarkers(runID: "D9527BA1")
+    #expect(markers == [
+      Data("/private-window-d9527ba1-".utf8),
+      Data("/private-product-d9527ba1-".utf8),
+    ])
+    #expect(!markers.contains(Data("privacyProbe".utf8)))
+    #expect(!markers.contains(Data("privacyJS=1".utf8)))
+    #expect(!markers.contains(Data("privacyHttp=1".utf8)))
+  }
+
   @Test func checkpointsOnlyFilesChangedByNormalPositiveControls() {
     let baseline = [
       "Chromium/History": "10:1",

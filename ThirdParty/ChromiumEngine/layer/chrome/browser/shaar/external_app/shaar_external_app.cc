@@ -54,15 +54,23 @@ std::vector<std::string>& ProbeLaunches() {
   return *launches;
 }
 
+bool& ProbeAuditAuthorized() {
+  static bool authorized = false;
+  return authorized;
+}
+
 uint64_t& NextID() {
   static uint64_t next_id = 1;
   return next_id;
 }
 
-bool ProbeMode(shaar_engine* engine) {
+bool TestingEnabled() {
   const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-  return testing && std::string_view(testing) == "1" &&
-         lifecycle::HasOwnedProbeRoot(engine);
+  return testing && std::string_view(testing) == "1";
+}
+
+bool ProbeMode(shaar_engine* engine) {
+  return TestingEnabled() && lifecycle::HasOwnedProbeRoot(engine);
 }
 
 void Dismiss(const std::string& id) {
@@ -194,8 +202,15 @@ shaar_error_code Resolve(const char* request_id, bool accepted) {
 
 const char* ProbeLaunchesJSON() {
   shaar_engine* engine = lifecycle::ActiveEngine();
-  if (!engine || !ProbeMode(engine))
+  if (engine) {
+    if (!ProbeMode(engine))
+      return nullptr;
+    // Keep the audit available to the verification process after engine quit.
+    // The first read requires an active engine with an owned probe root.
+    ProbeAuditAuthorized() = true;
+  } else if (!TestingEnabled() || !ProbeAuditAuthorized()) {
     return nullptr;
+  }
   base::ListValue entries;
   for (const std::string& url : ProbeLaunches()) {
     base::DictValue entry;

@@ -55,7 +55,7 @@ final class BrowserEngine {
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
   private(set) var extensions: [BrowserExtension] = []
   private(set) var extensionPopupSize = CGSize(width: 480, height: 560)
-  let presentsNativePanels: Bool
+  var presentsNativePanels: Bool
   let lazyPinnedTabs: Bool
   var extensionPanel: ExtensionPanelRoute? {
     didSet {

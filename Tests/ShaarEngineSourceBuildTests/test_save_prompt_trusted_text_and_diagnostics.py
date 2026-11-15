@@ -91,6 +91,23 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         )
         self.assertIn("registry.Find(SHAAR_OP_PROBE_TRUSTED_TEXT)", engine_tests)
 
+    def test_trusted_input_failures_report_only_the_stage(self):
+        source = (LAYER / "devtools/shaar_devtools.cc").read_text()
+        for stage in (
+            "capture lease wait timed out", "target unavailable at start",
+            "target unavailable before snapshot", "forced snapshot was empty",
+            "tab disappeared after snapshot", "target unavailable after snapshot",
+            "main frame unavailable after snapshot",
+            "element point unavailable or outside view",
+            "target unavailable at element point",
+            "target unavailable before dispatch",
+            "target unavailable before text commit", "capture timed out",
+        ):
+            with self.subTest(stage=stage):
+                self.assertIn(f'Fail("{stage}")', source)
+        self.assertIn('std::string("trusted input failed at ") + stage', source)
+        self.assertNotIn('std::string("trusted input failed at ") + text_', source)
+
 
 if __name__ == "__main__":
     unittest.main()

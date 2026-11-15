@@ -19,6 +19,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
@@ -128,6 +129,11 @@ TEST_F(PrivateSessionRegistryTest, SameParentAndIDShareOnePrimaryOTRLease) {
   PrivateSessionRegistry::Session* first = nullptr;
   EXPECT_EQ(registry.Open(&profile, "profile-a", "session-a", &first), SHAAR_OK);
   ASSERT_NE(first, nullptr);
+  EXPECT_TRUE(first->otr->IsOffTheRecord());
+  EXPECT_TRUE(content::StoragePartitionConfig::CreateDefault(first->otr)
+                  .in_memory());
+  EXPECT_FALSE(content::StoragePartitionConfig::CreateDefault(&profile)
+                   .in_memory());
   PrivateSessionRegistry::Session* second = nullptr;
   EXPECT_EQ(registry.Open(&profile, "profile-a", "session-a", &second), SHAAR_OK);
   EXPECT_EQ(first, second);

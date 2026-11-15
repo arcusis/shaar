@@ -48,11 +48,14 @@ std::map<std::string, PendingDialog>& Pending() {
 void Expire(std::string id);
 
 bool IsActiveOwnedTab(shaar_engine* engine, content::WebContents* contents,
+                      bool before_unload,
                       windows_tabs::SelectedRegularTab* identity) {
-  auto selected = windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
+  auto selected = before_unload
+      ? windows_tabs::Registry().FindRegularTab(engine, contents)
+      : windows_tabs::Registry().FindSelectedRegularTab(engine, contents);
   const bool regular_profile = contents && contents->GetBrowserContext() &&
       !contents->GetBrowserContext()->IsOffTheRecord();
-  if (!DialogMayBePresented(selected.has_value(), regular_profile))
+  if (!DialogMayBePresented(selected.has_value(), regular_profile, before_unload))
     return false;
   *identity = std::move(*selected);
   return true;
@@ -64,7 +67,7 @@ bool Start(shaar_engine* engine, content::WebContents* contents,
            content::JavaScriptDialogManager::DialogClosedCallback* callback) {
   windows_tabs::SelectedRegularTab identity{};
   if (!callback || callback->is_null() || !lifecycle::EngineIsReady(engine) || !contents ||
-      !IsActiveOwnedTab(engine, contents, &identity) || Pending().size() >= 8)
+      !IsActiveOwnedTab(engine, contents, before_unload, &identity) || Pending().size() >= 8)
     return false;
   const std::string id = base::Uuid::GenerateRandomV4().AsLowercaseString();
   base::Value::Dict payload;
@@ -154,8 +157,9 @@ shaar_error_code Fail(shaar_error* error, shaar_error_code code) {
 
 }  // namespace
 
-bool DialogMayBePresented(bool is_selected_tab, bool is_regular_profile) {
-  return is_selected_tab && is_regular_profile;
+bool DialogMayBePresented(bool is_selected_tab, bool is_regular_profile,
+                          bool before_unload) {
+  return (is_selected_tab || before_unload) && is_regular_profile;
 }
 
 bool SuppressedDialogAccepted(content::JavaScriptDialogType type) {

@@ -81,6 +81,16 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
         self.assertEqual(
             self.server.submission_counts(), {"/card": 2, "/address": 1})
 
+    def test_receipt_keeps_only_known_trusted_input_failure_stages(self):
+        output = (
+            "Trusted probe text: trusted input failed at target unavailable before text commit\n"
+            "Trusted probe text: trusted input failed at user supplied secret\n"
+        )
+        self.assertEqual(
+            PROBE.trusted_input_failure_stages(output),
+            ["target unavailable before text commit"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

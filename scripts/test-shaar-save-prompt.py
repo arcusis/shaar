@@ -25,6 +25,16 @@ BUTTON = (
 )
 EXPECTED_SUBMISSIONS = {"/password", "/card", "/address"}
 DIAGNOSTIC_PREFIX = "SHAAR_SAVE_PROMPT_DIAGNOSTIC "
+TRUSTED_INPUT_FAILURE_PREFIX = "trusted input failed at "
+TRUSTED_INPUT_FAILURE_STAGES = {
+    "capture lease unavailable", "target unavailable at start",
+    "target unavailable before snapshot", "forced snapshot was empty",
+    "tab disappeared after snapshot", "target unavailable after snapshot",
+    "main frame unavailable after snapshot",
+    "element point unavailable or outside view", "target unavailable at element point",
+    "target unavailable before dispatch", "target unavailable before text commit",
+    "capture timed out",
+}
 DIAGNOSTIC_STAGES = {
     "hook:password", "hook:card", "hook:address", "offer:entered",
     "offer:invalid-input", "offer:context-denied", "offer:no-profile-services",
@@ -149,6 +159,17 @@ def screenshot_directory(receipt, locale):
     return receipt.parent / "screenshots" / locale
 
 
+def trusted_input_failure_stages(output):
+    stages = []
+    for line in output.splitlines():
+        if TRUSTED_INPUT_FAILURE_PREFIX not in line:
+            continue
+        stage = line.split(TRUSTED_INPUT_FAILURE_PREFIX, 1)[1].strip()
+        if stage in TRUSTED_INPUT_FAILURE_STAGES:
+            stages.append(stage)
+    return stages
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, default=ROOT / "build/Shaar Verification.app")
@@ -199,7 +220,9 @@ def main():
             )
             report = json.loads(report_path.read_text()) if report_path.is_file() else {}
             diagnostics = []
-            for line in (result.stdout + "\n" + result.stderr).splitlines():
+            combined_output = result.stdout + "\n" + result.stderr
+            trusted_input_failures = trusted_input_failure_stages(combined_output)
+            for line in combined_output.splitlines():
                 if DIAGNOSTIC_PREFIX not in line:
                     continue
                 stage = line.split(DIAGNOSTIC_PREFIX, 1)[1].strip()
@@ -231,6 +254,7 @@ def main():
         "rows": report.get("rows", []), "submittedForms": submitted_forms,
         "submissionCounts": submission_counts,
         "diagnosticStages": diagnostics,
+        "trustedInputFailures": trusted_input_failures,
         "screenshots": screenshots,
         "crashReports": crashes,
         "passed": result.returncode == 0 and report.get("passed") is True

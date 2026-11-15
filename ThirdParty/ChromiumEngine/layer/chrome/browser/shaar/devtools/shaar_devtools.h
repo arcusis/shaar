@@ -85,6 +85,8 @@ bool MapTrustedWebStorePoint(int css_x, int css_y,
                              int viewport_width, int viewport_height,
                              int widget_width, int widget_height,
                              int* widget_x, int* widget_y);
+bool ShouldRetryCoveredWebStoreClick(bool store_target, bool covered,
+                                    unsigned retries);
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open);

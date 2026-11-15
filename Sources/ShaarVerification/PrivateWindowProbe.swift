@@ -229,10 +229,7 @@ final class PrivateWindowProbe {
     let t1 = UUID().uuidString.uppercased()
     let t2 = UUID().uuidString.uppercased()
     diskSnapshot = chromiumProfileFiles()
-    privateDiskMarkers = [
-      Data("/private-window-\(marker)-".utf8), Data("privacyProbe".utf8),
-      Data("privacyJS=1".utf8), Data("privacyHttp=1".utf8),
-    ]
+    privateDiskMarkers = PrivateDiskArtifactBaseline.privateOnlyMarkers(runID: runID)
     markStage("opening-private-windows")
     try open(w1, contextA, t1, fixture.appending(path: "private-window-\(marker)-a").absoluteString)
     privateWindows.append(w1)
@@ -1143,6 +1140,16 @@ final class PrivateWindowProbe {
 }
 
 enum PrivateDiskArtifactBaseline {
+  static func privateOnlyMarkers(runID: String) -> Set<Data> {
+    // The normal positive controls also author privacyProbe, privacyJS, and privacyHttp.
+    // Those keys cannot establish a private-to-normal disk leak, especially when LevelDB
+    // flushes the normal writes after the metadata checkpoint.
+    [
+      Data("/private-window-\(runID.lowercased())-".utf8),
+      Data("/private-product-\(runID.lowercased())-".utf8),
+    ]
+  }
+
   static func checkpointNormalControlChanges(
     baseline: [String: String], beforeControls: [String: String],
     afterControls: [String: String]

@@ -91,7 +91,7 @@ diff --git a/chrome/browser/shaar/javascript_dialogs/shaar_javascript_dialogs.cc
  namespace shaar::javascript_dialogs {
  namespace {
 @@ -67,7 +69,7 @@
-       !IsActiveOwnedTab(engine, contents, &identity) || Pending().size() >= 8)
+       !IsActiveOwnedTab(engine, contents, before_unload, &identity) || Pending().size() >= 8)
      return false;
    const std::string id = base::Uuid::GenerateRandomV4().AsLowercaseString();
 -  base::Value::Dict payload;

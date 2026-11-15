@@ -7,6 +7,7 @@
 #include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
 
 #include <cstring>
+#include <iterator>
 #include <map>
 #include <pthread.h>
 #include <utility>
@@ -284,9 +285,29 @@ shaar_error_code ConfigurePrivateProfile(Profile* otr) {
                    "disable_non_proxied_udp");
   prefs->SetList(prefs::kWebRTCIPHandlingUrl, base::ListValue());
   prefs->SetList(prefs::kWebRtcLocalIpsAllowedUrls, base::ListValue());
-  prefs->SetBoolean("credentials_enable_service", false);
-  prefs->SetBoolean("autofill.profile_enabled", false);
-  prefs->SetBoolean("autofill.credit_card_enabled", false);
+  Profile* original = otr->GetOriginalProfile();
+  PrefService* original_prefs = original ? original->GetPrefs() : nullptr;
+  constexpr const char* kAutofillPrefs[] = {
+      "credentials_enable_service", "autofill.profile_enabled",
+      "autofill.credit_card_enabled"};
+  bool original_autofill_values[std::size(kAutofillPrefs)] = {};
+  if (!original_prefs)
+    return SHAAR_NOT_READY;
+  for (size_t i = 0; i < std::size(kAutofillPrefs); ++i)
+    original_autofill_values[i] = original_prefs->GetBoolean(kAutofillPrefs[i]);
+
+  for (const char* key : kAutofillPrefs)
+    prefs->SetBoolean(key, false);
+
+  // Some Chromium pref registrations route OTR writes to the original profile.
+  // Restore any such write immediately, and fail closed below if the OTR
+  // service cannot retain its own disabled value.
+  for (size_t i = 0; i < std::size(kAutofillPrefs); ++i) {
+    if (original_prefs->GetBoolean(kAutofillPrefs[i]) !=
+        original_autofill_values[i]) {
+      original_prefs->SetBoolean(kAutofillPrefs[i], original_autofill_values[i]);
+    }
+  }
   const GURL probe("https://shaar-privacy.invalid/");
   return settings->GetContentSetting(probe, probe, ContentSettingsType::COOKIES) ==
                      CONTENT_SETTING_BLOCK &&
@@ -298,7 +319,13 @@ shaar_error_code ConfigurePrivateProfile(Profile* otr) {
                  prefs->GetList(prefs::kWebRtcLocalIpsAllowedUrls).empty() &&
                  !prefs->GetBoolean("credentials_enable_service") &&
                  !prefs->GetBoolean("autofill.profile_enabled") &&
-                 !prefs->GetBoolean("autofill.credit_card_enabled")
+                 !prefs->GetBoolean("autofill.credit_card_enabled") &&
+                 original_prefs->GetBoolean("credentials_enable_service") ==
+                     original_autofill_values[0] &&
+                 original_prefs->GetBoolean("autofill.profile_enabled") ==
+                     original_autofill_values[1] &&
+                 original_prefs->GetBoolean("autofill.credit_card_enabled") ==
+                     original_autofill_values[2]
              ? SHAAR_OK
              : SHAAR_POLICY_BLOCKED;
 }

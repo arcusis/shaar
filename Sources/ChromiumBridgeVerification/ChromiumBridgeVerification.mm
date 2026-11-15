@@ -82,6 +82,20 @@ BOOL ProbeCaptureAllowed(void) {
   return ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]);
 }
 
+void LogTrustedInputFailure(const char *stage) {
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (testing && std::strcmp(testing, "1") == 0 && ProbeCaptureAllowed()) {
+    NSLog(@"Trusted probe text: trusted input failed at %s", stage);
+  }
+}
+
+void LogTrustedInputTrace(const char *stage) {
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (testing && std::strcmp(testing, "1") == 0 && ProbeCaptureAllowed()) {
+    NSLog(@"Trusted probe text: trace: %s", stage);
+  }
+}
+
 BOOL ProbeTrustedInputSurfaceAllowed(NSView *view) {
   NSWindow *pageWindow = view.window;
   if (!pageWindow) return NO;
@@ -1933,26 +1947,38 @@ static void ProbeCancelNativeHold(ARCShaarRuntime *runtime, NSString *tabID,
                            completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
   if (!completion) return;
   const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
-  if (!testing || std::strcmp(testing, "1") != 0 ||
-      !ARCProbeTrustedTextFieldAllowed(elementID) || text.length == 0 || text.length > 64) {
+  if (!testing || std::strcmp(testing, "1") != 0) {
+    completion(NO);
+    return;
+  }
+  LogTrustedInputTrace("bridge handler entered");
+  if (!ARCProbeTrustedTextFieldAllowed(elementID) || text.length == 0 || text.length > 64) {
+    LogTrustedInputFailure("invalid fixture text request");
     completion(NO);
     return;
   }
   NSView *view = [self viewForTabID:tabID];
   if (!ProbeTrustedInputSurfaceAllowed(view)) {
+    LogTrustedInputFailure("render surface unavailable");
     completion(NO);
     return;
   }
   NSString *profileID = [self shaarDevToolsProfileIDForTabID:tabID];
   NSString *windowID = [self windowIDForTabID:tabID];
   if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    LogTrustedInputFailure("tab ownership unavailable");
     completion(NO);
     return;
   }
   [self shaarDevToolsSubmit:1099 tabID:tabID profileID:profileID windowID:windowID
-                   payload:@{@"schemaVersion": @1, @"elementID": elementID, @"text": text}
+                payload:@{@"schemaVersion": @1, @"elementID": elementID, @"text": text}
                 completion:^(NSDictionary *reply, NSError *error) {
-    if (error) NSLog(@"Trusted probe text: %@", error.localizedDescription);
+    if (error) {
+      LogTrustedInputFailure("engine request rejected");
+      NSLog(@"Trusted probe text: %@", error.localizedDescription);
+    } else if (![reply[@"submitted"] boolValue]) {
+      LogTrustedInputFailure("engine reply not submitted");
+    }
     completion(!error && [reply[@"submitted"] boolValue]);
   }];
 }

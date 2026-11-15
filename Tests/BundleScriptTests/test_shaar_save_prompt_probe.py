@@ -84,11 +84,14 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
     def test_receipt_keeps_only_known_trusted_input_failure_stages(self):
         output = (
             "Trusted probe text: trusted input failed at target unavailable before text commit\n"
+            "Trusted probe text: trusted input failed at render surface unavailable\n"
+            "Trusted probe text: trusted input failed at engine request rejected\n"
             "Trusted probe text: trusted input failed at user supplied secret\n"
         )
         self.assertEqual(
             PROBE.trusted_input_failure_stages(output),
-            ["target unavailable before text commit"],
+            ["target unavailable before text commit", "render surface unavailable",
+             "engine request rejected"],
         )
 
 

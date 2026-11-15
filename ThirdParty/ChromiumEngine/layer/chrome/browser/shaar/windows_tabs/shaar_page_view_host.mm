@@ -10,7 +10,9 @@
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "url/gurl.h"
 
 @interface ShaarPageHostWindow : NSWindow
 @property(nonatomic, readonly) BOOL wasShown;
@@ -32,6 +34,11 @@ namespace {
 std::unordered_map<void*, PageViewHost*>& SelectedOwners() {
   static std::unordered_map<void*, PageViewHost*> owners;
   return owners;
+}
+
+bool IsChromeWebStoreOrigin(const GURL& url) {
+  return url.SchemeIs("https") && url.host() == "chromewebstore.google.com" &&
+         url.EffectiveIntPort() == 443;
 }
 }  // namespace
 
@@ -152,6 +159,7 @@ void PageViewHost::SetSelectedWebContents(content::WebContents* contents) {
     previous->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
   selected_contents_ = contents ? contents->GetWeakPtr()
                                 : base::WeakPtr<content::WebContents>();
+  Observe(contents);
   DevToolsContentsResizingStrategy strategy;
   content::WebContents* frontend = contents
       ? DevToolsWindow::GetInTabWebContents(contents, &strategy) : nullptr;
@@ -169,10 +177,25 @@ void PageViewHost::RefreshVisibility() {
     visibility = (window_.occlusionState & NSWindowOcclusionStateVisible)
                      ? content::Visibility::VISIBLE
                      : content::Visibility::OCCLUDED;
+  } else if (!window_.isVisible && !window_.isMiniaturized &&
+             IsChromeWebStoreOrigin(contents->GetLastCommittedURL())) {
+    // The store commits its installable button state in requestAnimationFrame.
+    // Keep the selected store document rendering in a hidden host so the queued
+    // update can run without ordering the native window on screen.
+    visibility = content::Visibility::VISIBLE;
   }
   contents->UpdateWebContentsVisibility(visibility);
-  if (devtools_contents_)
-    devtools_contents_->UpdateWebContentsVisibility(visibility);
+  if (devtools_contents_) {
+    // The exception above applies to the store page, not its DevTools panel.
+    devtools_contents_->UpdateWebContentsVisibility(
+        window_.isVisible ? visibility : content::Visibility::HIDDEN);
+  }
+}
+
+void PageViewHost::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->HasCommitted() && navigation_handle->IsInMainFrame())
+    RefreshVisibility();
 }
 
 void PageViewHost::Resize(NSSize size) {

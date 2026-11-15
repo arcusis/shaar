@@ -10,7 +10,9 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 @interface ShaarFocusProbeWindow : NSWindow
 @property(nonatomic, strong) NSResponder* acceptedResponder;
@@ -69,6 +71,28 @@ TEST_F(ShaarTabVisibilityTest, FallbackSelectionTracksOwningWindowVisibility) {
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::OCCLUDED);
   window.probeMiniaturized = YES;
   ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+}
+
+TEST_F(ShaarTabVisibilityTest, HiddenStoreOriginRendersAndLeavingItHidesAgain) {
+  web_contents()->WasHidden();
+  ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  PageViewHost host(NSMakeRect(0, 0, 800, 600), window);
+  host.SetSelectedWebContents(web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+
+  auto* tester = content::WebContentsTester::For(web_contents());
+  tester->NavigateAndCommit(GURL("https://chromewebstore.google.com/detail/example"));
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  tester->NavigateAndCommit(GURL("https://example.com/"));
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  tester->NavigateAndCommit(GURL("https://chromewebstore.google.com:8443/"));
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  tester->NavigateAndCommit(GURL("http://chromewebstore.google.com/"));
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
 }
 

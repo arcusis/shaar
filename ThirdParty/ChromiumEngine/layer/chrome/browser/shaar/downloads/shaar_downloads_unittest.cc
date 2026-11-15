@@ -14,6 +14,8 @@
 
 #include "base/values.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 
 namespace shaar {
@@ -134,6 +136,11 @@ TEST(ShaarDownloadsControlTest, PauseAndCancelAreIdempotent) {
 
 void RegisterPromptPref(TestingPrefServiceSimple* prefs, bool prompt_by_default) {
   prefs->registry()->RegisterBooleanPref(prefs::kPromptForDownload, prompt_by_default);
+}
+
+TEST(ShaarDownloadsDirectoryTest, FreshProfileDownloadsWithoutSavePanel) {
+  TestingProfile profile;
+  EXPECT_FALSE(profile.GetPrefs()->GetBoolean(prefs::kPromptForDownload));
 }
 
 TEST(ShaarDownloadsDirectoryTest, ClearsUngoogledSavePromptDefault) {

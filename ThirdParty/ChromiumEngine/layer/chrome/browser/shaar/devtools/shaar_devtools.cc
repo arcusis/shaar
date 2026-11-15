@@ -1531,6 +1531,14 @@ bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
          (url.host() == "127.0.0.1" || url.host() == "localhost");
 }
 
+bool TrustedInputProbeWindowAllowed(bool testing, bool owned_root,
+                                    bool selected, bool never_shown,
+                                    bool transparent_verification_host,
+                                    const GURL& url) {
+  return ProbeWindowAllowed(testing, owned_root, selected,
+                            never_shown || transparent_verification_host, url);
+}
+
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open) {
@@ -1647,10 +1655,12 @@ shaar_error_code HandleDevToolsOperation(
     const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
     const bool selected = context->browser_tabs->IsSelectedWebContents(
         engine, window, tab, contents);
-    if (!ProbeWindowAllowed(testing && std::strcmp(testing, "1") == 0,
-                           shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
-                           shaar::windows_tabs::HasNeverShownPageHost(window, contents),
-                           contents->GetLastCommittedURL()) || !scope.profile ||
+    if (!TrustedInputProbeWindowAllowed(
+            testing && std::strcmp(testing, "1") == 0,
+            shaar::lifecycle::HasOwnedProbeRoot(engine), selected,
+            shaar::windows_tabs::HasNeverShownPageHost(window, contents),
+            shaar::windows_tabs::HasTransparentVerificationPageHost(window, contents),
+            contents->GetLastCommittedURL()) || !scope.profile ||
         scope.private_session)
       return Fail(error, SHAAR_POLICY_BLOCKED, "trusted input probe is unavailable");
     int x = 0;

@@ -333,6 +333,26 @@ TEST_F(PrivateSessionRegistryTest, AutofillPreferencesAreDisabledOnlyInOTRProfil
   EXPECT_TRUE(registry.Close(session));
 }
 
+TEST_F(PrivateSessionRegistryTest, RegularAutofillDefaultsSurvivePrivateSession) {
+  TestingProfile profile;
+  constexpr const char* kAutofillPrefs[] = {
+      "credentials_enable_service", "autofill.profile_enabled",
+      "autofill.credit_card_enabled"};
+  for (const char* key : kAutofillPrefs)
+    ASSERT_TRUE(profile.GetPrefs()->GetBoolean(key)) << key;
+
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-defaults", &session),
+            SHAAR_OK);
+  ASSERT_NE(session, nullptr);
+  for (const char* key : kAutofillPrefs) {
+    EXPECT_FALSE(session->otr->GetPrefs()->GetBoolean(key)) << key;
+    EXPECT_TRUE(profile.GetPrefs()->GetBoolean(key)) << key;
+  }
+  EXPECT_TRUE(registry.Close(session));
+}
+
 TEST_F(PrivateSessionRegistryTest,
        PrivateBrowserInitializationCannotChangeNormalAutofillPreferences) {
   TestingProfile profile;

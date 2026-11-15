@@ -219,10 +219,10 @@ final class ExternalAppConsentProbe {
       }
       store.perform(.space(other.id))
     case .navigation:
-      _ = try await gesture(
-        tab, script: "(()=>{location.href='/external-navigation';return true;})()")
+      _ = await evaluate(
+        tab, "(()=>{location.href='/external-navigation';return true;})()")
     case .reload:
-      _ = try await gesture(tab, script: "(()=>{location.reload();return true;})()")
+      _ = await evaluate(tab, "(()=>{location.reload();return true;})()")
     case .tabClose:
       runtime.closeTabID(tab.uuidString)
     }
@@ -268,10 +268,28 @@ final class ExternalAppConsentProbe {
       ) as? Bool == true
     else { throw failure("Could not prepare the authored external link.") }
     runtime.focusTabID(tab.uuidString)
-    let rendered: Bool = await withCheckedContinuation { continuation in
-      runtime.captureProbeTabID(tab.uuidString) {
-        continuation.resume(returning: $0?.isEmpty == false)
+    guard let windowID = runtime.windowID(forTabID: tab.uuidString),
+      let renderWindow = runtime.window(forID: windowID), !renderWindow.isVisible
+    else { throw failure("Owned link window is unavailable for invisible rendering.") }
+    let priorAlpha = renderWindow.alphaValue
+    let priorIgnoresMouseEvents = renderWindow.ignoresMouseEvents
+    renderWindow.alphaValue = 0
+    renderWindow.ignoresMouseEvents = true
+    renderWindow.orderFront(nil)
+    defer {
+      renderWindow.orderOut(nil)
+      renderWindow.alphaValue = priorAlpha
+      renderWindow.ignoresMouseEvents = priorIgnoresMouseEvents
+    }
+    var rendered = false
+    for attempt in 0..<4 {
+      rendered = await withCheckedContinuation { continuation in
+        runtime.captureProbeTabID(tab.uuidString) {
+          continuation.resume(returning: $0?.isEmpty == false)
+        }
       }
+      if rendered { break }
+      if attempt < 3 { try await Task.sleep(for: .milliseconds(75)) }
     }
     guard rendered else { throw failure("Owned link document did not produce a compositor frame.") }
     let clicked: Bool = await withCheckedContinuation { continuation in
@@ -523,15 +541,6 @@ final class ExternalAppConsentProbe {
     }
     guard let data = value?.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-  }
-
-  private func gesture(_ tab: UUID, script: String) async throws -> Bool {
-    let value: String? = await withCheckedContinuation { continuation in
-      runtime.evaluateProbeUserGesture(inTabID: tab.uuidString, script: script) {
-        continuation.resume(returning: $0)
-      }
-    }
-    return value == "true" || value == "1"
   }
 
   private func readySecondary(_ tab: UUID, engine: BrowserEngine) async throws {

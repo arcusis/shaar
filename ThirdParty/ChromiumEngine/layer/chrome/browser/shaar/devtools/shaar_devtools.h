@@ -72,6 +72,10 @@ bool ParseProbePopupArguments(shaar_bytes args_json, bool evaluate,
                               std::string* popup_id, std::string* expression);
 bool ProbeWindowAllowed(bool testing, bool owned_root, bool selected,
                        bool never_shown, const GURL& url);
+bool TrustedInputProbeWindowAllowed(bool testing, bool owned_root,
+                                    bool selected, bool never_shown,
+                                    bool transparent_verification_host,
+                                    const GURL& url);
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open);

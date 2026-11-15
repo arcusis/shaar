@@ -55,6 +55,7 @@ class SavePromptTrustedTextTests(unittest.TestCase):
         bridge = BRIDGE.read_text()
         probe = PROBE.read_text()
         fixture = FIXTURE.read_text()
+        self.assertIn('"--probe-data-dir", str(root)', fixture)
         self.assertIn("submitTrustedProbeTextInTabID", bridge)
         self.assertIn("shaarDevToolsSubmit:1099", bridge)
         self.assertIn("valuesEntered", probe)

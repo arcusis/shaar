@@ -884,7 +884,7 @@ private struct ParitySnapshot {
       preferenceFilePresent: !preferences.isEmpty, enabled: enabled)
     return row(
       item: "Safe Browsing state", passed: decision.passed, disposition: decision.disposition,
-      delegate: "Safe Browsing enabled state",
+      delegate: "Ungoogled Chromium Safe Browsing availability",
       evidence: "\(decision.evidence) \(preferenceSummary())", signals: preferences)
   }
 

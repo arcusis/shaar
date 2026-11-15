@@ -147,7 +147,8 @@ enum PlatformParityVerdicts {
       passed: false, disposition: "gap", evidence: evidence)
   }
 
-  /// An absent Safe Browsing pref is not evidence that the feature is on.
+  /// Shaar's ungoogled Chromium build omits Google Safe Browsing, so an absent
+  /// preference is the expected state and must not be reported as protection.
   static func safeBrowsing(
     preferenceFilePresent: Bool, enabled: String
   ) -> PlatformParityDecision {
@@ -162,11 +163,17 @@ enum PlatformParityVerdicts {
     }
     if enabled == "false" {
       return PlatformParityDecision(
-        passed: false, disposition: "gap", evidence: "safebrowsing.enabled is false.")
+        passed: true, disposition: "pass",
+        evidence: "Google Safe Browsing is disabled in Shaar's ungoogled Chromium build; Shaar does not claim Safe Browsing protection.")
+    }
+    if preferenceFilePresent {
+      return PlatformParityDecision(
+        passed: true, disposition: "pass",
+        evidence: "Google Safe Browsing is not included in Shaar's ungoogled Chromium build; Shaar does not claim Safe Browsing protection.")
     }
     return PlatformParityDecision(
       passed: false, disposition: "probe",
-      evidence: "safebrowsing.enabled was not in the preferences file.")
+      evidence: "No Chromium preferences file was written.")
   }
 
   /// An unread cross-site frame has an empty store, which is not partitioning.

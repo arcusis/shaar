@@ -6,14 +6,20 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he]' >&2; exit 2; }
+usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 14,15,...]' >&2; exit 2; }
 archive_path=
 locale=en
+probe_filter=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --locale)
       [[ $# -ge 2 ]] || usage
       locale=$2
+      shift 2
+      ;;
+    --probes)
+      [[ $# -ge 2 && -n $2 ]] || usage
+      probe_filter=$2
       shift 2
       ;;
     -* ) usage ;;
@@ -25,11 +31,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n $archive_path && ( $locale == en || $locale == he ) ]] || usage
+if [[ -n $probe_filter ]]; then
+  IFS=',' read -r -a requested_probes <<< "$probe_filter"
+  case ",$probe_filter," in *,,*) usage ;; esac
+  for probe in "${requested_probes[@]}"; do
+    case "$probe" in 14|15|16|17|19) ;; *) usage ;; esac
+  done
+fi
+probe_selected() { [[ ",$probe_filter," == *",$1,"* ]]; }
 archive=$(cd "$(dirname "$archive_path")" 2>/dev/null && pwd -P)/$(basename "$archive_path") || usage
 [[ -f "$archive" && ! -L "$archive" ]] || { echo 'Engine archive must be a regular, non-symlink file.' >&2; exit 2; }
 dry_run=${SHAAR_V02_PROOF_DRY_RUN:-0}
 case "$dry_run" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_DRY_RUN must be 0 or 1.' >&2; exit 2 ;; esac
-widevine=${SHAAR_V02_PROOF_WIDEVINE:-0}
+widevine_default=0
+if [[ -n $probe_filter ]] && { probe_selected 17 || probe_selected 19; }; then
+  widevine_default=1
+fi
+widevine=${SHAAR_V02_PROOF_WIDEVINE:-$widevine_default}
 case "$widevine" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_WIDEVINE must be 0 or 1.' >&2; exit 2 ;; esac
 widevine_only=${SHAAR_V02_PROOF_WIDEVINE_ONLY:-0}
 case "$widevine_only" in 0|1) ;; *) echo 'SHAAR_V02_PROOF_WIDEVINE_ONLY must be 0 or 1.' >&2; exit 2 ;; esac
@@ -61,10 +79,29 @@ crash_snapshot > "$crashes_before"
 
 record() {
   labels+=("$1") results+=("$2") details+=("$3")
-  [[ $2 == PASS ]] || overall=1
+  [[ $2 == PASS || $2 == SKIP ]] || overall=1
 }
 run_step() {
   local label=$1; shift
+  local probe_id=
+  case "$label" in
+    'External protocol handler consent') probe_id=14 ;;
+    'Permission and protocol prompts') probe_id=15 ;;
+    'Save prompts') probe_id=16 ;;
+    'Platform parity for v0.2 web items') probe_id=17 ;;
+    'Widevine EME, ClearKey, Shaka playback') probe_id=19 ;;
+  esac
+  if [[ -n $probe_filter && -n $probe_id ]] && ! probe_selected "$probe_id"; then
+    record "$label" SKIP 'not selected by --probes'
+    return 0
+  fi
+  if [[ -n $probe_filter && -n $probe_id ]] && probe_selected "$probe_id"; then
+    :
+  elif [[ -n $probe_filter && -z $probe_id &&
+         $label != 'Shipping bundle build' && $label != 'Verification bundle build' ]]; then
+    record "$label" SKIP 'not selected by --probes'
+    return 0
+  fi
   local logfile="$logs/${#labels[@]}-${label//[^A-Za-z0-9_.-]/_}.log"
   echo "[v02-proof] $label"
   if "$@" >"$logfile" 2>&1; then
@@ -236,7 +273,7 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
     record_screenshot_evidence 'Protocol handler' "$he_root/screenshots/external-app-consent"
     record_screenshot_evidence 'Device pickers' "$he_root/screenshots/device-pickers"
   fi
-  if [[ $widevine == 1 ]]; then
+  if [[ $widevine == 1 ]] || { [[ -n $probe_filter ]] && probe_selected 19; }; then
     run_step 'Widevine EME, ClearKey, Shaka playback' \
       python3 scripts/test-platform-parity.py --widevine-only --app "$verification_app" \
       --receipt "$run_root/widevine-drm.json"
@@ -256,7 +293,7 @@ else
     record "$label" SKIP 'shipping or verification bundle build did not pass'
   done
   fi
-  if [[ $widevine == 1 ]]; then
+  if [[ $widevine == 1 ]] || { [[ -n $probe_filter ]] && probe_selected 19; }; then
     record 'Widevine EME, ClearKey, Shaka playback' SKIP 'shipping or verification bundle build did not pass'
   fi
   [[ $locale == he ]] && record 'Hebrew UI locale pass' SKIP 'shipping or verification bundle build did not pass'

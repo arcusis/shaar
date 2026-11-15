@@ -828,6 +828,19 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     fixture.validate_external_app_consent_report(self.root, 'initial', main, 0)
 
+    def test_failed_external_consent_probe_reports_product_evidence_not_schema_mismatch(self):
+        main, evidence = self.main_report('initial'), self.evidence('initial')
+        main.update(passed=False, error='Native no-launch audit unavailable before request.')
+        evidence.update(passed=False, approvedRequests=0, launchCount=0, deniedRequests=0)
+        for key in fixture.EXTERNAL_APP_CONSENT_BOOLEAN_FIELDS:
+            evidence[key] = False
+        self.write_phase('initial', main, evidence)
+        with self.assertRaisesRegex(
+                RuntimeError,
+                r'probe did not complete: engineError=.*Native no-launch audit unavailable.*'
+                r'failedChecks=.*approvedRequests=0.*launchCount=0.*deniedRequests=0'):
+            fixture.validate_external_app_consent_report(self.root, 'initial', main, 1)
+
     def test_missing_phase_and_cross_phase_identity_remove_stale_summary(self):
         self.write_phase('initial')
         self.write_phase('restart')

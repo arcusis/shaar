@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 from contextlib import redirect_stderr
+import errno
 import importlib.util
 import io
 from pathlib import Path
@@ -21,6 +22,27 @@ SPEC.loader.exec_module(PROBE)
 
 
 class PermissionProbeEvidencePathTests(unittest.TestCase):
+    def test_probe_root_cleanup_retries_directory_not_empty_race(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "probe"
+            root.mkdir()
+            (root / "late-helper-write").write_text("done")
+            original = PROBE.shutil.rmtree
+            calls = 0
+
+            def rmtree_with_transient_race(path):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise OSError(errno.ENOTEMPTY, "Directory not empty", str(path))
+                original(path)
+
+            with patch.object(PROBE.shutil, "rmtree", side_effect=rmtree_with_transient_race), \
+                    patch.object(PROBE.time, "sleep"):
+                PROBE.remove_probe_root(root)
+            self.assertEqual(calls, 2)
+            self.assertFalse(root.exists())
+
     def test_cli_rejects_symlinked_evidence_directories_before_probe_setup(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

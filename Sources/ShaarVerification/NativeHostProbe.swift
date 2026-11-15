@@ -333,7 +333,7 @@ final class NativeHostProbe {
         reopenCommandWasEnabled: commandWasEnabled,
         selectedURL: restoredTab.url.absoluteString,
         expectedURL: fixture.appending(path: "host-second-temporary").absoluteString,
-        selectedTabWasLive: primary.runtime.nativeTabID(forID: restoredTab.id.uuidString) >= 0,
+        selectedTabWasLive: primary.runtime.view(forTabID: restoredTab.id.uuidString) != nil,
         recoverySnapshotWasConsumed: host.lastClosedWindowSnapshot == nil)
       let evidenceData = try JSONEncoder().encode(evidence)
       try evidenceData.write(

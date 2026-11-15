@@ -47,6 +47,10 @@ import os
       frameworkURL: framework, outputURL: output, pageURL: page, scenario: arguments[index + 3])
   }
 
+  static func heavyPageRunLoopPassed(samples: Int, maximumDelayMs: Int) -> Bool {
+    samples >= 2 && maximumDelayMs <= 1000
+  }
+
   static func run(frameworkURL: URL, outputURL: URL, pageURL: URL?, scenario: String) -> Int32 {
     guard let pageURL, isLoopbackFixtureURL(pageURL) else {
       write(["passed": false, "error": "Loopback http base URL is required."], to: outputURL)
@@ -708,7 +712,9 @@ import os
     sampler.stop()
     os_signpost(.event, log: log, name: "HeavyVideoDone", signpostID: signpost)
     rows.append(row(
-      "heavy-main-run-loop", sampler.samples >= 2 && sampler.maximumDelayMs <= 1000 ? "pass" : "fail",
+      "heavy-main-run-loop",
+      ShaarBrowsingQA.heavyPageRunLoopPassed(
+        samples: sampler.samples, maximumDelayMs: sampler.maximumDelayMs) ? "pass" : "fail",
       "\(sampler.samples) samples at 50 ms; maximum main run-loop delay \(sampler.maximumDelayMs) ms.",
       ["samples": sampler.samples, "maximumDelayMs": sampler.maximumDelayMs]))
     rows.append(

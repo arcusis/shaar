@@ -187,7 +187,8 @@ def main():
             environment.update(HOME=str(home), CFFIXED_USER_HOME=str(home),
                                SHAAR_ENGINE_TESTING="1", SHAAR_MOCK_KEYCHAIN="1")
             command = [
-                str(executable), "--save-prompt-probe", str(report_path), page, never_page,
+                str(executable), "--probe-data-dir", str(root),
+                "--save-prompt-probe", str(report_path), page, never_page,
             ]
             if options.locale == "he":
                 command.extend(["-AppleLanguages", "(he)"])

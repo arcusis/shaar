@@ -84,6 +84,7 @@ constexpr base::TimeDelta kProbeCaptureTimeout = base::Seconds(12);
 // That deferral lifts only when a main frame runs after 500ms.
 constexpr base::TimeDelta kProbeClickCommitDelay = base::Milliseconds(600);
 constexpr base::TimeDelta kProbeClickLeaseHold = base::Milliseconds(50);
+constexpr base::TimeDelta kStoreCalloutDismissDelay = base::Milliseconds(400);
 
 class RuntimeServices final : public DevToolsRuntimeServices {
 public:
@@ -373,13 +374,19 @@ bool ProbeClickInsideView(content::WebContents* contents, int x, int y) {
   return x < size.width() && y < size.height();
 }
 
-void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
+void DispatchTrustedMove(content::RenderWidgetHost* widget, int x, int y) {
   const gfx::PointF point(x, y);
   const base::TimeTicks now = base::TimeTicks::Now();
   widget->ForwardMouseEvent(blink::WebMouseEvent(
       blink::WebInputEvent::Type::kMouseMove, point, point,
       blink::WebPointerProperties::Button::kNoButton, 0,
       blink::WebInputEvent::kNoModifiers, now));
+}
+
+void DispatchTrustedClick(content::RenderWidgetHost* widget, int x, int y) {
+  const gfx::PointF point(x, y);
+  const base::TimeTicks now = base::TimeTicks::Now();
+  DispatchTrustedMove(widget, x, y);
   widget->ForwardMouseEvent(blink::WebMouseEvent(
       blink::WebInputEvent::Type::kMouseDown, point, point,
       blink::WebPointerProperties::Button::kLeft, 1,
@@ -479,6 +486,17 @@ class ProbeTrustedInput final
       Dispatch(x_, y_);
       return;
     }
+    ResolveElementPoint();
+  }
+
+  void ResolveElementPoint() {
+    if (finished_)
+      return;
+    auto* contents = contents_.get();
+    if (!contents || !Activate()) {
+      Fail();
+      return;
+    }
     auto* frame = contents->GetPrimaryMainFrame();
     if (!frame) {
       Fail();
@@ -491,8 +509,8 @@ class ProbeTrustedInput final
           "b.getAttribute('aria-disabled')!=='true');if(!e)return null;"
           "e.scrollIntoView({block:'center',inline:'center',behavior:'instant'});"
           "const r=e.getBoundingClientRect();if(!r.width||!r.height)return null;"
-          "return {x:Math.round(r.left+r.width/2),"
-          "y:Math.round(r.top+r.height/2),"
+          "const x=Math.round(r.left+r.width/2),y=Math.round(r.top+r.height/2);"
+          "return {x,y,covered:!e.contains(document.elementFromPoint(x,y)),"
           "viewportWidth:innerWidth,viewportHeight:innerHeight};})()"
         : "(()=>{const e=document.getElementById('" + element_id_ +
           "');if(!e)return null;" +
@@ -518,11 +536,33 @@ class ProbeTrustedInput final
         point ? point->FindInt("viewportWidth") : std::nullopt;
     const std::optional<int> viewport_height =
         point ? point->FindInt("viewportHeight") : std::nullopt;
+    const bool covered = point && point->FindBool("covered").value_or(false);
     auto* contents = contents_.get();
     auto* view = contents ? contents->GetRenderWidgetHostView() : nullptr;
     int widget_x = x.value_or(-1);
     int widget_y = y.value_or(-1);
     const bool store_target = element_id_ == "webstore-add-to-chrome";
+    if (store_target && covered) {
+      if (!ShouldRetryCoveredWebStoreClick(store_target, covered,
+                                          cover_retries_++)) {
+        Fail();
+        return;
+      }
+      auto* widget = Activate();
+      if (!widget) {
+        Fail();
+        return;
+      }
+      // The Store publisher callout can cover the button after the paint
+      // wait. Its page script sets a 300 ms hide delay.
+      DispatchTrustedMove(widget, 1, 1);
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&ProbeTrustedInput::ResolveElementPoint,
+                         base::WrapRefCounted(this)),
+          kStoreCalloutDismissDelay);
+      return;
+    }
     bool valid_point = false;
     if (view && x && y) {
       if (store_target && viewport_width && viewport_height) {
@@ -610,6 +650,7 @@ class ProbeTrustedInput final
   base::ScopedClosureRunner capturer_;
   base::OneShotTimer timer_;
   bool finished_ = false;
+  unsigned cover_retries_ = 0;
 };
 
 shaar_error_code Fail(shaar_error* error, shaar_error_code code,
@@ -1654,6 +1695,11 @@ bool MapTrustedWebStorePoint(int css_x, int css_y,
   *widget_x = static_cast<int>(mapped_x);
   *widget_y = static_cast<int>(mapped_y);
   return true;
+}
+
+bool ShouldRetryCoveredWebStoreClick(bool store_target, bool covered,
+                                    unsigned retries) {
+  return store_target && covered && retries < 4;
 }
 
 void EmitFrontendStateEvent(shaar_engine* engine,

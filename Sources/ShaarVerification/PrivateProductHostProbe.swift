@@ -542,12 +542,15 @@ final class PrivateProductHostProbe {
       differentSource != nil
       && differentSource?.contextID != first.contextID
 
+    let tabCountBeforeCancelledClose = first.store.tabs.count
     let cancelled = runtime.attemptCancelledPrivateProbeCloseID(first.windowID)
-    checks["productCancelledCloseRetainsOwner"] =
-      cancelled
-      && privateHost.ownedWindows.contains { $0.windowID == first.windowID }
-      && first.store.tabs.count == 3
-      && lifecycleStore === first.store && lifecycleHosting === first.hosting
+    checks["productCancelledCloseRetainsOwner"] = Self.cancelledCloseRetainsOwner(
+      cancelled: cancelled,
+      ownerStillOwned: privateHost.ownedWindows.contains { $0.windowID == first.windowID },
+      tabCountBefore: tabCountBeforeCancelledClose,
+      tabCountAfter: first.store.tabs.count,
+      storeRetained: lifecycleStore === first.store,
+      hostingRetained: lifecycleHosting === first.hosting)
   }
 
   private func captureStartPage(_ owner: PrivateBrowserHost.Owner) async throws {
@@ -683,6 +686,14 @@ final class PrivateProductHostProbe {
     return !rows.contains {
       ($0["u"] as? String)?.contains("private-product-\(runID.lowercased())") == true
     }
+  }
+
+  static func cancelledCloseRetainsOwner(
+    cancelled: Bool, ownerStillOwned: Bool, tabCountBefore: Int, tabCountAfter: Int,
+    storeRetained: Bool, hostingRetained: Bool
+  ) -> Bool {
+    cancelled && ownerStillOwned && tabCountBefore > 0 && tabCountAfter == tabCountBefore
+      && storeRetained && hostingRetained
   }
 
   private func waitForWindows(_ privateHost: PrivateBrowserHost, count: Int) async throws {

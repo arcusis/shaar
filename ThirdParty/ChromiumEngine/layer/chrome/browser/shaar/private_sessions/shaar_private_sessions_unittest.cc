@@ -313,6 +313,26 @@ TEST_F(PrivateSessionRegistryTest, HTTPSOnlyAppliesToOTRProfile) {
   EXPECT_TRUE(registry.Close(session));
 }
 
+TEST_F(PrivateSessionRegistryTest, AutofillPreferencesAreDisabledOnlyInOTRProfile) {
+  TestingProfile profile;
+  constexpr const char* kAutofillPrefs[] = {
+      "credentials_enable_service", "autofill.profile_enabled",
+      "autofill.credit_card_enabled"};
+  for (const char* key : kAutofillPrefs)
+    profile.GetPrefs()->SetBoolean(key, true);
+
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-autofill", &session),
+            SHAAR_OK);
+  ASSERT_NE(session, nullptr);
+  for (const char* key : kAutofillPrefs) {
+    EXPECT_FALSE(session->otr->GetPrefs()->GetBoolean(key)) << key;
+    EXPECT_TRUE(profile.GetPrefs()->GetBoolean(key)) << key;
+  }
+  EXPECT_TRUE(registry.Close(session));
+}
+
 TEST_F(PrivateSessionRegistryTest, WebRTCAndReferrerPrefsStayPrivate) {
   TestingProfile profile;
   profile.GetPrefs()->SetBoolean(prefs::kEnableReferrers, true);

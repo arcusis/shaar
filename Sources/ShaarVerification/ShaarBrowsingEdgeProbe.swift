@@ -33,7 +33,7 @@ func browsingEdgeRecordNote(
 func browsingEdgePrintSurface(_ note: [String: String]) -> Bool {
   let name = (note["class"] ?? "").lowercased()
   let title = (note["title"] ?? "").lowercased()
-  return name.contains("print") || title.contains("print")
+  return name.contains("print") || title.contains("print") || note["kind"] == "save-panel"
 }
 
 func browsingEdgeFileChooserOpened(_ note: [String: String]) -> Bool {

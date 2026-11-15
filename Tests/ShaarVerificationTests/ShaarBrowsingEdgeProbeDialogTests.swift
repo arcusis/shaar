@@ -33,6 +33,7 @@ import Testing
   @Test func printAndFileChooserEvidenceRequiresTheirExpectedSignals() {
     #expect(browsingEdgePrintSurface(["class": "NSPrintPanel"]))
     #expect(browsingEdgePrintSurface(["title": "Print Preview"]))
+    #expect(browsingEdgePrintSurface(["kind": "save-panel", "class": "NSSavePanel"]))
     #expect(!browsingEdgePrintSurface(["class": "NSOpenPanel", "title": "Choose file"]))
     #expect(browsingEdgeFileChooserOpened(["kind": "open-panel"]))
     #expect(!browsingEdgeFileChooserOpened(["kind": "save-panel"]))

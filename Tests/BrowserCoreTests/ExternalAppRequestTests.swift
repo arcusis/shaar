@@ -90,6 +90,16 @@ import Testing
   #expect(request(name: String(repeating: "a", count: 257)) == nil)
 }
 
+@Test func externalAppRequestStripsPlatformBidiIsolatesFromLocalizedHandlerNames() {
+  let request = ExternalAppRequest(
+    id: "x1", profileID: UUID(), tabID: UUID(),
+    pageURL: URL(string: "https://example.com")!, scheme: "webcal",
+    requestingOrigin: nil, applicationName: "\u{200E}\u{2068}לוח שנה\u{2069}",
+    windowID: "window-1")
+
+  #expect(request?.applicationName == "לוח שנה")
+}
+
 @Test func externalAppRequestMatchesOnlySelectedProfileTabAndPage() throws {
   let profile = BrowserProfile(name: "Shared")
   let otherProfile = BrowserProfile(name: "Other")

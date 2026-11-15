@@ -4,20 +4,32 @@
 
 import Foundation
 
+public enum BrowserExtensionText {
+  public static func sanitizedForDisplay(_ value: String) -> String {
+    String(value.unicodeScalars.filter { scalar in
+      switch scalar.value {
+      case 0x061C, 0x200E...0x200F, 0x202A...0x202E, 0x2066...0x2069: false
+      default: true
+      }
+    })
+  }
+}
+
 public struct BrowserExtension: Identifiable, Equatable, Sendable {
   public let id: String
   public let name: String
   public let version: String
 
   public init?(id: String, name: String, version: String) {
+    let displayName = BrowserExtensionText.sanitizedForDisplay(name)
     guard Self.isValidID(id),
-      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-      !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-      name.utf8.count <= 1024, !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      !displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+      displayName.utf8.count <= 1024, !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       version.utf8.count <= 128
     else { return nil }
     self.id = id
-    self.name = name
+    self.name = displayName
     self.version = version
   }
 
@@ -59,16 +71,17 @@ public struct ExtensionInstallRequest: Identifiable, Equatable, Sendable {
     id: String, profileID: UUID, tabID: UUID, sourceURL: URL,
     browserExtension: BrowserExtension, kind: ExtensionInstallKind, permissions: [String]
   ) {
+    let displayPermissions = permissions.map(BrowserExtensionText.sanitizedForDisplay)
     guard !id.isEmpty, id.utf8.count <= 128, !browserExtension.name.isEmpty,
       browserExtension.name.utf8.count <= 1024, browserExtension.version.utf8.count <= 128,
-      permissions.count <= 128,
-      permissions.allSatisfy({ permission in
+      displayPermissions.count <= 128,
+      displayPermissions.allSatisfy({ permission in
         !permission.isEmpty && permission.utf8.count <= 8192
           && !permission.unicodeScalars.contains(where: {
             CharacterSet.controlCharacters.contains($0)
           })
       }),
-      permissions.reduce(0, { $0 + $1.utf8.count }) <= 65536,
+      displayPermissions.reduce(0, { $0 + $1.utf8.count }) <= 65536,
       NavigationInput.isWebURL(sourceURL)
     else { return nil }
     self.id = id
@@ -77,7 +90,7 @@ public struct ExtensionInstallRequest: Identifiable, Equatable, Sendable {
     self.sourceURL = sourceURL
     self.browserExtension = browserExtension
     self.kind = kind
-    self.permissions = permissions
+    self.permissions = displayPermissions
   }
 
   public func matches(_ session: BrowserSession) -> Bool {

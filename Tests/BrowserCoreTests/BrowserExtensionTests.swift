@@ -15,10 +15,21 @@ import Testing
   #expect(
     BrowserExtension(id: String(repeating: "a", count: 32), name: "Example\nInjected", version: "1")
       == nil)
+  let hebrewName = try #require(
+    BrowserExtension(
+      id: String(repeating: "a", count: 32), name: "\u{2068}שלום\u{2069}", version: "1"))
+  #expect(hebrewName.name == "שלום")
   #expect(ExtensionInstallKind(rawValue: "external") == nil)
   #expect(ExtensionInstallKind(rawValue: "other") == nil)
   let browserExtension = try #require(
     BrowserExtension(id: String(repeating: "a", count: 32), name: "Example", version: "1"))
+  let bidiPermission = try #require(
+    ExtensionInstallRequest(
+      id: "install1", profileID: UUID(), tabID: UUID(),
+      sourceURL: URL(string: "https://example.com")!,
+      browserExtension: browserExtension, kind: .install,
+      permissions: ["Site access: \u{200F}https://example.com/*\u{202C}"]))
+  #expect(bidiPermission.permissions == ["Site access: https://example.com/*"])
   let oversized = ExtensionInstallRequest(
     id: "install1", profileID: UUID(), tabID: UUID(),
     sourceURL: URL(string: "https://example.com")!,

@@ -776,7 +776,7 @@ final class EngineProbe {
         fixtureStage = "Library"
         checks += try await LibraryProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
-          phase: phase
+          phase: phase, importOnly: true
         ).run()
         localFixturesPassed = true
         finish(error: nil)

@@ -131,6 +131,7 @@ final class WindowClientProbe {
     }
     try expect(true, "native bookmark changes refresh both clients using the same profile")
     try await wait("secondary bookmark editor acknowledgement") { secondStore.sheet == nil }
+    secondStore.showLibrary(.bookmarks)
     try expect(
       secondStore.deleteBookmark(editor.id, profileID: profile),
       "secondary application submits native bookmark removal")
@@ -139,6 +140,10 @@ final class WindowClientProbe {
         && secondStore.library.bookmarks[profile]?.items.contains { $0.address == address } == false
     }
     try expect(true, "native bookmark removal refreshes both independent library caches")
+    if case .library = secondStore.sheet {
+      secondStore.sheet = nil
+      secondStore.sheetDidDismiss()
+    }
     try expect(
       secondStore.library.bookmarks.keys.allSatisfy { $0 == profile }
         && secondStore.library.history.keys.allSatisfy { $0 == profile },

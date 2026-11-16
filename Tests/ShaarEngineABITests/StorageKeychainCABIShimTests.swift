@@ -11,13 +11,14 @@ private let noOpStorageKeychainReply:
     UnsafeMutableRawPointer?, UnsafePointer<shaar_result>?
   ) -> Void = { _, _ in }
 
-private let fakeStorageKeychainSubmitSuccess: @convention(c) (
-  OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
-  shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
-  UnsafeMutablePointer<shaar_error>?
-) -> shaar_error_code = { _, _, _, _, _, _, _, _, _, _ in
-  shaar_error_code(rawValue: 0)
-}
+private let fakeStorageKeychainSubmitSuccess:
+  @convention(c) (
+    OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+    shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+    UnsafeMutablePointer<shaar_error>?
+  ) -> shaar_error_code = { _, _, _, _, _, _, _, _, _, _ in
+    shaar_error_code(rawValue: 0)
+  }
 
 @Test func storageKeychainCShimRejectsMissingRequiredPointers() {
   let invalidArgument = UInt32(shaar_error_code(rawValue: 1).rawValue)
@@ -69,14 +70,15 @@ private let fakeStorageKeychainSubmitSuccess: @convention(c) (
 }
 
 @Test func storageKeychainCShimRejectsShortImmediateErrorOutput() {
-  let invalidArgument = UInt32(SHAAR_INVALID_ARGUMENT.rawValue)
+  let invalidArgument = UInt32(shaar_error_code(rawValue: 1).rawValue)
   let symbol = UnsafeRawPointer(bitPattern: 1)
   let engine = OpaquePointer(bitPattern: 2)
   var scope = shaar_scope(
     size: UInt32(MemoryLayout<shaar_scope>.size),
     profile: OpaquePointer(bitPattern: 3), private_session: nil)
   var error = shaar_error(
-    size: UInt32(MemoryLayout<shaar_error>.size - 1), code: SHAAR_OK, platform_code: 0,
+    size: UInt32(MemoryLayout<shaar_error>.size - 1), code: shaar_error_code(rawValue: 0),
+    platform_code: 0,
     message: shaar_bytes(data: nil, size: 0))
 
   let result = withUnsafePointer(to: &scope) { scopePointer in

@@ -4,9 +4,9 @@
 
 from contextlib import redirect_stderr
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 import io
 import importlib.util
-import re
 import shutil
 import sys
 import subprocess
@@ -25,7 +25,31 @@ SPEC.loader.exec_module(PROBE)
 GIBIBYTE = 1024 ** 3
 
 
+class ScriptSourceParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_script = False
+        self.source = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self.in_script = True
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self.in_script = False
+
+    def handle_data(self, data):
+        if self.in_script:
+            self.source.append(data)
+
+
 class BrowsingQAReportTests(unittest.TestCase):
+    def test_script_parser_accepts_case_insensitive_tags(self):
+        parser = ScriptSourceParser()
+        parser.feed('<SCRIPT type="text/javascript">const value = 1 < 2;</SCRIPT>')
+        self.assertEqual("".join(parser.source), "const value = 1 < 2;")
+
     def test_hidden_flow_screenshots_are_copied_before_disposable_profile_cleanup(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "flow-root"
@@ -302,8 +326,9 @@ class BrowsingQAReportTests(unittest.TestCase):
         if node is None:
             self.skipTest("Node.js is required to execute the fixture script")
         fixture = PROBE.Fixture.document(None, "/scroll", "").decode()
-        match = re.search(r"<script>(.*?)</script>", fixture, re.DOTALL)
-        self.assertIsNotNone(match)
+        parser = ScriptSourceParser()
+        parser.feed(fixture)
+        self.assertTrue(parser.source)
         runner = r"""
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -331,7 +356,7 @@ process.stdin.on('end', () => {
 });
 """
         completed = subprocess.run(
-            [node, "-e", runner], input=match.group(1), text=True,
+            [node, "-e", runner], input="".join(parser.source), text=True,
             capture_output=True, timeout=10, check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)

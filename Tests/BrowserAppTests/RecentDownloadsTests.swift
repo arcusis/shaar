@@ -23,7 +23,9 @@ struct RecentDownloadsTests {
 
   @Test func recentDownloadAccessibilityValueIncludesProgressWhenDeterminate() {
     let profileID = UUID()
-    func item(total: Double, dangerous: Bool = false, state: DownloadState = .downloading) -> BrowserDownload {
+    func item(total: Double, dangerous: Bool = false, state: DownloadState = .downloading)
+      -> BrowserDownload
+    {
       BrowserDownload(
         id: id, profileID: profileID, filename: "report.zip", path: "",
         sourceURL: "https://example.test/report.zip", state: state,

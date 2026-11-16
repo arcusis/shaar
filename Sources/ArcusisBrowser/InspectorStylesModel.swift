@@ -435,7 +435,8 @@ final class InspectorStylesModel {
   }
 
   func togglePseudo(_ name: String) async {
-    guard !Task.isCancelled, !forcing, !busy, InspectorPseudoForce.names.contains(name), let inspector,
+    guard !Task.isCancelled, !forcing, !busy, InspectorPseudoForce.names.contains(name),
+      let inspector,
       inspector.isOpen,
       let selection = inspector.selection, selection.locked
     else { return }

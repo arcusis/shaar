@@ -24,7 +24,8 @@ struct NativeHostProbeTests {
     let restored = UUID()
     let fixture = try #require(URL(string: "http://127.0.0.1:49152/account"))
     let expectedURL = NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
-      fixture: fixture).absoluteString
+      fixture: fixture
+    ).absoluteString
     let evidence = NativeHostClosedWindowRecoveryEvidence(
       closedWindowID: closed, restoredWindowID: restored,
       closedWindowWasRemoved: true, reopenCommandWasEnabled: true,
@@ -33,7 +34,9 @@ struct NativeHostProbeTests {
 
     #expect(evidence.passed)
     let encoded = try JSONEncoder().encode(evidence)
-    #expect(try JSONDecoder().decode(NativeHostClosedWindowRecoveryEvidence.self, from: encoded) == evidence)
+    #expect(
+      try JSONDecoder().decode(NativeHostClosedWindowRecoveryEvidence.self, from: encoded)
+        == evidence)
   }
 
   @Test func closedWindowReopensTheMostRecentlyNavigatedSelectedPage() throws {
@@ -52,30 +55,35 @@ struct NativeHostProbeTests {
         closedWindowID: closed, restoredWindowID: closed,
         closedWindowWasRemoved: true, reopenCommandWasEnabled: true,
         selectedURL: expectedURL, expectedURL: expectedURL,
-        selectedTabWasLive: true, recoverySnapshotWasConsumed: true).passed)
+        selectedTabWasLive: true, recoverySnapshotWasConsumed: true
+      ).passed)
     #expect(
       !NativeHostClosedWindowRecoveryEvidence(
         closedWindowID: closed, restoredWindowID: UUID(),
         closedWindowWasRemoved: true, reopenCommandWasEnabled: false,
         selectedURL: expectedURL, expectedURL: expectedURL,
-        selectedTabWasLive: true, recoverySnapshotWasConsumed: true).passed)
+        selectedTabWasLive: true, recoverySnapshotWasConsumed: true
+      ).passed)
     #expect(
       !NativeHostClosedWindowRecoveryEvidence(
         closedWindowID: closed, restoredWindowID: UUID(),
         closedWindowWasRemoved: true, reopenCommandWasEnabled: true,
         selectedURL: "http://127.0.0.1:49152/wrong-page", expectedURL: expectedURL,
-        selectedTabWasLive: true, recoverySnapshotWasConsumed: true).passed)
+        selectedTabWasLive: true, recoverySnapshotWasConsumed: true
+      ).passed)
     #expect(
       !NativeHostClosedWindowRecoveryEvidence(
         closedWindowID: closed, restoredWindowID: UUID(),
         closedWindowWasRemoved: true, reopenCommandWasEnabled: true,
         selectedURL: expectedURL, expectedURL: expectedURL,
-        selectedTabWasLive: false, recoverySnapshotWasConsumed: true).passed)
+        selectedTabWasLive: false, recoverySnapshotWasConsumed: true
+      ).passed)
     #expect(
       !NativeHostClosedWindowRecoveryEvidence(
         closedWindowID: closed, restoredWindowID: UUID(),
         closedWindowWasRemoved: true, reopenCommandWasEnabled: true,
         selectedURL: expectedURL, expectedURL: expectedURL,
-        selectedTabWasLive: true, recoverySnapshotWasConsumed: false).passed)
+        selectedTabWasLive: true, recoverySnapshotWasConsumed: false
+      ).passed)
   }
 }

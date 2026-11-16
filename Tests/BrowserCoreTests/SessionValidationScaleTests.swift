@@ -29,7 +29,8 @@ import Testing
   for _ in 0..<3 {
     for tab in tabs {
       if let folderID = tab.folderID {
-        allTabsBelongToFolder = allTabsBelongToFolder
+        allTabsBelongToFolder =
+          allTabsBelongToFolder
           && folders.contains { $0.id == folderID && $0.isPinned == tab.isPinned }
       }
     }

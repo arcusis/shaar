@@ -28,7 +28,8 @@ final class PrivateSiteControlsModel: Identifiable {
 
   static func updateFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
     BrowserLocalization.string(
-      "Could not update private site cookie settings. Try again.", table: "Shell", language: language)
+      "Could not update private site cookie settings. Try again.", table: "Shell",
+      language: language)
   }
 
   init?(

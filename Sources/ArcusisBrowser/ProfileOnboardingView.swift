@@ -72,10 +72,11 @@ struct OnboardingStepHeader: View {
       }
       .accessibilityRepresentation {
         ProgressView(
-          value: Double(step.rawValue + 1), total: Double(ProfileOnboardingStep.allCases.count))
-          .accessibilityLabel(
-            ProfileOnboardingAccessibility.stepLabel(
-              stepIndex: step.rawValue + 1, stepCount: ProfileOnboardingStep.allCases.count))
+          value: Double(step.rawValue + 1), total: Double(ProfileOnboardingStep.allCases.count)
+        )
+        .accessibilityLabel(
+          ProfileOnboardingAccessibility.stepLabel(
+            stepIndex: step.rawValue + 1, stepCount: ProfileOnboardingStep.allCases.count))
       }
       Text(
         ProfileOnboardingAccessibility.stepLabel(
@@ -147,7 +148,8 @@ private struct AccountConnectStep: View {
       } else if let provider = model.connecting {
         HStack(spacing: 10) {
           ProgressView().controlSize(.small)
-            .accessibilityLabel(ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title))
+            .accessibilityLabel(
+              ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title))
           Text(
             ProfileOnboardingAccessibility.signInProgressLabel(provider: provider.title)
           )

@@ -9,8 +9,10 @@ import Testing
 @testable import ArcusisBrowser
 
 @Test func libraryFooterProgressLabelIsLocalized() {
-  #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .english) == "Updating Library…")
-  #expect(LibraryPanelFooterAccessibility.footerProgressLabel(language: .hebrew) == "הספרייה מתעדכנת…")
+  #expect(
+    LibraryPanelFooterAccessibility.footerProgressLabel(language: .english) == "Updating Library…")
+  #expect(
+    LibraryPanelFooterAccessibility.footerProgressLabel(language: .hebrew) == "הספרייה מתעדכנת…")
 }
 
 @Test @MainActor func libraryPanelTitleIsAHeading() {

@@ -15,10 +15,11 @@ import Testing
 
     let observations: [[String: Any]] = [["requestedType": "popup"]]
     let rollback = ["ownerPreserved": true, "modelOrderPreserved": false]
-    let failed = try JSONSerialization.jsonObject(
-      with: EngineRequestedWindowProbe.reportData(
-        phase: "restart", checks: ["created"], observations: observations,
-        rollback: rollback, error: Failure())) as? [String: Any]
+    let failed =
+      try JSONSerialization.jsonObject(
+        with: EngineRequestedWindowProbe.reportData(
+          phase: "restart", checks: ["created"], observations: observations,
+          rollback: rollback, error: Failure())) as? [String: Any]
     #expect(failed?["passed"] as? Bool == false)
     #expect(failed?["phase"] as? String == "restart")
     #expect(failed?["checks"] as? [String] == ["created"])
@@ -26,13 +27,15 @@ import Testing
     #expect(failed?["rollback"] as? [String: Bool] == rollback)
     #expect((failed?["observations"] as? [[String: String]])?.first == ["requestedType": "popup"])
 
-    let passed = try JSONSerialization.jsonObject(
-      with: EngineRequestedWindowProbe.reportData(
-        phase: "initial", checks: ["created", "closed"], observations: [], rollback: [:],
-        error: nil)) as? [String: Any]
+    let passed =
+      try JSONSerialization.jsonObject(
+        with: EngineRequestedWindowProbe.reportData(
+          phase: "initial", checks: ["created", "closed"], observations: [], rollback: [:],
+          error: nil)) as? [String: Any]
     #expect(passed?["passed"] as? Bool == true)
     #expect(passed?["phase"] as? String == "initial")
     #expect(passed?["error"] is NSNull)
-    #expect((passed?["scope"] as? String)?.contains("hidden managed normal-profile windows") == true)
+    #expect(
+      (passed?["scope"] as? String)?.contains("hidden managed normal-profile windows") == true)
   }
 }

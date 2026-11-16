@@ -41,7 +41,8 @@ struct InspectorSourceActionsTests {
   }
 
   @Test @MainActor func backendFailuresUseLocalizedSourceRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       InspectorSourceActions.failureMessage(for: error)
         == InspectorL10n.string("Could not get the source details. Try again."))

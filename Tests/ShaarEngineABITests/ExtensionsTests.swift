@@ -252,9 +252,12 @@ struct ShaarExtensionsAdapterTests {
         "fromWebStore": true,
       ]
       row[field] = 1
-      let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "extensions": [row]])
+      let data = try JSONSerialization.data(withJSONObject: [
+        "schemaVersion": 1, "extensions": [row],
+      ])
       await fake.setReply(try #require(String(data: data, encoding: .utf8)))
-      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row"))
+      {
         _ = try await adapter.list(profileID: UUID())
       }
     }
@@ -270,7 +273,8 @@ struct ShaarExtensionsAdapterTests {
       row.replacingOccurrences(of: #""fromWebStore":true"#, with: #""fromWebStore":0"#),
     ] {
       let fake = FakeExtensionsTransport("{\"schemaVersion\":1,\"extensions\":[\(invalidRow)]}")
-      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
+      await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row"))
+      {
         _ = try await ShaarExtensionsAdapter(shaar: fake).list(profileID: UUID())
       }
     }
@@ -286,7 +290,8 @@ struct ShaarExtensionsAdapterTests {
 
   @Test func extensionResponseFlagsRejectNumericJSONValues() async throws {
     let list = FakeExtensionsTransport(
-      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":1,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#)
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Extension","version":"1","enabled":1,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#
+    )
     await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
       _ = try await ShaarExtensionsAdapter(shaar: list).list(profileID: UUID())
     }

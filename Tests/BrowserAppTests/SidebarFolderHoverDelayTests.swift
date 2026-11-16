@@ -4,6 +4,7 @@
 
 import Foundation
 import Testing
+
 @testable import ArcusisBrowser
 
 @Suite @MainActor
@@ -13,7 +14,9 @@ struct SidebarFolderHoverDelayTests {
     let clock = ContinuousClock()
     var activated = false
 
-    delay.schedule(until: clock.now + .milliseconds(1)) { false } activate: {
+    delay.schedule(until: clock.now + .milliseconds(1)) {
+      false
+    } activate: {
       activated = true
     }
     await delay.waitForCurrentTask()
@@ -21,7 +24,9 @@ struct SidebarFolderHoverDelayTests {
     #expect(!delay.isScheduled)
     #expect(!activated)
 
-    delay.schedule(until: clock.now + .milliseconds(1)) { true } activate: {
+    delay.schedule(until: clock.now + .milliseconds(1)) {
+      true
+    } activate: {
       activated = true
     }
     await delay.waitForCurrentTask()

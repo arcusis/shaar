@@ -115,8 +115,10 @@ struct DevToolsPanelTests {
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":5,"leaseID":42,"data":{"requestID":"r1","status":200,"truncated":false}}"#
     #expect(decodePanel(response) != nil)
     #expect(
-      decodePanel(response.replacingOccurrences(of: #""truncated":false"#,
-        with: #""truncated":0"#)) == nil)
+      decodePanel(
+        response.replacingOccurrences(
+          of: #""truncated":false"#,
+          with: #""truncated":0"#)) == nil)
     #expect(
       decodePanel(response.replacingOccurrences(of: #""status":200"#, with: #""status":true"#))
         == nil)
@@ -136,7 +138,8 @@ struct DevToolsPanelTests {
     #expect(
       ShaarDevToolsPanelEventRouter.decode(
         event(booleanLease, scope: regular), scope: regular,
-        windowID: "window-a", tabID: "tab-a", leaseID: 1) == nil)  }
+        windowID: "window-a", tabID: "tab-a", leaseID: 1) == nil)
+  }
 
   @Test func networkHeadersAreAcceptedOnRequestAndResponseEvents() {
     let request =

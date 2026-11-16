@@ -29,12 +29,14 @@ enum InspectorDetailsL10n {
     switch value {
     case "Accessibility data exceeds supported limits.",
       "Asset data exceeds supported limits.", "Asset data is unavailable or exceeds 32 MiB.",
-      "Chromium did not return this resource's content.", "Component data does not belong to this tree.",
+      "Chromium did not return this resource's content.",
+      "Component data does not belong to this tree.",
       "Component tree exceeds supported limits.", "Component values exceed supported limits.",
       "Element details exceed the supported size.", "The selected element is no longer available.",
       "This asset is no longer selected.":
       return BrowserLocalization.string(value, table: "InspectorDetails", language: language)
-    case "Chromium could not capture this element.", "The page could not complete the Inspector request.",
+    case "Chromium could not capture this element.",
+      "The page could not complete the Inspector request.",
       "This Inspector target is no longer available.":
       return BrowserLocalization.string(value, table: "Inspector", language: language)
     default:

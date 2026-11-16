@@ -243,13 +243,15 @@ struct DeviceChooserTests {
     #expect(
       request(
         store, transport: "usb", id: "max-multibyte-name",
-        options: [["optionId": "multibyte-name", "name": multibyteName]], canGrant: true)?.options.first?.title
+        options: [["optionId": "multibyte-name", "name": multibyteName]], canGrant: true)?.options
+        .first?.title
         == multibyteName)
     let oversizedMultibyteName = String(repeating: "🔌", count: 65)
     #expect(
       request(
         store, transport: "usb", id: "oversized-multibyte-name",
-        options: [["optionId": "multibyte-too-large", "name": oversizedMultibyteName]], canGrant: true) == nil)
+        options: [["optionId": "multibyte-too-large", "name": oversizedMultibyteName]],
+        canGrant: true) == nil)
   }
 
   @Test func chooserOptionCountMatchesTheEngineLimit() throws {
@@ -263,8 +265,10 @@ struct DeviceChooserTests {
     let excessOptions = (0..<65).map {
       ["optionId": "device-\($0)", "name": "Device \($0)"] as [String: Any]
     }
-    #expect(request(store, transport: "usb", id: "too-many-options", options: excessOptions,
-      canGrant: true) == nil)
+    #expect(
+      request(
+        store, transport: "usb", id: "too-many-options", options: excessOptions,
+        canGrant: true) == nil)
   }
 
   @Test func chooserRejectsDuplicateOptionIndexes() throws {
@@ -312,8 +316,10 @@ struct DeviceChooserTests {
 
   @Test func deviceNamesWithoutAVisibleBaseUseTheFallbackLabel() throws {
     let store = try store()
-    let request = try #require(self.request(store, transport: "usb", id: "invisible-name",
-      options: [["optionId": "device-0", "name": "\u{FE0F}"]], canGrant: true))
+    let request = try #require(
+      self.request(
+        store, transport: "usb", id: "invisible-name",
+        options: [["optionId": "device-0", "name": "\u{FE0F}"]], canGrant: true))
     #expect(request.options.first?.title == PanelsL10n.string("Unknown device"))
   }
 

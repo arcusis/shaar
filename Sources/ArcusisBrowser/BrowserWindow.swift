@@ -81,7 +81,8 @@ struct BrowserWindow: View {
           spaceReduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),
           value: store.session.selectedSpaceID
         )
-        .animation(spaceReduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
+        .animation(
+          spaceReduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
       }
       sidebarLayer
       if store.commandIsOpen {
@@ -391,7 +392,9 @@ struct BrowserWindow: View {
       .frame(width: frame.width)
       .fixedSize(horizontal: false, vertical: true)
       .position(x: centerX, y: frame.midY)
-      .animation(spaceReduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight)
+      .animation(
+        spaceReduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight
+      )
       .transition(.scale(scale: 0.94, anchor: anchor).combined(with: .opacity))
   }
 

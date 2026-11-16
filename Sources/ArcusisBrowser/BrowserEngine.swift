@@ -96,8 +96,8 @@ final class BrowserEngine {
   isolated deinit {
     suspensionTask?.cancel()
     memoryPressureSource?.cancel()
-    delayedRefreshTasks.values.forEach { $0.cancel() }
-    developmentProbeTasks.values.forEach { $0.cancel() }
+    for task in delayedRefreshTasks.values { task.cancel() }
+    for task in developmentProbeTasks.values { task.cancel() }
   }
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
@@ -527,8 +527,9 @@ final class BrowserEngine {
         let store = self.store, store.requestHTTPAuth(request)
       else {
         if let tabID = payload["tabID"] as? String {
-          self.events.rejectHTTPAuth(id, tabID: tabID,
-                                     windowID: payload["windowID"] as? String ?? "")
+          self.events.rejectHTTPAuth(
+            id, tabID: tabID,
+            windowID: payload["windowID"] as? String ?? "")
         }
         return
       }
@@ -1166,10 +1167,12 @@ final class BrowserEngine {
   private func cancelDelayedRefreshes() {
     let tasks = Array(delayedRefreshTasks.values)
     delayedRefreshTasks.removeAll()
-    tasks.forEach { $0.cancel() }
+    for task in tasks { task.cancel() }
   }
 
-  func recordDownloadDirectoryAcknowledgement(_ acknowledged: URL, requested: URL, for profile: UUID) {
+  func recordDownloadDirectoryAcknowledgement(
+    _ acknowledged: URL, requested: URL, for profile: UUID
+  ) {
     guard store?.preferences.downloadDirectory(for: profile) == requested else { return }
     store?.preferences.setDownloadDirectory(acknowledged, for: profile)
   }

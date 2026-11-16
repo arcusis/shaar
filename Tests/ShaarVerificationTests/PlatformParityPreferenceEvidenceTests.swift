@@ -9,7 +9,7 @@ import Testing
 @Suite struct PlatformParityPreferenceEvidenceTests {
   @Test func booleanCookieControlModeIsNotReportedAsANumericPreference() {
     let values = PlatformParityPreferenceEvidence.excerpt([
-      "profile": ["cookie_controls_mode": true],
+      "profile": ["cookie_controls_mode": true]
     ])
     #expect(values["profile.cookie_controls_mode"] == nil)
   }

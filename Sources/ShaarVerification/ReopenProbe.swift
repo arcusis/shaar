@@ -61,7 +61,8 @@ final class ReopenProbe {
     let ids: RecoveryIdentities
     var previousInstance: String?
     if phase == "initial" {
-      guard store.createSpace(name: "Bulk close recovery", sharingProfile: base.profileID, tint: .ocean)
+      guard
+        store.createSpace(name: "Bulk close recovery", sharingProfile: base.profileID, tint: .ocean)
       else { throw RecoveryFailure("Could not create bulk-close recovery space.") }
       let bulkSpace = store.session.selectedSpaceID
       for _ in 0..<3 { store.perform(.open(url)) }

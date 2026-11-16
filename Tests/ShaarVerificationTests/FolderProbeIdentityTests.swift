@@ -18,7 +18,8 @@ import Testing
 
   @Test func identitiesRejectMalformedAndMissingRequiredValues() throws {
     let malformed = Data(
-      #"{"source":"not-a-uuid","destination":"00000000-0000-0000-0000-000000000001","root":"00000000-0000-0000-0000-000000000002","child":"00000000-0000-0000-0000-000000000003","parent":"00000000-0000-0000-0000-000000000004","tabs":[]}"#.utf8)
+      #"{"source":"not-a-uuid","destination":"00000000-0000-0000-0000-000000000001","root":"00000000-0000-0000-0000-000000000002","child":"00000000-0000-0000-0000-000000000003","parent":"00000000-0000-0000-0000-000000000004","tabs":[]}"#
+        .utf8)
     let missing = Data(#"{"source":"00000000-0000-0000-0000-000000000001"}"#.utf8)
 
     #expect(throws: (any Error).self) {

@@ -6,12 +6,13 @@ import Foundation
 
 public enum BrowserExtensionText {
   public static func sanitizedForDisplay(_ value: String) -> String {
-    String(value.unicodeScalars.filter { scalar in
-      switch scalar.value {
-      case 0x061C, 0x200E...0x200F, 0x202A...0x202E, 0x2066...0x2069: false
-      default: true
-      }
-    })
+    String(
+      value.unicodeScalars.filter { scalar in
+        switch scalar.value {
+        case 0x061C, 0x200E...0x200F, 0x202A...0x202E, 0x2066...0x2069: false
+        default: true
+        }
+      })
   }
 }
 
@@ -25,7 +26,8 @@ public struct BrowserExtension: Identifiable, Equatable, Sendable {
     guard Self.isValidID(id),
       !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       !displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-      displayName.utf8.count <= 1024, !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      displayName.utf8.count <= 1024,
+      !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       version.utf8.count <= 128
     else { return nil }
     self.id = id

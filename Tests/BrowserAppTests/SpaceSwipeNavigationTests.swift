@@ -75,7 +75,8 @@ struct SpaceSwipeNavigationTests {
     let authoredEvent = try #require(makeWindowEvent(for: window))
 
     #expect(store.showLibraryDrawer(.spaces))
-    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) === authoredEvent)
+    #expect(
+      monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) === authoredEvent)
     #expect(store.session.selectedSpaceID == initialSpaceID)
 
     store.closeLibraryDrawer()
@@ -97,7 +98,8 @@ struct SpaceSwipeNavigationTests {
         tabID: tab.id, pageURL: pageURL,
         requestingOrigin: URL(string: "https://example.test")!, kinds: [.camera]))
     #expect(store.requestWebsitePermission(request))
-    #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) === authoredEvent)
+    #expect(
+      monitor.route(authoredEvent, deltaX: 2, deltaY: 0, eventWindow: window) === authoredEvent)
     #expect(store.session.selectedSpaceID == afterSwipeSpaceID)
   }
 

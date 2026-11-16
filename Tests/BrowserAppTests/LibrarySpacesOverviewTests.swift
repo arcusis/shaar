@@ -12,7 +12,8 @@ import XCTest
 @MainActor
 final class LibrarySpacesOverviewTests: XCTestCase {
   func testSpaceSelectionAccessibilityTraitTracksSelection() {
-    XCTAssertTrue(LibrarySpacesOverview.spaceSelectionTraits(isSelected: true).contains(.isSelected))
+    XCTAssertTrue(
+      LibrarySpacesOverview.spaceSelectionTraits(isSelected: true).contains(.isSelected))
     XCTAssertFalse(
       LibrarySpacesOverview.spaceSelectionTraits(isSelected: false).contains(.isSelected))
   }
@@ -67,7 +68,8 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     }
     print("librarySpacesFolderPathBenchmark: \(start.duration(to: .now))")
 
-    let card = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "Folder 149").first)
+    let card = try XCTUnwrap(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Folder 149").first)
     let expectedItemIDs = Set(
       folderIDs.map { "folder-\($0)" }
         + [149, 299, 449].map { "tab-\(tabs[$0].id)" })
@@ -171,7 +173,8 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     XCTAssertEqual(
       LibrarySpaceItemsAccessibility.tabLabel(title: " \n\t", address: address),
       address)
-    XCTAssertEqual(LibrarySpaceItemsAccessibility.tabLabel(title: address, address: address), address)
+    XCTAssertEqual(
+      LibrarySpaceItemsAccessibility.tabLabel(title: address, address: address), address)
     XCTAssertEqual(
       LibrarySpaceItemsAccessibility.tabLabel(title: " Article ", address: address),
       " Article , \(address)")

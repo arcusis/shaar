@@ -17,12 +17,16 @@ struct BasicBrowsingProbeTests {
     #expect(BasicBrowsingPageEvidence.isLive(loaded, expectedHost: "127.0.0.1"))
     #expect(BasicBrowsingPageEvidence.isLive(loaded, expectedHost: nil))
     #expect(!BasicBrowsingPageEvidence.isLive(loaded, expectedHost: "example.test"))
-    #expect(!BasicBrowsingPageEvidence.isLive([
-      "href": "http://127.0.0.1:43123/account", "ready": "loading", "text": "fixture",
-    ], expectedHost: "127.0.0.1"))
-    #expect(!BasicBrowsingPageEvidence.isLive([
-      "href": "http://127.0.0.1:43123/account", "ready": "complete", "text": "",
-    ], expectedHost: "127.0.0.1"))
+    #expect(
+      !BasicBrowsingPageEvidence.isLive(
+        [
+          "href": "http://127.0.0.1:43123/account", "ready": "loading", "text": "fixture",
+        ], expectedHost: "127.0.0.1"))
+    #expect(
+      !BasicBrowsingPageEvidence.isLive(
+        [
+          "href": "http://127.0.0.1:43123/account", "ready": "complete", "text": "",
+        ], expectedHost: "127.0.0.1"))
     #expect(!BasicBrowsingPageEvidence.isLive(["ready": "complete"], expectedHost: nil))
   }
 

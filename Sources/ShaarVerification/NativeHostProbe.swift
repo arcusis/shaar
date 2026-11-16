@@ -131,7 +131,8 @@ enum NativeHostViewportValidation {
       let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
       let pageVisibilityState = document["visibilityState"] as? String,
       let resizeEventCount = (document["resizeEventCount"] as? NSNumber)?.intValue,
-      let mediaQueryChangeEventCount = (document["mediaQueryChangeEventCount"] as? NSNumber)?.intValue,
+      let mediaQueryChangeEventCount = (document["mediaQueryChangeEventCount"] as? NSNumber)?
+        .intValue,
       let pageFocusEventCount = (document["pageFocusEventCount"] as? NSNumber)?.intValue,
       let pageBlurEventCount = (document["pageBlurEventCount"] as? NSNumber)?.intValue,
       let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue
@@ -343,7 +344,8 @@ final class NativeHostProbe {
         reopenCommandWasEnabled: commandWasEnabled,
         selectedURL: restoredTab.url.absoluteString,
         expectedURL: NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
-          fixture: fixture).absoluteString,
+          fixture: fixture
+        ).absoluteString,
         selectedTabWasLive: primary.runtime.view(forTabID: restoredTab.id.uuidString) != nil,
         recoverySnapshotWasConsumed: host.lastClosedWindowSnapshot == nil)
       let evidenceData = try JSONEncoder().encode(evidence)
@@ -352,8 +354,9 @@ final class NativeHostProbe {
         options: .atomic)
       try expect(
         evidence.passed
-          && restoredTab.url == NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
-            fixture: fixture),
+          && restoredTab.url
+            == NativeHostClosedWindowRecoveryEvidence.expectedReopenedPage(
+              fixture: fixture),
         "History reopens the last closed window with its selected page live")
       if NativeHostProbeScope.stopsAfterClosedWindowRecovery(
         environment: ProcessInfo.processInfo.environment)
@@ -1267,7 +1270,8 @@ final class NativeHostProbe {
             query.addEventListener('change', () => window.__arcusisMediaQueryChangeEvents++);
             return {matches: query.matches};
           })()
-          """) { continuation.resume(returning: $0) }
+          """
+      ) { continuation.resume(returning: $0) }
     }
     guard let data = json?.data(using: .utf8),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -1280,9 +1284,10 @@ final class NativeHostProbe {
       let json: String? = await withCheckedContinuation { continuation in
         primary.runtime.evaluate(
           inTabID: tabID.uuidString,
-          script: "({count:window.__arcusisMediaQueryChangeEvents||0})") {
-            continuation.resume(returning: $0)
-          }
+          script: "({count:window.__arcusisMediaQueryChangeEvents||0})"
+        ) {
+          continuation.resume(returning: $0)
+        }
       }
       if let data = json?.data(using: .utf8),
         let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

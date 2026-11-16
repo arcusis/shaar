@@ -124,7 +124,8 @@ struct TabSuspensionTests {
     var downloadCheckCount = 0
     let privateSession = PrivatePageSession(
       runtime: runtime, contextID: "benchmark-context", windowID: "benchmark-window",
-      firstTabID: tabs[0].id, store: store, profileIsDownloading: { id in
+      firstTabID: tabs[0].id, store: store,
+      profileIsDownloading: { id in
         downloadCheckCount += 1
         return id == profile.id
       })

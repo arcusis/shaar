@@ -318,7 +318,8 @@ private func shortcutEvent(for item: NSMenuItem) -> NSEvent {
 
 @Test @MainActor func normalNewWindowUsesCommandNAndPreservesOtherWindowShortcuts() {
   let entries = ShortcutCatalog.installed().entries
-  #expect(entries.contains { $0.command == "newWindow" && $0.key == "n" && $0.modifiers == .command })
+  #expect(
+    entries.contains { $0.command == "newWindow" && $0.key == "n" && $0.modifiers == .command })
   #expect(LauncherCommands.catalog.contains { $0.id == "newWindow" })
   #expect(LauncherCommands.catalog.contains { $0.id == "newPrivateWindow" })
   #expect(LauncherCommands.catalog.contains { $0.id == "newMiniWindow" })

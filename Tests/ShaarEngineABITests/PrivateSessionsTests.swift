@@ -106,7 +106,8 @@ struct PrivateSessionsTests {
       throws: ShaarEngineError.status(
         .notFound, platformCode: 0, message: "private session is closed")
     ) {
-      try sessionAdapter.openWindow(sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
+      try sessionAdapter.openWindow(
+        sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
     }
 
     let windowEngine = FakePrivateSessionsEngine()
@@ -134,7 +135,8 @@ struct PrivateSessionsTests {
     let tabAdapter = ShaarPrivateSessionsAdapter(engine: tabEngine)
     _ = try tabAdapter.openSession(
       profileID: Data("profile-a".utf8), sessionID: Data("session-a".utf8))
-    _ = try tabAdapter.openWindow(sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
+    _ = try tabAdapter.openWindow(
+      sessionID: Data("session-a".utf8), windowID: Data("window-a".utf8))
     tabEngine.tabHandle = 0
     #expect(
       throws: ShaarEngineError.status(

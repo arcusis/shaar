@@ -280,9 +280,10 @@ struct ProfilePrivacyTests {
     #expect(model.loaded && model.failure == nil)
     #expect(model.sites.map(\.id) == ["https://example.test"])
     #expect(model.sites.first?.permissions.first?.value == .allow)
-    #expect(model.sites.first?.permissions.contains {
-      $0.id == "protocolHandlers" && $0.title == SettingsL10n.string("Protocol Handlers")
-    } == true)
+    #expect(
+      model.sites.first?.permissions.contains {
+        $0.id == "protocolHandlers" && $0.title == SettingsL10n.string("Protocol Handlers")
+      } == true)
     #expect(model.cookiesBlocked == nil)
     await model.setCookiesBlocked(true)
     #expect(!backend.calls.contains { $0.0 == "cookies" })

@@ -18,11 +18,12 @@ struct AgentBridgeViewTests {
     let model = AgentBridgeModel(target: target) { operation, _, reply in
       switch operation {
       case .enable:
-        reply([
-          "schemaVersion": 1, "enabled": true, "port": 9222,
-          "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
-          "connectionCount": 1, "token": String(repeating: "a", count: 43),
-        ], nil)
+        reply(
+          [
+            "schemaVersion": 1, "enabled": true, "port": 9222,
+            "wsEndpoint": "ws://127.0.0.1:9222/devtools/browser/id",
+            "connectionCount": 1, "token": String(repeating: "a", count: 43),
+          ], nil)
       case .disable:
         disableReply = reply
       case .status:

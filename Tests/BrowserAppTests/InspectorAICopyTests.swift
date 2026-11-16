@@ -44,7 +44,8 @@ import Testing
   }
 
   @Test func backendFailuresUseLocalizedCopyRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       InspectorAICopyModel.failureMessage(for: error)
         == InspectorL10n.string("Could not copy the selected element. Try again."))

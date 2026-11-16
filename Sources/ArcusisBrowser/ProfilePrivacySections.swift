@@ -6,7 +6,8 @@ import BrowserCore
 import SwiftUI
 
 enum ProfilePrivacyAccessibility {
-  static func loadingPermissionsLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+  static func loadingPermissionsLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String
+  {
     BrowserLocalization.string("Loading site permissions", table: "Settings", language: language)
   }
 

@@ -1,25 +1,14 @@
 {
-  "captureMethod": "Hidden production host; live Chromium in-process viewport PNG inserted at its exact native frame, then whole-window AppKit bitmap at 2x. Site controls use the production panel with live HTTPS state in a hidden host. Settings uses the production Profiles view with the same workspace profiles. Page-only images use the unmodified engine viewport PNG at exactly 1440x900 CSS pixels, 2x, before extension installation.",
-  "capturedAt": "2026-11-01T20:47:43Z",
-  "engineVersion": "155.0.8059.84",
-  "extensions": [
-    {
-      "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
-      "name": "Dark Reader",
-      "sourceURL": "https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh",
-      "version": "4.9.134"
-    },
-    {
-      "id": "nngceckbapebfimnlniiiahkandclblb",
-      "name": "Bitwarden Password Manager",
-      "sourceURL": "https://chromewebstore.google.com/detail/bitwarden-password-manager/nngceckbapebfimnlniiiahkandclblb",
-      "version": "2026.10.1"
-    }
-  ],
+  "captureMethod": "Hidden production host; live Chromium probe viewport PNG at temporary 2x device metrics inserted at its exact native frame, then whole-window AppKit bitmap at 2x. Site controls use the production panel with live HTTPS state in a hidden host. Settings uses the production Profiles view with the same workspace profiles. Page-only images use the engine viewport PNG at exactly 1440x900 CSS pixels, 2x, before extension installation. Standalone feature surfaces are production views rendered in unordered AppKit windows at 2x; each image identifies its method.",
+  "capturedAt": "2026-11-16T11:12:08Z",
+  "engineArchiveSHA256": "f17841ccb576459451d54033d3287c814f567eec3a0024f716cd8cd7d1d23ae8",
+  "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+  "engineVersion": "157.0.8103.51",
+  "extensions": [],
   "images": [
     {
       "appearance": "light",
-      "bytes": 893970,
+      "bytes": 741385,
       "description": "Public page viewport only; no Shaar chrome.",
       "document": {
         "dark": false,
@@ -28,12 +17,13 @@
         "height": 900,
         "images": true,
         "ready": "complete",
-        "text": 1713,
+        "text": 1742,
         "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
         "url": "https://arcusis.com/",
         "width": 1440
       },
-      "engineVersion": "155.0.8059.84",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
       "file": "page-arcusis.png",
       "maxChannelRMSE": 0,
       "optimization": "Pillow lossless PNG optimization",
@@ -42,16 +32,26 @@
         "width": 2880
       },
       "scale": 2,
-      "sha256": "2e425e6e235421cc47cb0b38333e6a07824fcb3db1fa14cabb1bfd04bb7efabe",
+      "sha256": "15f23c215fd065ab2272cb6c731adc0404cad5f0712a303fb6f50fdd2aa56c01",
       "viewportSize": {
         "height": 900,
         "unit": "CSS pixels",
         "width": 1440
+      },
+      "webp": {
+        "bytes": 510004,
+        "file": "page-arcusis.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1800,
+          "width": 2880
+        },
+        "sha256": "888e0addc4979fbd11069b611d49b7ca7c6c2dfded66dbd93766ac39488fa5b3"
       }
     },
     {
       "appearance": "light",
-      "bytes": 457484,
+      "bytes": 370752,
       "description": "Public page viewport only; no Shaar chrome.",
       "document": {
         "dark": false,
@@ -60,30 +60,41 @@
         "height": 900,
         "images": true,
         "ready": "complete",
-        "text": 4722,
-        "title": "Hasbara - Accurate Information About Israel | Trusted\u2026",
+        "text": 5154,
+        "title": "Hasbara - Accurate Information About Israel",
         "url": "https://hasbara.co.il/",
         "width": 1440
       },
-      "engineVersion": "155.0.8059.84",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
       "file": "page-hasbara.png",
-      "maxChannelRMSE": 1.4249,
+      "maxChannelRMSE": 1.451,
       "optimization": "libimagequant 256-color palette, no resizing",
       "pixelSize": {
         "height": 1800,
         "width": 2880
       },
       "scale": 2,
-      "sha256": "e10d0a5b3077cd603603e72a1ffa06b5b7dbce4e92c9be85c23cadb672c4d3cb",
+      "sha256": "9f62f7fa3f933927c3252bc143325f1428352c7ea5a6f4592aa0d17f178398fe",
       "viewportSize": {
         "height": 900,
         "unit": "CSS pixels",
         "width": 1440
+      },
+      "webp": {
+        "bytes": 302876,
+        "file": "page-hasbara.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1800,
+          "width": 2880
+        },
+        "sha256": "bd681953a7428daa8db06bd9a89e847b99a1902ad7dc4cf7157d550363b7bd9f"
       }
     },
     {
       "appearance": "light",
-      "bytes": 884273,
+      "bytes": 886037,
       "description": "Public page viewport only; no Shaar chrome.",
       "document": {
         "dark": false,
@@ -97,25 +108,36 @@
         "url": "https://freightfte.com/",
         "width": 1440
       },
-      "engineVersion": "155.0.8059.84",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
       "file": "page-freightfte.png",
-      "maxChannelRMSE": 1.2741,
-      "optimization": "libimagequant 80-color palette, no resizing",
+      "maxChannelRMSE": 1.1928,
+      "optimization": "libimagequant 96-color palette, no resizing",
       "pixelSize": {
         "height": 1800,
         "width": 2880
       },
       "scale": 2,
-      "sha256": "f862a44fa8c759119ce69201fc0666670b0aca3222fc7027b2a841b8d9f1f2f1",
+      "sha256": "d7b7823b1839d05d7669007db01cefc2293e538fe84330082e2c62d475dd959b",
       "viewportSize": {
         "height": 900,
         "unit": "CSS pixels",
         "width": 1440
+      },
+      "webp": {
+        "bytes": 811138,
+        "file": "page-freightfte.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1800,
+          "width": 2880
+        },
+        "sha256": "135ff645b075ca0e5e3f0ad6363114079662ea42e8ab896deaa32d99daab0a10"
       }
     },
     {
       "appearance": "light",
-      "bytes": 405055,
+      "bytes": 454180,
       "description": "Public page viewport only; no Shaar chrome.",
       "document": {
         "dark": false,
@@ -124,12 +146,13 @@
         "height": 900,
         "images": true,
         "ready": "complete",
-        "text": 8874,
+        "text": 9564,
         "title": "GitHub - arcusis/shaar: Shaar, a native macOS browser built on Chromium. \u00b7 GitHub",
         "url": "https://github.com/arcusis/shaar",
         "width": 1440
       },
-      "engineVersion": "155.0.8059.84",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
       "file": "page-github.png",
       "maxChannelRMSE": 0,
       "optimization": "Pillow lossless PNG optimization",
@@ -138,16 +161,27 @@
         "width": 2880
       },
       "scale": 2,
-      "sha256": "e5fe3bef9d14d2c81d7b39042928ec799fa06e66ac835c2f72141441f1fce44f",
+      "sha256": "e698b9ecb50c50730c0c6ccc59bf9dc8904ccc3e04b2ca2f9dba5d175c8efa6e",
       "viewportSize": {
         "height": 900,
         "unit": "CSS pixels",
         "width": 1440
+      },
+      "webp": {
+        "bytes": 128266,
+        "file": "page-github.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1800,
+          "width": 2880
+        },
+        "sha256": "0fc34ea9f4b9487aba16d39ae4849cf51610b6de185e4011c8ead35181628eb8"
       }
     },
     {
       "appearance": "light",
-      "bytes": 752930,
+      "bytes": 837323,
+      "captureMethod": "hidden production host with live page and native chrome at 2x",
       "description": "Green Work Space with the public Arcusis website.",
       "document": {
         "dark": false,
@@ -156,12 +190,13 @@
         "height": 877,
         "images": true,
         "ready": "complete",
-        "text": 1716,
+        "text": 1739,
         "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
         "url": "https://arcusis.com/",
         "width": 1224
       },
-      "engineVersion": "155.0.8059.84",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
       "file": "hero.png",
       "maxChannelRMSE": 0,
       "optimization": "Pillow lossless PNG optimization",
@@ -170,7 +205,17 @@
         "width": 2880
       },
       "scale": 2,
-      "sha256": "4158e15b8ddd68684f1740bcd20dbc08d3a2acb98aa73e014e4ba90dccf79d5c",
+      "sha256": "3dfccab47ac57dcec17746d13c616f3cedf9ec29fe15561a5de0fb731ca6107d",
+      "webp": {
+        "bytes": 490558,
+        "file": "hero.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "37ab8a6b7d6602ba23a52fa5d801e9250ccc333a7256fd849f5446c1fe3ac9ad"
+      },
       "windowSize": {
         "height": 960,
         "unit": "points",
@@ -179,8 +224,9 @@
     },
     {
       "appearance": "light",
-      "bytes": 462305,
-      "description": "Blue Hasbara Space with hasbara.co.il and the sidebar visible.",
+      "bytes": 702138,
+      "captureMethod": "hidden production host with live page and native chrome at 2x",
+      "description": "Extensions toolbar entry point on arcusis.com in the Work profile, before installation.",
       "document": {
         "dark": false,
         "dpr": 2,
@@ -188,128 +234,13 @@
         "height": 877,
         "images": true,
         "ready": "complete",
-        "text": 4722,
-        "title": "Hasbara - Accurate Information About Israel | Trusted\u2026",
-        "url": "https://hasbara.co.il/",
-        "width": 1224
-      },
-      "engineVersion": "155.0.8059.84",
-      "file": "spaces.png",
-      "maxChannelRMSE": 1.5638,
-      "optimization": "libimagequant 256-color palette, no resizing",
-      "pixelSize": {
-        "height": 1920,
-        "width": 2880
-      },
-      "scale": 2,
-      "sha256": "38c8247b2bd5922f0ccbd0851d9c782e94920541fb0011e967dbb18f5d9ed5e0",
-      "windowSize": {
-        "height": 960,
-        "unit": "points",
-        "width": 1440
-      }
-    },
-    {
-      "appearance": "light",
-      "bytes": 687694,
-      "description": "Nativ searching freight across real public tabs over arcusis.com.",
-      "document": {
-        "dark": false,
-        "dpr": 2,
-        "fonts": "loaded",
-        "height": 877,
-        "images": true,
-        "ready": "complete",
-        "text": 1704,
+        "text": 1748,
         "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
         "url": "https://arcusis.com/",
         "width": 1224
       },
-      "engineVersion": "155.0.8059.84",
-      "file": "command-t.png",
-      "maxChannelRMSE": 0,
-      "optimization": "Pillow lossless PNG optimization",
-      "pixelSize": {
-        "height": 1920,
-        "width": 2880
-      },
-      "scale": 2,
-      "sha256": "aa6f1b7e96295942476474e6513a733bbf71c43c240006f0133ef8e7d047e15e",
-      "windowSize": {
-        "height": 960,
-        "unit": "points",
-        "width": 1440
-      }
-    },
-    {
-      "appearance": "light",
-      "bytes": 873083,
-      "description": "Live HTTPS site control center on https://arcusis.com.",
-      "document": {
-        "dark": false,
-        "dpr": 2,
-        "fonts": "loaded",
-        "height": 877,
-        "images": true,
-        "ready": "complete",
-        "text": 1713,
-        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
-        "url": "https://arcusis.com/",
-        "width": 1224
-      },
-      "engineVersion": "155.0.8059.84",
-      "file": "site-controls.png",
-      "maxChannelRMSE": 0,
-      "optimization": "Pillow lossless PNG optimization",
-      "pixelSize": {
-        "height": 1920,
-        "width": 2880
-      },
-      "scale": 2,
-      "sha256": "865ae82d83a8b086243a7d008c52bcdeb658600b9a72744ac4beb74489c93414",
-      "windowSize": {
-        "height": 960,
-        "unit": "points",
-        "width": 1440
-      }
-    },
-    {
-      "appearance": "light",
-      "bytes": 362003,
-      "description": "Settings > Profiles with the disposable Work and Personal profiles.",
-      "engineVersion": "155.0.8059.84",
-      "file": "profiles.png",
-      "maxChannelRMSE": 0,
-      "optimization": "Pillow lossless PNG optimization",
-      "pixelSize": {
-        "height": 1464,
-        "width": 1800
-      },
-      "scale": 2,
-      "sha256": "c0c0530fc12c269ef1f342569fca29b1e887d55a25c2c6437955159b6415c480",
-      "windowSize": {
-        "height": 732,
-        "unit": "points",
-        "width": 900
-      }
-    },
-    {
-      "appearance": "light",
-      "bytes": 593172,
-      "description": "Real Dark Reader and Bitwarden toolbar icons on arcusis.com in the Work profile.",
-      "document": {
-        "dark": false,
-        "dpr": 2,
-        "fonts": "loaded",
-        "height": 877,
-        "images": true,
-        "ready": "complete",
-        "text": 1704,
-        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
-        "url": "https://arcusis.com/",
-        "width": 1224
-      },
-      "engineVersion": "155.0.8059.84",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
       "file": "extensions.png",
       "maxChannelRMSE": 0,
       "optimization": "Pillow lossless PNG optimization",
@@ -318,15 +249,878 @@
         "width": 2880
       },
       "scale": 2,
-      "sha256": "97a9de71a713598c8ae8da1fb0863cf939fc6cf5a3fd25f786bde42a0e54980d",
+      "sha256": "660e2cd81f28d07132dac1a9a18c1aa4a9ab2bdda7f41f2b44249bef1db16cd9",
+      "webp": {
+        "bytes": 405952,
+        "file": "extensions.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "d5680583d96fefdbb549263b2a5eb6f86cea741347e70b0d9df13e36806107db"
+      },
       "windowSize": {
         "height": 960,
         "unit": "points",
         "width": 1440
       }
+    },
+    {
+      "appearance": "light",
+      "bytes": 652455,
+      "captureMethod": "production hidden host with a simulated in-progress navigation callback; live page at 2x",
+      "description": "Stop Loading control during page navigation.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "stop-loading.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "1ba12b3b1087ea786479718cb864b1d4e8658926823ef912bc0e6edbf3cfbde2",
+      "webp": {
+        "bytes": 368514,
+        "file": "stop-loading.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "d9f879e5f5a457afb8b508d5c0b3d765c9a42a7b92dd2f36f9cbe1633634e949"
+      },
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 442353,
+      "captureMethod": "hidden production host with live page and native chrome at 2x",
+      "description": "Blue Hasbara Space with hasbara.co.il and the sidebar visible.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": false,
+        "ready": "complete",
+        "text": 5090,
+        "title": "Hasbara - Accurate Information About Israel",
+        "url": "https://hasbara.co.il/",
+        "width": 1224
+      },
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "spaces.png",
+      "maxChannelRMSE": 1.3926,
+      "optimization": "libimagequant 256-color palette, no resizing",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "6f1bc94f4406161ac1f8f9390e9634810a2902a33ec41954d3fe016633e3372f",
+      "webp": {
+        "bytes": 376792,
+        "file": "spaces.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "2f4f022a9ef0f095bb0d61c5c5ef0bc7e34f24962d229a6701bf86ac184ecd5f"
+      },
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 699238,
+      "captureMethod": "hidden production host with live page and native chrome at 2x",
+      "description": "Command-T searching freight across real public tabs over arcusis.com.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1738,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "command-t.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "73ee5834080b98d45f95eb94c55922da35b77b65b8e87c9480823f98ce7eacbe",
+      "webp": {
+        "bytes": 406152,
+        "file": "command-t.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "9d8dfabf1cbef0238077ef21fdee2f9593cdbd003de1359798e5cabbb7dd2c7b"
+      },
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 717724,
+      "captureMethod": "hidden production host with live page and native chrome at 2x",
+      "description": "Live HTTPS site control center on https://arcusis.com.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1730,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "site-controls.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "02f633ee023d7c948464fd04b1d14982a09a8e585abbe23ab158060b233eb33b",
+      "webp": {
+        "bytes": 363658,
+        "file": "site-controls.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "278d646afb9c9d2eaf48550846f481c25454f1f250a560fdc0ae77a8edc2f3a6"
+      },
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 362855,
+      "captureMethod": "hidden production host",
+      "description": "Settings > Profiles with the disposable Work and Personal profiles.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "profiles.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1464,
+        "width": 1800
+      },
+      "scale": 2,
+      "sha256": "7b8fad3cbffd75da869db9803744e6e0d56ffe3b9595cbda8057e67e8bb2374c",
+      "webp": {
+        "bytes": 187784,
+        "file": "profiles.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1464,
+          "width": 1800
+        },
+        "sha256": "e1ded66c37265646966e57f9c96fac13ad0757524cea21d123e98567a5675e59"
+      },
+      "windowSize": {
+        "height": 732,
+        "unit": "points",
+        "width": 900
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 165103,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Actual Bitwarden Chrome Web Store installation request in the hidden production host.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "web-store-bitwarden-consent.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1300,
+        "width": 1100
+      },
+      "scale": 2,
+      "sha256": "cf7abc4f66b9541918db8ce2a7e5008ffebdeeaa9c0150aca32f61667a7b53f0",
+      "webp": {
+        "bytes": 64088,
+        "file": "web-store-bitwarden-consent.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1300,
+          "width": 1100
+        },
+        "sha256": "bb8c72d748ad740579b9afa351c36e7c5f5f7d95b8c6fc6de6a57e714a03bb7c"
+      },
+      "windowSize": {
+        "height": 650,
+        "unit": "points",
+        "width": 550
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 243268,
+      "captureMethod": "production hidden private host rendered offscreen at 2x",
+      "description": "Private start page in a real hidden private window.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "private-window-light.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1440,
+        "width": 2200
+      },
+      "scale": 2,
+      "sha256": "4f70147e58c34f8f5842c7f190bdba7504fa987bd6a8765aeb08b6ebddbca179",
+      "webp": {
+        "bytes": 91234,
+        "file": "private-window-light.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1440,
+          "width": 2200
+        },
+        "sha256": "d0747c0cab5d1e1e8cad2a62f82d5b7a6ddde5a9c18822a532b786420b379647"
+      },
+      "windowSize": {
+        "height": 720,
+        "unit": "points",
+        "width": 1100
+      }
+    },
+    {
+      "appearance": "dark",
+      "bytes": 249277,
+      "captureMethod": "production hidden private host rendered offscreen at 2x",
+      "description": "Private start page in a real hidden private window.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "private-window-dark.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1440,
+        "width": 2200
+      },
+      "scale": 2,
+      "sha256": "af7f5691949f6dfd4ac23bc648858473fd3ef984ce49d9aa5ab3aae01bf7d6bc",
+      "webp": {
+        "bytes": 100288,
+        "file": "private-window-dark.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1440,
+          "width": 2200
+        },
+        "sha256": "6f599c41ee03d41f57ca932296156729a5251f2513c1426aeb1bd332c506d8b0"
+      },
+      "windowSize": {
+        "height": 720,
+        "unit": "points",
+        "width": 1100
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 23750,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Downloads drawer with an in-progress download.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "downloads-light.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 520,
+        "width": 640
+      },
+      "scale": 2,
+      "sha256": "c0ce43577d89986eb0a4d840943d34bd2674eed2c2d65a0de844b6225cef0176",
+      "webp": {
+        "bytes": 10800,
+        "file": "downloads-light.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 520,
+          "width": 640
+        },
+        "sha256": "2f83921bbc4ddfaedcb5f410f1dcb0a24c273495de95362de05ec7e6c0b1188e"
+      },
+      "windowSize": {
+        "height": 260,
+        "unit": "points",
+        "width": 320
+      }
+    },
+    {
+      "appearance": "dark",
+      "bytes": 24113,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Downloads drawer with an in-progress download.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "downloads-dark.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 520,
+        "width": 640
+      },
+      "scale": 2,
+      "sha256": "7883426385e73cbf05c8b2346ec5f09446c706a5ac925ef1bdd61e8732e742a5",
+      "webp": {
+        "bytes": 11148,
+        "file": "downloads-dark.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 520,
+          "width": 640
+        },
+        "sha256": "7a0a3d7b20f8382cfbbdaed31035251f9013f908cdf20f986718e2c856e64355"
+      },
+      "windowSize": {
+        "height": 260,
+        "unit": "points",
+        "width": 320
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 31409,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Native JavaScript alert sheet.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "javascript-dialog.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 880,
+        "width": 1040
+      },
+      "scale": 2,
+      "sha256": "c4aa39e16726dc451aab15710fbf8a70e37aabec8beec767e80736f59b7bf489",
+      "webp": {
+        "bytes": 11376,
+        "file": "javascript-dialog.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 880,
+          "width": 1040
+        },
+        "sha256": "a4ed5c7cba1594639c39b1d92a76d85c744546e11ff12bac5784fffb0c81e50d"
+      },
+      "windowSize": {
+        "height": 440,
+        "unit": "points",
+        "width": 520
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 47778,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Native HTTP Basic authentication sheet.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "basic-auth.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 880,
+        "width": 1040
+      },
+      "scale": 2,
+      "sha256": "077250fe7e4082e8d2101e83140d8c9280d06e128841de24f9b108b1be0316be",
+      "webp": {
+        "bytes": 18152,
+        "file": "basic-auth.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 880,
+          "width": 1040
+        },
+        "sha256": "a35a53eb90ec8b1a9120960453ecaf46a0b250e055ebb34d9d480d7f1c99d7f0"
+      },
+      "windowSize": {
+        "height": 440,
+        "unit": "points",
+        "width": 520
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 101549,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Camera, microphone and location permission prompt.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "permission-camera-mic-location.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1120,
+        "width": 1000
+      },
+      "scale": 2,
+      "sha256": "494763c20ce58aaef3a4e9975ae40027452329cb3272fa12463f9dd4d47605a8",
+      "webp": {
+        "bytes": 37288,
+        "file": "permission-camera-mic-location.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1120,
+          "width": 1000
+        },
+        "sha256": "12efacd29fb6fac5e003a60578bfc6bc497fcf40193a1aac2b8e7f3ec404d48d"
+      },
+      "windowSize": {
+        "height": 560,
+        "unit": "points",
+        "width": 500
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 61649,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "External protocol handler consent for Mail.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "protocol-handler.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1080,
+        "width": 1000
+      },
+      "scale": 2,
+      "sha256": "6695642fb3f7320f794d1a3dc8dbffaa9f55c4db2e78a0f5bb95ff310b2ea960",
+      "webp": {
+        "bytes": 23284,
+        "file": "protocol-handler.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1080,
+          "width": 1000
+        },
+        "sha256": "4aad8eadf0d1976ddd3ae9d937d56ca8bf1590d65e3f68e6acc39453524770f3"
+      },
+      "windowSize": {
+        "height": 540,
+        "unit": "points",
+        "width": 500
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 64532,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Bluetooth device chooser consent.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "device-chooser-bluetooth.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 840,
+        "width": 1000
+      },
+      "scale": 2,
+      "sha256": "05b467deabefcb8adb98c4c3852d29c8971ddd2ccd30316bcd427ff7e1b2593f",
+      "webp": {
+        "bytes": 27154,
+        "file": "device-chooser-bluetooth.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 840,
+          "width": 1000
+        },
+        "sha256": "530d6e0cb8fc31a6a6dd60f1c466d03382f1b8e1e92ee09ce2819a3125d3dc19"
+      },
+      "windowSize": {
+        "height": 420,
+        "unit": "points",
+        "width": 500
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 45769,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Serial device chooser consent.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "device-chooser-serial.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 840,
+        "width": 1000
+      },
+      "scale": 2,
+      "sha256": "8d495abb8690f7dc5fa70238a2cc814ed8b4ea0c0823eb60514075d8f286f531",
+      "webp": {
+        "bytes": 18548,
+        "file": "device-chooser-serial.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 840,
+          "width": 1000
+        },
+        "sha256": "8066dea4be61a10abfdeb4e185640a723747508e4736dc67cf500774059ca97f"
+      },
+      "windowSize": {
+        "height": 420,
+        "unit": "points",
+        "width": 500
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 11539,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Sidebar media controls.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "media-controls-light.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 200,
+        "width": 400
+      },
+      "scale": 2,
+      "sha256": "4e93e7bc7f0bc50a9ef15f40a3a70418b3d088879dc1923085fecd3481322c4e",
+      "webp": {
+        "bytes": 4840,
+        "file": "media-controls-light.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 200,
+          "width": 400
+        },
+        "sha256": "e190ee70b2a47d58211fda658850f53893c463fae5f883fbc202e3317b8fa5a0"
+      },
+      "windowSize": {
+        "height": 100,
+        "unit": "points",
+        "width": 200
+      }
+    },
+    {
+      "appearance": "dark",
+      "bytes": 11419,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Sidebar media controls.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "media-controls-dark.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 200,
+        "width": 400
+      },
+      "scale": 2,
+      "sha256": "1c78293c547ae634a0815b011e8f7c3228a8741fa6716be83be3d925f6221775",
+      "webp": {
+        "bytes": 4814,
+        "file": "media-controls-dark.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 200,
+          "width": 400
+        },
+        "sha256": "af8af8860294a1f3c9c53e37aa7b2517f62627be5da96714f5ffec51928b675f"
+      },
+      "windowSize": {
+        "height": 100,
+        "unit": "points",
+        "width": 200
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 8767,
+      "captureMethod": "production AppKit PiP controls rendered offscreen at 2x",
+      "description": "Picture-in-picture controls over a sample video backdrop.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "picture-in-picture.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 400,
+        "width": 712
+      },
+      "scale": 2,
+      "sha256": "3771ffa2e768dc205af0bdf6075fbbca3ef4aa75a26f3a3723a03d2ae4b2fe51",
+      "webp": {
+        "bytes": 2862,
+        "file": "picture-in-picture.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 400,
+          "width": 712
+        },
+        "sha256": "16dc2e935475c5073e3b30607caf88ba038516721411337ba0115f231392788b"
+      },
+      "windowSize": {
+        "height": 200,
+        "unit": "points",
+        "width": 356
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 218797,
+      "captureMethod": "production SwiftUI view in an unordered 2x AppKit host; no engine event",
+      "description": "Settings showing sleeping tabs controls.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "sleeping-tabs-settings.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1464,
+        "width": 1800
+      },
+      "scale": 2,
+      "sha256": "297e3ebf25f06c7be6896aa2bd96c510e8a9b17a8194f88778b04ef2923f326f",
+      "webp": {
+        "bytes": 74260,
+        "file": "sleeping-tabs-settings.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1464,
+          "width": 1800
+        },
+        "sha256": "45709b59fa13159e0510d89354381b651ffed2500abb45d8939ca3456b78691a"
+      },
+      "windowSize": {
+        "height": 732,
+        "unit": "points",
+        "width": 900
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 285758,
+      "captureMethod": "hidden production host with live page and native chrome at 2x",
+      "description": "Hebrew right-to-left browser window on arcusis.com.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1742,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "hebrew-window.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "5175a376373e20ea07c759750a69aa50fd36baf0b4e1beb43df7d50f528a61db",
+      "webp": {
+        "bytes": 80438,
+        "file": "hebrew-window.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "752a5ac177276ae6054922592bb7149ea111b384d0f08c4ea4f2f1a0b180cf16"
+      },
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 195904,
+      "captureMethod": "live HTTPS-first interstitial in the production hidden host at 2x",
+      "description": "Live HTTPS-first warning for a plain HTTP site.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "https-first-warning.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "4042d9fad4eb726a48367d5ca6f5ac1edf979c7731b09aecf96e4544267d82a2",
+      "webp": {
+        "bytes": 60886,
+        "file": "https-first-warning.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 1920,
+          "width": 2880
+        },
+        "sha256": "38e060ee35353f28fb41cb587b54969b5a2d22c0001d55cd5a0583674833b448"
+      },
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 13385,
+      "captureMethod": "live save-prompt probe in an offscreen 2x AppKit panel",
+      "description": "Live password save prompt in the hidden production host.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "save-password.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 392,
+        "width": 720
+      },
+      "scale": 2,
+      "sha256": "9803d164641e623749c97163efe95b7509977f1b22c2c8b3bc8d6ad4aa96f8b1",
+      "webp": {
+        "bytes": 3702,
+        "file": "save-password.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 392,
+          "width": 720
+        },
+        "sha256": "c7c77cdac5d58d4acc99549854366691b4ed7d8a86a1adb703fbf3aefa1cd171"
+      },
+      "windowSize": {
+        "height": 196,
+        "unit": "points",
+        "width": 360
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 10411,
+      "captureMethod": "live save-prompt probe in an offscreen 2x AppKit panel",
+      "description": "Live card save prompt in the hidden production host.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "save-card.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 392,
+        "width": 720
+      },
+      "scale": 2,
+      "sha256": "ea4406b1873039b97194a686e14cecb664bab33878db285fcb00121cb6a83a22",
+      "webp": {
+        "bytes": 2686,
+        "file": "save-card.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 392,
+          "width": 720
+        },
+        "sha256": "7fa2371db749763bc87a84590ed4614e8f0156ffeb50b480e3a88d14824c2a0c"
+      },
+      "windowSize": {
+        "height": 196,
+        "unit": "points",
+        "width": 360
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 15357,
+      "captureMethod": "live save-prompt probe in an offscreen 2x AppKit panel",
+      "description": "Live address save prompt in the hidden production host.",
+      "engineReleaseTag": "engine-157.0.8103.51-shaar.48",
+      "engineVersion": "157.0.8103.51",
+      "file": "save-address.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 392,
+        "width": 720
+      },
+      "scale": 2,
+      "sha256": "71c6bdc5c5f8eb51375bc8d3d28437b2e361cfeacbeb8b2157a88697a502daeb",
+      "webp": {
+        "bytes": 4252,
+        "file": "save-address.webp",
+        "optimization": "Pillow lossless WebP, method 6, no resizing",
+        "pixelSize": {
+          "height": 392,
+          "width": 720
+        },
+        "sha256": "e04f5436ae72aab4011b2a464f2d3127f9ff8e90a5439f5b1ab71fd5a932ef5f"
+      },
+      "windowSize": {
+        "height": 196,
+        "unit": "points",
+        "width": 360
+      }
     }
   ],
   "privacy": "Fresh marked temporary data directory, mock keychain, no sign-ins or existing profiles, prohibited app activation, no windows ordered onscreen, audio muted by the engine harness.",
   "schema": 2,
-  "skipped": []
+  "skipped": [
+    {
+      "file": "developer-tools-f12.png",
+      "reason": "The pinned engine exposes the hidden F12 dock as a remote Chromium surface; AppKit bitmap capture does not paint its panels and shaar.48 has no DevTools-frontend capture probe."
+    }
+  ]
 }

@@ -8,6 +8,17 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct ShaarBrowsingEdgeProbeDialogTests {
+  @Test func hiddenRenderSurfaceDoesNotMaskInteractiveOrKeyWindows() {
+    #expect(!browsingEdgeWindowCountsAsVisible(
+      isVisible: true, alphaValue: 0, ignoresMouseEvents: true, isKeyWindow: false))
+    #expect(browsingEdgeWindowCountsAsVisible(
+      isVisible: true, alphaValue: 0, ignoresMouseEvents: false, isKeyWindow: false))
+    #expect(browsingEdgeWindowCountsAsVisible(
+      isVisible: true, alphaValue: 0, ignoresMouseEvents: true, isKeyWindow: true))
+    #expect(browsingEdgeWindowCountsAsVisible(
+      isVisible: true, alphaValue: 0.01, ignoresMouseEvents: true, isKeyWindow: false))
+  }
+
   @Test func dialogNotesDeduplicateBeforeEnforcingTheCap() {
     var notes: [[String: String]] = []
     var seen: Set<String> = []

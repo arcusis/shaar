@@ -36,6 +36,12 @@ func browsingEdgePrintSurface(_ note: [String: String]) -> Bool {
   return name.contains("print") || title.contains("print") || note["kind"] == "save-panel"
 }
 
+func browsingEdgeWindowCountsAsVisible(
+  isVisible: Bool, alphaValue: CGFloat, ignoresMouseEvents: Bool, isKeyWindow: Bool
+) -> Bool {
+  isVisible && !(alphaValue == 0 && ignoresMouseEvents && !isKeyWindow)
+}
+
 func browsingEdgeFileChooserOpened(_ note: [String: String]) -> Bool {
   note["kind"] == "open-panel"
 }
@@ -298,7 +304,10 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
       if let sheet = window.attachedSheet {
         record(sheet, kind: "sheet")
       }
-      if window.isVisible {
+      if browsingEdgeWindowCountsAsVisible(
+        isVisible: window.isVisible, alphaValue: window.alphaValue,
+        ignoresMouseEvents: window.ignoresMouseEvents, isKeyWindow: window.isKeyWindow)
+      {
         record(window, kind: "visible")
       }
     }
@@ -421,7 +430,6 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     }
     dialogs.start()
     report.add(await checkFind(context, runtime, pageURL))
-    report.add(await checkPageZoom(context, runtime))
     report.add(await checkPrint())
     report.add(await checkHuge(context, runtime, pageURL))
     report.add(await checkScroll(context, runtime, pageURL))
@@ -434,6 +442,7 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     report.add(await checkHang(context, runtime, pageURL))
     report.add(await checkCrash(context, runtime, pageURL))
     report.add(contentsOf: await checkDialogs(context, runtime, pageURL, dialogs))
+    report.add(await checkPageZoom(context, runtime))
     screenshotCaptured = capture(context.hosting, output: report.output)
     cancelActiveDownloads(context)
     let stray = visibleWindowLabels()
@@ -465,19 +474,28 @@ private final class DialogGuard: NSObject, @unchecked Sendable {
     _ context: NativeBrowserContext, _ runtime: ARCShaarRuntime
   ) async -> [String: Any] {
     let view = menuTitles(menuID: "View")
-    let before = await pageScale(runtime, context)
     guard let item = firstItem(where: isPageZoom) else {
       return makeRow("Page zoom", false, "No Zoom In command to invoke. View: \(view).")
     }
+    guard let tab = selectedID(context) else {
+      return makeRow("Page zoom", false, "No selected tab to zoom.")
+    }
+    let surface = ShaarSavePromptRenderSurface(window: context.window) {
+      runtime.focusTabID(tab.uuidString)
+    }
+    let presented = surface.isPresentingFramesWithoutInputOrFocus
+    try? await Task.sleep(for: .milliseconds(400))
+    let before = await pageScale(runtime, context)
     let title = item.title
     let sent = perform(item)
     try? await Task.sleep(for: .milliseconds(400))
     let after = await pageScale(runtime, context)
     let changed = scaleChanged(before, after)
+    let orderedOut = surface.orderOutAndRestore()
     let hidden = windowsHidden()
     return makeRow(
-      "Page zoom", sent && changed && hidden,
-      "invoked \(title), sent \(sent), scale \(scaleText(before)) to \(scaleText(after)), hidden \(hidden)"
+      "Page zoom", sent && changed && presented && orderedOut && hidden,
+      "invoked \(title), sent \(sent), scale \(scaleText(before)) to \(scaleText(after)), transparent surface \(presented), ordered out \(orderedOut), hidden \(hidden)"
     )
   }
 

@@ -1591,7 +1591,8 @@ static NSString *PrivateQuitCancelRejection(ARCShaarRuntime *runtime, NSString *
 
 static const shaar_operation kProbePopupEvaluateOperation = static_cast<shaar_operation>(1095);
 static const shaar_operation kProbePopupCaptureOperation = static_cast<shaar_operation>(1096);
-static const shaar_operation kProbePopupTrustedClickOperation = static_cast<shaar_operation>(1097);
+static const shaar_operation kProbePopupTrustedClickOperation =
+    SHAAR_OP_PROBE_POPUP_TRUSTED_CLICK;
 
 static NSDictionary *ProbePopupOwner(ARCShaarRuntime *runtime, NSString *popupID) {
   if (!ProbeCaptureAllowed() || !ARCProbePopupIdentifier(popupID)) return nil;

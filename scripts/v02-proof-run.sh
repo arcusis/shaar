@@ -282,7 +282,10 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
   run_step 'Permission and protocol prompts' python3 scripts/test-shaar-permission-prompt.py \
     --app "$verification_app" --evidence "$run_root/permission-prompts"
   run_step 'Save prompts' python3 scripts/test-shaar-save-prompt.py \
-    --app "$verification_app" --receipt "$run_root/save-prompts.json"
+    --app "$verification_app" --receipt "$run_root/save-prompts.json" --locale "$locale"
+  save_prompt_index=$((${#results[@]} - 1))
+  save_prompt_result=${results[$save_prompt_index]}
+  save_prompt_detail=${details[$save_prompt_index]}
   run_step 'Platform parity for v0.2 web items' run_platform_parity
   run_step 'Media and picture-in-picture' python3 scripts/test-shaar-media.py \
     --app "$verification_app" --receipt "$run_root/media.json"
@@ -299,9 +302,7 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
     run_step 'Hebrew permission prompts' env SHAAR_V02_PROOF_LOCALE=he \
       python3 scripts/test-shaar-permission-prompt.py --app "$verification_app" \
       --evidence "$he_root/permission-prompts"
-    run_step 'Hebrew save prompts' env SHAAR_V02_PROOF_LOCALE=he \
-      python3 scripts/test-shaar-save-prompt.py --app "$verification_app" \
-      --receipt "$he_root/save-prompts.json"
+    record 'Hebrew save prompts' "$save_prompt_result" "same Hebrew run: $save_prompt_detail"
     run_step 'Hebrew downloads and Chrome Web Store extension' run_he_engine_fixture --bitwarden
     run_step 'Hebrew local MV3 extensions' run_he_engine_fixture --local-extension-install
     run_step 'Hebrew protocol handler' run_he_engine_fixture --external-app-consent
@@ -311,14 +312,13 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
     if [[ -z $probe_filter ]]; then
       run_he_engine_fixture
       cp "$he_root"/browsing-*.png "$he_root/screenshots/" 2>/dev/null || true
-      cp "$he_root"/save-prompt-*.png "$he_root/screenshots/" 2>/dev/null || true
       cp "$he_root"/permission-prompts/*.png "$he_root/screenshots/" 2>/dev/null || true
       record_named_screenshot 'Dialogs' "$he_root/screenshots/browsing-dialogs.png"
       record_named_screenshot 'Basic auth' "$he_root/screenshots/browsing-edge.png"
       record_screenshot_evidence 'Permission prompts' "$he_root/permission-prompts"
-      record_named_screenshot 'Password save prompt' "$he_root/screenshots/save-prompt-password.png"
-      record_named_screenshot 'Card save prompt' "$he_root/screenshots/save-prompt-card.png"
-      record_named_screenshot 'Address save prompt' "$he_root/screenshots/save-prompt-address.png"
+      record_named_screenshot 'Password save prompt' "$run_root/screenshots/he/save-prompt-password-save.png"
+      record_named_screenshot 'Card save prompt' "$run_root/screenshots/he/save-prompt-card-save.png"
+      record_named_screenshot 'Address save prompt' "$run_root/screenshots/he/save-prompt-address-save.png"
       record_screenshot_evidence 'Downloads' "$he_root/screenshots/downloads"
       record_screenshot_evidence 'Chrome Web Store extension' "$he_root/screenshots/bitwarden"
       record_screenshot_evidence 'Device pickers' "$he_root/screenshots/device-pickers"

@@ -66,7 +66,8 @@ import os
   }
 
   private static func conceal(_ window: NSWindow) {
-    windows[ObjectIdentifier(window)] = windows[ObjectIdentifier(window)]
+    windows[ObjectIdentifier(window)] =
+      windows[ObjectIdentifier(window)]
       ?? WindowState(
         window: window, alphaValue: window.alphaValue,
         ignoresMouseEvents: window.ignoresMouseEvents)
@@ -383,7 +384,8 @@ import os
       backPath = context.store.session.selectedPage?.tab.url.path
     }
     runtime.goForward(inTabID: current.uuidString)
-    let forwardPath = await until(attempts: 100, condition: { settled(context, path: reloadPath) })
+    let forwardPath =
+      await until(attempts: 100, condition: { settled(context, path: reloadPath) })
       ? context.store.session.selectedPage?.tab.url.path : nil
     let reloadHistoryOK = reloadHistoryPreserved(
       backPath: backPath, forwardPath: forwardPath, expectedReloadPath: reloadPath)
@@ -399,16 +401,21 @@ import os
     if stopStarted {
       stopLoadingStarted = await until(attempts: 40, condition: { pageIsLoading(context) })
     }
-    let stopped = stopLoadingStarted && runtime.stopTabID(
-      current.uuidString, profileID: context.store.session.selectedSpace.profileID.uuidString)
+    let stopped =
+      stopLoadingStarted
+      && runtime.stopTabID(
+        current.uuidString, profileID: context.store.session.selectedSpace.profileID.uuidString)
     var stopSettled = false
     if stopped {
       stopSettled = await until(attempts: 60, condition: { !pageIsLoading(context) })
     }
     let stopPreservedPage = context.store.session.selectedPage?.tab.url.path == committedPath
-    rows.append(row(
-      "churn-stop-loading", stopLoadingStarted && stopped && stopSettled && stopPreservedPage ? "pass" : "fail",
-      "Started=\(stopLoadingStarted), stop accepted=\(stopped), loading ended=\(stopSettled), committed page preserved=\(stopPreservedPage)."))
+    rows.append(
+      row(
+        "churn-stop-loading",
+        stopLoadingStarted && stopped && stopSettled && stopPreservedPage ? "pass" : "fail",
+        "Started=\(stopLoadingStarted), stop accepted=\(stopped), loading ended=\(stopSettled), committed page preserved=\(stopPreservedPage)."
+      ))
     let failures = context.store.rendererFailures.count
     rows.append(
       row(
@@ -679,52 +686,63 @@ import os
       rows.append(row("heavy-scroll", "fail", "The scroll page did not load."))
       return rows
     }
-    let before = wholeNumber(
-      await evaluate(runtime, tab: scrollID, script: "document.getElementById('feed')?.children.length ?? 0")
-    ) ?? 0
+    let before =
+      wholeNumber(
+        await evaluate(
+          runtime, tab: scrollID, script: "document.getElementById('feed')?.children.length ?? 0")
+      ) ?? 0
     let scrolled = await trustedScroll(runtime, tab: scrollID, element: "feed")
     var deliveredScroll = false
     if scrolled {
       deliveredScroll = await untilReady(attempts: 20) {
-        (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0")) ?? 0) > 0
+        (wholeNumber(await evaluate(runtime, tab: scrollID, script: "window.__scrollEvents||0"))
+          ?? 0) > 0
       }
     }
     var reachedLoadThreshold = false
     if deliveredScroll {
       reachedLoadThreshold = await untilReady(attempts: 20) {
-        (wholeNumber(await evaluate(
-          runtime, tab: scrollID,
-          script: "window.__scrollLoadThresholdReached?1:0"
-        )) ?? 0) == 1
+        (wholeNumber(
+          await evaluate(
+            runtime, tab: scrollID,
+            script: "window.__scrollLoadThresholdReached?1:0"
+          )) ?? 0) == 1
       }
     }
     if !scrolled {
-      rows.append(row(
-        "heavy-scroll", "blocked",
-        "A trusted wheel event could not be submitted to the feed; row growth was not attributable."
-      ))
+      rows.append(
+        row(
+          "heavy-scroll", "blocked",
+          "A trusted wheel event could not be submitted to the feed; row growth was not attributable."
+        ))
     } else if !deliveredScroll {
-      rows.append(row(
-        "heavy-scroll", "blocked",
-        "The trusted wheel input did not deliver a scroll event to the page; row growth was not attributable."
-      ))
+      rows.append(
+        row(
+          "heavy-scroll", "blocked",
+          "The trusted wheel input did not deliver a scroll event to the page; row growth was not attributable."
+        ))
     } else if !reachedLoadThreshold {
-      rows.append(row(
-        "heavy-scroll", "blocked",
-        "A page scroll event arrived, but the feed did not reach its lazy-load threshold."
-      ))
+      rows.append(
+        row(
+          "heavy-scroll", "blocked",
+          "A page scroll event arrived, but the feed did not reach its lazy-load threshold."
+        ))
     } else {
       var after = before
       let grew = await untilReady(attempts: 40) {
-        after = wholeNumber(await evaluate(
-          runtime, tab: scrollID,
-          script: "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
-        )) ?? 0
+        after =
+          wholeNumber(
+            await evaluate(
+              runtime, tab: scrollID,
+              script:
+                "(()=>{const feed=document.getElementById('feed');return feed?feed.children.length:0})()"
+            )) ?? 0
         return before == 100 && after > before
       }
-      rows.append(row(
-        "heavy-scroll", grew ? "pass" : "fail",
-        "Trusted scroll submitted=\(scrolled); rows grew from \(before) to \(after)."))
+      rows.append(
+        row(
+          "heavy-scroll", grew ? "pass" : "fail",
+          "Trusted scroll submitted=\(scrolled); rows grew from \(before) to \(after)."))
     }
 
     context.store.perform(.open(url(base, path: "/webgl")))
@@ -775,12 +793,13 @@ import os
     }
     sampler.stop()
     os_signpost(.event, log: log, name: "HeavyVideoDone", signpostID: signpost)
-    rows.append(row(
-      "heavy-main-run-loop",
-      ShaarBrowsingQA.heavyPageRunLoopPassed(
-        samples: sampler.samples, maximumDelayMs: sampler.maximumDelayMs) ? "pass" : "fail",
-      "\(sampler.samples) samples at 50 ms; maximum main run-loop delay \(sampler.maximumDelayMs) ms.",
-      ["samples": sampler.samples, "maximumDelayMs": sampler.maximumDelayMs]))
+    rows.append(
+      row(
+        "heavy-main-run-loop",
+        ShaarBrowsingQA.heavyPageRunLoopPassed(
+          samples: sampler.samples, maximumDelayMs: sampler.maximumDelayMs) ? "pass" : "fail",
+        "\(sampler.samples) samples at 50 ms; maximum main run-loop delay \(sampler.maximumDelayMs) ms.",
+        ["samples": sampler.samples, "maximumDelayMs": sampler.maximumDelayMs]))
     rows.append(
       row(
         "picture-in-picture", "blocked",
@@ -888,8 +907,8 @@ import os
       row(
         "dialogs-beforeunload", status,
         "Armed=\(armedState ?? "nil"), prompted=\(decision.prompted), "
-        + "dialogRequestQueued=\(decision.dialogRequestQueued), "
-        + "dialogSheetPresented=\(decision.dialogSheetPresented), "
+          + "dialogRequestQueued=\(decision.dialogRequestQueued), "
+          + "dialogSheetPresented=\(decision.dialogSheetPresented), "
           + "cancelled=\(decision.cancelled), "
           + "sawVisibleDialog=\(decision.sawVisibleDialog), dismissed=\(dismissed)."
       ))
@@ -1401,7 +1420,8 @@ import os
         let flag = await evaluate(
           runtime, tab: tab, script: "document.documentElement.dataset.prompted==='1'?1:0")
         let prompted = flag == "1"
-        let cancelled = context.store.sheet?.id != request.sheetID
+        let cancelled =
+          context.store.sheet?.id != request.sheetID
           && context.store.session.page(forTabID: tab) != nil
         return (prompted, true, sheetPresented, cancelled, false)
       }

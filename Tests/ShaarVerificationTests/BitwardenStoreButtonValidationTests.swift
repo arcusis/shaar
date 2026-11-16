@@ -10,18 +10,22 @@ import Testing
 
 @Suite struct BitwardenStoreButtonValidationTests {
   @Test func installButtonMustBePresentAndEnabled() {
-    #expect(BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
-      "buttons": [["text": "Add to Chrome", "disabled": false]],
-    ]))
-    #expect(BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
-      "buttons": [["text": "add to chrome"]],
-    ]))
-    #expect(!BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
-      "buttons": [["text": "Add to Chrome", "disabled": true]],
-    ]))
-    #expect(!BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
-      "buttons": [["text": "Open extension"]],
-    ]))
+    #expect(
+      BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
+        "buttons": [["text": "Add to Chrome", "disabled": false]]
+      ]))
+    #expect(
+      BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
+        "buttons": [["text": "add to chrome"]]
+      ]))
+    #expect(
+      !BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
+        "buttons": [["text": "Add to Chrome", "disabled": true]]
+      ]))
+    #expect(
+      !BitwardenStoreButtonValidation.hasEnabledInstallButton(in: [
+        "buttons": [["text": "Open extension"]]
+      ]))
     #expect(!BitwardenStoreButtonValidation.hasEnabledInstallButton(in: ["buttons": NSNull()]))
   }
 

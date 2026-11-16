@@ -72,10 +72,12 @@ struct ExtensionManagementTests {
   @Test func shaarListRejectsBooleanExtensionLocations() throws {
     let reply: [String: Any] = [
       "schemaVersion": 1,
-      "extensions": [[
-        "id": String(repeating: "a", count: 32), "name": "Example",
-        "version": "1.0", "source": true,
-      ]],
+      "extensions": [
+        [
+          "id": String(repeating: "a", count: 32), "name": "Example",
+          "version": "1.0", "source": true,
+        ]
+      ],
     ]
     let data = try JSONSerialization.data(withJSONObject: reply)
     let json = try #require(String(data: data, encoding: .utf8))
@@ -86,10 +88,12 @@ struct ExtensionManagementTests {
   @Test func shaarListRejectsBooleanSchemaVersion() throws {
     let reply: [String: Any] = [
       "schemaVersion": true,
-      "extensions": [[
-        "id": String(repeating: "a", count: 32), "name": "Example",
-        "version": "1.0", "source": 4,
-      ]],
+      "extensions": [
+        [
+          "id": String(repeating: "a", count: 32), "name": "Example",
+          "version": "1.0", "source": 4,
+        ]
+      ],
     ]
     let data = try JSONSerialization.data(withJSONObject: reply)
     let json = try #require(String(data: data, encoding: .utf8))
@@ -667,7 +671,8 @@ extension ExtensionManagementTests {
     let item = try JSONDecoder().decode(
       ManagedExtension.self,
       from: Data(
-        #"{"id":"abcdefghijklmnopabcdefghijklmnop","name":"\u200F\u202AShaar probe\u202C\u200F","version":"1.0","description":"Safe","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[]}"#.utf8))
+        #"{"id":"abcdefghijklmnopabcdefghijklmnop","name":"\u200F\u202AShaar probe\u202C\u200F","version":"1.0","description":"Safe","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[]}"#
+          .utf8))
     #expect(item.name == "Shaar probe")
   }
 

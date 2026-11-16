@@ -265,7 +265,8 @@ enum ShortcutPageRouting {
         // resulting symbol as the menu key equivalent, while this event's base key is /.
         let shiftedSymbol = flags.contains(.shift) && itemKey != key && itemKey == typedKey
         if shiftedSymbol { itemFlags.insert(.shift) }
-        let searchAlias = item.representedObject as? String == BrowserMenuCommand.search.rawValue
+        let searchAlias =
+          item.representedObject as? String == BrowserMenuCommand.search.rawValue
           && key == "f" && flags == [.command, .option]
         guard
           item.isEnabled && !itemKey.isEmpty
@@ -313,7 +314,9 @@ enum NextTabShortcutRouting {
       offset = 1
     } else if event.keyCode == 33 && modifiers == [.command, .shift] {
       offset = -1
-    } else { return false }
+    } else {
+      return false
+    }
     return store.selectAdjacentTab(by: offset)
   }
 }

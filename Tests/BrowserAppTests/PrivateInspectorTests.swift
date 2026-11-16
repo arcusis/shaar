@@ -83,9 +83,13 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
     for _ in 0..<100 where runtime.pendingAuditReplies.count < 2 { await Task.yield() }
     #expect(runtime.pendingAuditReplies.count == 2)
 
-    let reply: [String: Any] = ["result": ["value": [
-      "scope": "page", "violations": 0, "incomplete": 0, "findings": [], "truncated": false,
-    ]]]
+    let reply: [String: Any] = [
+      "result": [
+        "value": [
+          "scope": "page", "violations": 0, "incomplete": 0, "findings": [], "truncated": false,
+        ]
+      ]
+    ]
     runtime.pendingAuditReplies[0](reply, nil)
     try await Task.sleep(for: .milliseconds(10))
     #expect(audit.busy)

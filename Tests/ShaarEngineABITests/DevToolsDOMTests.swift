@@ -65,10 +65,16 @@ struct DevToolsDOMTests {
     let base =
       #"{"schemaVersion":1,"kind":"panelEvent","eventID":21,"leaseID":7,"data":{"parentNodeId":2,"previousNodeId":0,"node":{"nodeId":3,"nodeType":1,"nodeName":"DIV","nodeValue":""},"truncated":false}}"#
     for (sequence, payload) in [
-      (UInt64(10), base.replacingOccurrences(
-        of: #""parentNodeId":2"#, with: #""parentNodeId":true"#)),
-      (UInt64(11), base.replacingOccurrences(
-        of: #""nodeId":3"#, with: #""nodeId":true"#)),
+      (
+        UInt64(10),
+        base.replacingOccurrences(
+          of: #""parentNodeId":2"#, with: #""parentNodeId":true"#)
+      ),
+      (
+        UInt64(11),
+        base.replacingOccurrences(
+          of: #""nodeId":3"#, with: #""nodeId":true"#)
+      ),
     ] {
       let event = ShaarCopiedEvent(
         sequence: sequence, kind: 14, profileID: Data("profile-a".utf8), sessionID: Data(),

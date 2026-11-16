@@ -319,7 +319,10 @@ final class DownloadProbe {
     var revealed: [URL] = []
     let openAccepted = BrowserEngine.performDownloadFileAction(
       url, open: true,
-      openFile: { opened.append($0); return true },
+      openFile: {
+        opened.append($0)
+        return true
+      },
       revealFile: { revealed.append($0) })
     try expect(
       openAccepted && opened == [url] && revealed.isEmpty,
@@ -328,7 +331,10 @@ final class DownloadProbe {
     opened.removeAll()
     let revealAccepted = BrowserEngine.performDownloadFileAction(
       url, open: false,
-      openFile: { opened.append($0); return true },
+      openFile: {
+        opened.append($0)
+        return true
+      },
       revealFile: { revealed.append($0) })
     try expect(
       revealAccepted && opened.isEmpty && revealed == [url],

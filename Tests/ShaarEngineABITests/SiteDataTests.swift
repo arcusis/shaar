@@ -166,12 +166,13 @@ struct SiteDataTests {
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.clearSelectedTabCookies(origin: "https://example.com")
     }
-    let cookie = try #require(ShaarSiteCookie(dictionary: [
-      "name": "sid", "value": "abc", "domain": "example.com", "path": "/",
-      "secure": true, "httpOnly": true, "sameSite": "Lax",
-      "expiresUnixMs": NSNull(), "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
-      "sourceScheme": 2, "sourcePort": 443,
-    ]))
+    let cookie = try #require(
+      ShaarSiteCookie(dictionary: [
+        "name": "sid", "value": "abc", "domain": "example.com", "path": "/",
+        "secure": true, "httpOnly": true, "sameSite": "Lax",
+        "expiresUnixMs": NSNull(), "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+        "sourceScheme": 2, "sourcePort": 443,
+      ]))
     await #expect(throws: ShaarSiteDataError.malformedResponse) {
       try await adapter.setCookie(
         cookie, value: "updated", secure: true, httpOnly: false, sameSite: .lax,
@@ -259,7 +260,8 @@ struct SiteDataTests {
     for invalid in [
       cookie.replacingOccurrences(of: #""secure":true"#, with: #""secure":1"#),
       cookie.replacingOccurrences(of: #""httpOnly":true"#, with: #""httpOnly":0"#),
-      cookie.replacingOccurrences(of: #""partitionCrossSite":false"#, with: #""partitionCrossSite":1"#),
+      cookie.replacingOccurrences(
+        of: #""partitionCrossSite":false"#, with: #""partitionCrossSite":1"#),
     ] {
       await fake.setResponse("{\"schemaVersion\":1,\"cookies\":[\(invalid)]}")
       await #expect(throws: ShaarSiteDataError.malformedResponse) {

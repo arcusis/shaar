@@ -9,11 +9,12 @@ import Testing
 
 @testable import ShaarEngineABI
 
-private typealias DevToolsShimSubmit = @convention(c) (
-  OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
-  shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
-  UnsafeMutablePointer<shaar_error>?
-) -> shaar_error_code
+private typealias DevToolsShimSubmit =
+  @convention(c) (
+    OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+    shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+    UnsafeMutablePointer<shaar_error>?
+  ) -> shaar_error_code
 
 @_cdecl("fake_devtools_submit_short_error_struct")
 private func fakeDevToolsSubmitShortErrorStruct(

@@ -6,11 +6,12 @@ import ShaarEngineABIC
 import ShaarEngineC
 import Testing
 
-private typealias NavigationShimSubmit = @convention(c) (
-  OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
-  shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
-  UnsafeMutablePointer<shaar_error>?
-) -> shaar_error_code
+private typealias NavigationShimSubmit =
+  @convention(c) (
+    OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+    shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+    UnsafeMutablePointer<shaar_error>?
+  ) -> shaar_error_code
 
 private let noOpNavigationReply: shaar_reply_fn = { _, _ in }
 
@@ -65,8 +66,9 @@ private func fakeNavigationCShimSubmit(
 
 @Test func navigationCShimRejectsMissingEngineAndReply() {
   let invalidArgument = UInt32(SHAAR_INVALID_ARGUMENT.rawValue)
-  let symbol = unsafeBitCast(fakeNavigationCShimSubmit as NavigationShimSubmit,
-                             to: UnsafeRawPointer.self)
+  let symbol = unsafeBitCast(
+    fakeNavigationCShimSubmit as NavigationShimSubmit,
+    to: UnsafeRawPointer.self)
   var scope = shaar_scope(
     size: UInt32(MemoryLayout<shaar_scope>.size),
     profile: OpaquePointer(bitPattern: 0x11), private_session: nil)
@@ -91,8 +93,9 @@ private func fakeNavigationCShimSubmit(
 
 @Test func navigationCShimRejectsTruncatedScopeBeforeCopyingIt() {
   let invalidArgument = UInt32(SHAAR_INVALID_ARGUMENT.rawValue)
-  let symbol = unsafeBitCast(fakeNavigationCShimSubmit as NavigationShimSubmit,
-                             to: UnsafeRawPointer.self)
+  let symbol = unsafeBitCast(
+    fakeNavigationCShimSubmit as NavigationShimSubmit,
+    to: UnsafeRawPointer.self)
   var scope = shaar_scope(size: 0, profile: nil, private_session: nil)
   var error = shaar_error(
     size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK, platform_code: 0,

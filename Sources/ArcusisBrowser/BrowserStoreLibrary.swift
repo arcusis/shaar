@@ -119,7 +119,8 @@ extension BrowserStore {
       return false
     }
     guard mayUseLibrary(profileID, editing: editorRoute != nil),
-      library.bookmarks[profileID]?.items.contains(where: { $0.id == id && !$0.isPermanent }) == true
+      library.bookmarks[profileID]?.items.contains(where: { $0.id == id && !$0.isPermanent })
+        == true
     else { return false }
     return library.mutate(
       .bookmark(["op": "remove", "id": id.uuidString.lowercased()]), profile: profileID

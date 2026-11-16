@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import XCTest
+
 @testable import ShaarVerification
 
 final class PrivateWindowOwnershipTests: XCTestCase {

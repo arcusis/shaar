@@ -7,8 +7,8 @@ import Foundation
 import SwiftUI
 import Testing
 
-@testable import BrowserCore
 @testable import ArcusisBrowser
+@testable import BrowserCore
 
 @Test @MainActor func selectedResultRowShowsItsTitleSubtitleAndActionHint() throws {
   let result = CommandResult(
@@ -19,7 +19,8 @@ import Testing
   let imageURL = FileManager.default.temporaryDirectory.appending(
     path: "command-result-row-\(UUID().uuidString).png")
   defer { try? FileManager.default.removeItem(at: imageURL) }
-  let capturedView = view
+  let capturedView =
+    view
     .frame(width: 560, height: BrowserChromeLayout.resultRowHeight)
     .background(Color.white)
     .environment(\.colorScheme, .light)

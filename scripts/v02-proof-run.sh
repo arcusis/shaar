@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 usage() { echo 'Usage: scripts/v02-proof-run.sh ENGINE_ARCHIVE [--locale en|he] [--probes 5,6,9,14,15,...|private-window]' >&2; exit 2; }
 archive_path=
@@ -162,6 +162,8 @@ run_engine_fixture() {
   SHAAR_VERIFICATION_APP="$PWD/build/Shaar Verification.app" \
     python3 scripts/engine_fixture.py "$@"
 }
+# Called with no arguments for the default downloads fixture.
+# shellcheck disable=SC2120
 run_he_engine_fixture() {
   local mode=${1:-}
   mode=${mode#--}
@@ -187,6 +189,8 @@ record_named_screenshot() {
     record "$label screenshot" FAIL "missing ${path#"$PWD"/}"
   fi
 }
+# Invoked by run_step through its function-name argument.
+# shellcheck disable=SC2329
 run_device_chooser_check() {
   local receipt="$run_root/device-choosers.json"
   python3 scripts/test-device-choosers.py --app "$verification_app" >"$receipt" 2>&1 || true
@@ -208,6 +212,8 @@ if failed or receipt.get("newCrashes"):
     raise SystemExit(1)
 PY
 }
+# Invoked by run_step through its function-name argument.
+# shellcheck disable=SC2329
 run_platform_parity() {
   local receipt="$run_root/platform-parity.json"
   python3 scripts/test-platform-parity.py --app "$verification_app" --receipt "$receipt" || return
@@ -239,6 +245,8 @@ bundle_env=(env "SHAAR_ENGINE_ARCHIVE_PATH=$archive")
 if [[ $dry_run == 1 ]]; then
   bundle_env+=("SHAAR_V02_PROOF_DRY_RUN=1")
 fi
+# Invoked by run_step through its function-name argument.
+# shellcheck disable=SC2329
 build_bundle() {
   local args=(--with-engine)
   [[ $widevine == 1 ]] && args+=(--with-widevine-cdm)
@@ -310,6 +318,7 @@ if [[ ${results[0]} == PASS && ${results[1]} == PASS &&
       python3 scripts/test-device-choosers.py --app "$verification_app" \
       --screenshot-dir "$he_root/screenshots/device-pickers"
     if [[ -z $probe_filter ]]; then
+      # shellcheck disable=SC2119
       run_he_engine_fixture
       cp "$he_root"/browsing-*.png "$he_root/screenshots/" 2>/dev/null || true
       cp "$he_root"/permission-prompts/*.png "$he_root/screenshots/" 2>/dev/null || true

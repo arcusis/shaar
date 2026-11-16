@@ -18,7 +18,10 @@ private final class PrivateCookieFailureRuntime: ARCChromiumRuntime {
     completion: @escaping @MainActor @Sendable (NSNumber?, Error?) -> Void
   ) {
     if failsReads {
-      completion(nil, NSError(domain: "Fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."]))
+      completion(
+        nil,
+        NSError(
+          domain: "Fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."]))
     } else {
       completion(NSNumber(value: false), nil)
     }
@@ -29,7 +32,9 @@ private final class PrivateCookieFailureRuntime: ARCChromiumRuntime {
     completion: @escaping @MainActor @Sendable (Error?) -> Void
   ) {
     if failsWrites {
-      completion(NSError(domain: "Fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."]))
+      completion(
+        NSError(
+          domain: "Fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."]))
     } else {
       completion(nil)
     }
@@ -77,12 +82,15 @@ struct SiteControlsPrivateTests {
 
     runtime.failsReads = true
     await model.load()
-    #expect(model.failure == ShellL10n.string("Could not load private site cookie settings. Try again."))
+    #expect(
+      model.failure == ShellL10n.string("Could not load private site cookie settings. Try again."))
 
     runtime.failsReads = false
     await model.load()
     runtime.failsWrites = true
     await model.setAllowed(true)
-    #expect(model.failure == ShellL10n.string("Could not update private site cookie settings. Try again."))
+    #expect(
+      model.failure == ShellL10n.string("Could not update private site cookie settings. Try again.")
+    )
   }
 }

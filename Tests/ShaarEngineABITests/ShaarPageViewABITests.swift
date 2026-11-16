@@ -94,7 +94,8 @@ private struct FakeInvalidMessagePageViewSymbols: ShaarSymbolResolving {
         ) -> shaar_error_code
       return unsafeBitCast(function, to: UnsafeRawPointer.self)
     case "shaar_window_host_resize":
-      let function = fakePageViewResize
+      let function =
+        fakePageViewResize
         as @convention(c) (
           OpaquePointer?, OpaquePointer?, Double, Double, UnsafeMutablePointer<shaar_error>?
         ) -> shaar_error_code

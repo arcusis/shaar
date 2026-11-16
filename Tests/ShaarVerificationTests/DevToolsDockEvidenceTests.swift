@@ -31,7 +31,9 @@ import Testing
       invalid[key] = 1
       #expect(!DevToolsDockEvidence.matches(invalid, open: true))
     }
-    for key in ["pageWidth", "containerWidth", "pageHeight", "gap", "frontendWidth", "frontendHeight"] {
+    for key in [
+      "pageWidth", "containerWidth", "pageHeight", "gap", "frontendWidth", "frontendHeight",
+    ] {
       var invalid = openState
       invalid[key] = true
       #expect(!DevToolsDockEvidence.matches(invalid, open: true))

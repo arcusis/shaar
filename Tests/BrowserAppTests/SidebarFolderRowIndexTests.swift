@@ -29,16 +29,23 @@ import Testing
   var checksum = 0
   for _ in 0..<10 {
     for folder in folders {
-      checksum += (index.isActive(folder.id) ? 1 : 0)
+      checksum +=
+        (index.isActive(folder.id) ? 1 : 0)
         + (index.hasContents(folder.id) ? 1 : 0) + index.pathLabel(to: folder.id).count
     }
   }
   print("sidebarFolderRowLookupFocusedBenchmark: \(start.duration(to: .now))")
   #expect(checksum > 0)
   for folder in folders {
-    #expect(index.isActive(folder.id) == space.folderPath(to: selectedFolderID).contains { $0.id == folder.id })
-    #expect(index.hasContents(folder.id) == (space.tabs.contains { $0.folderID == folder.id }
-      || space.folders.contains { $0.parentID == folder.id }))
-    #expect(index.pathLabel(to: folder.id) == space.folderPath(to: folder.id).reversed().map(\.name).joined(separator: " / "))
+    #expect(
+      index.isActive(folder.id)
+        == space.folderPath(to: selectedFolderID).contains { $0.id == folder.id })
+    #expect(
+      index.hasContents(folder.id)
+        == (space.tabs.contains { $0.folderID == folder.id }
+          || space.folders.contains { $0.parentID == folder.id }))
+    #expect(
+      index.pathLabel(to: folder.id)
+        == space.folderPath(to: folder.id).reversed().map(\.name).joined(separator: " / "))
   }
 }

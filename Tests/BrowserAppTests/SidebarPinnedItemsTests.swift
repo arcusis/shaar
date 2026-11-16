@@ -27,6 +27,7 @@ struct SidebarPinnedItemsTests {
     #expect(!snapshot.isEmpty)
     #expect(snapshot.items.first == .tab(tab, depth: 0))
     #expect(buildCount == 1)
-    #expect(SidebarPinnedItems { space.sidebarItemSections().pinned }.items == [.tab(tab, depth: 0)])
+    #expect(
+      SidebarPinnedItems { space.sidebarItemSections().pinned }.items == [.tab(tab, depth: 0)])
   }
 }

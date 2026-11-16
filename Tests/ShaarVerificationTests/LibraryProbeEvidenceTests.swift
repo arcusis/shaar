@@ -14,21 +14,23 @@ import Testing
     let profile = store.session.selectedSpace.profileID
     let folderID = UUID()
     store.library.onLoad = { _, _, done in
-      done(.success([
-        "bar": [
-          "id": "00000000-0000-4000-8000-000000000001", "k": "f", "t": "Bookmarks bar",
-          "c": [["id": folderID.uuidString, "k": "f", "t": "Temporary", "c": []]],
-        ],
-        "other": [
-          "id": "00000000-0000-4000-8000-000000000002", "k": "f", "t": "Other bookmarks",
-          "c": [],
-        ],
-      ]))
+      done(
+        .success([
+          "bar": [
+            "id": "00000000-0000-4000-8000-000000000001", "k": "f", "t": "Bookmarks bar",
+            "c": [["id": folderID.uuidString, "k": "f", "t": "Temporary", "c": []]],
+          ],
+          "other": [
+            "id": "00000000-0000-4000-8000-000000000002", "k": "f", "t": "Other bookmarks",
+            "c": [],
+          ],
+        ]))
     }
     store.library.refresh(profile, section: .bookmarks)
     store.library.onMutation = { _, _, done in done(nil as String?) }
 
-    #expect(LibraryProbeEvidence.deleteBookmarkFromLibrary(folderID, profileID: profile, store: store))
+    #expect(
+      LibraryProbeEvidence.deleteBookmarkFromLibrary(folderID, profileID: profile, store: store))
   }
 
   @Test func acceptsOnlyAuthoredFixtureObjects() throws {

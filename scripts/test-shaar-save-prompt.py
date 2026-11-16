@@ -323,6 +323,12 @@ def storage_diagnostics(output):
     return evidence
 
 
+def public_progress(receipt):
+    """Keep untrusted verification rows and diagnostics out of CI logs."""
+    status = "PASS" if receipt.get("passed") is True else "FAIL"
+    return f"Save-prompt proof: {status}; rows={len(receipt.get('rows', []))}"
+
+
 def verification_keychain_evidence(app):
     try:
         with (app / "Contents/Info.plist").open("rb") as stream:
@@ -469,10 +475,9 @@ def main():
     }
     options.receipt.parent.mkdir(parents=True, exist_ok=True)
     options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
-    print(json.dumps(receipt, indent=2))
+    print(public_progress(receipt))
     if not receipt["passed"]:
-        if result.stderr:
-            print(result.stderr[-4000:])
+        print(f"Save-prompt proof failed; inspect {options.receipt} for diagnostics.")
         raise SystemExit(1)
 
 

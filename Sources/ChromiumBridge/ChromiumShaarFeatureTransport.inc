@@ -103,20 +103,6 @@
   return YES;
 }
 
-- (NSWindow *)shaarPictureInPictureWindowForTabID:(NSString *)tabID {
-  shaar_tab *tab = (shaar_tab *)_shaarTabs[tabID].pointerValue;
-  shaar_profile *profile = (shaar_profile *)_shaarProfiles[_shaarTabProfiles[tabID]].pointerValue;
-  auto lookup = (decltype(&shaar_media_pip_window))dlsym(_shaarLibrary, "shaar_media_pip_window");
-  if (!tab || !profile || !lookup) return nil;
-  shaar_scope scope = {};
-  scope.size = sizeof(scope);
-  scope.profile = profile;
-  shaar_window *window = nullptr;
-  shaar_error error = EmptyError();
-  if (lookup(scope, tab, &window, &error) != SHAAR_OK || !window) return nil;
-  return (__bridge NSWindow *)_symbols.window_native_window(window);
-}
-
 - (NSDictionary *)shaarSecurityInfoForTabID:(NSString *)tabID profileID:(NSString *)profileID {
   if (![self shaarHasTabID:tabID profileID:profileID selected:YES]) return nil;
   NSString *windowID = _shaarTabWindows[tabID];

@@ -4,6 +4,7 @@
 
 import ChromiumBridge
 import Testing
+
 @testable import ArcusisBrowser
 
 struct BrowserEngineSiteControlsTests {

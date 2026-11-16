@@ -72,14 +72,17 @@ final class ChromiumPageLayoutTests: XCTestCase {
     let second = NSView(frame: .zero)
     let liveTabs: Set<UUID> = [firstID, secondID]
 
-    XCTAssertTrue(PrivateBrowserPage.selectPage(first, tabID: firstID, liveTabs: liveTabs, in: container))
-    XCTAssertTrue(PrivateBrowserPage.selectPage(second, tabID: secondID, liveTabs: liveTabs, in: container))
+    XCTAssertTrue(
+      PrivateBrowserPage.selectPage(first, tabID: firstID, liveTabs: liveTabs, in: container))
+    XCTAssertTrue(
+      PrivateBrowserPage.selectPage(second, tabID: secondID, liveTabs: liveTabs, in: container))
     XCTAssertTrue(first.superview === container)
     XCTAssertTrue(first.isHidden)
     XCTAssertTrue(second.superview === container)
     XCTAssertFalse(second.isHidden)
 
-    XCTAssertTrue(PrivateBrowserPage.selectPage(first, tabID: firstID, liveTabs: liveTabs, in: container))
+    XCTAssertTrue(
+      PrivateBrowserPage.selectPage(first, tabID: firstID, liveTabs: liveTabs, in: container))
     XCTAssertTrue(first.superview === container)
     XCTAssertFalse(first.isHidden)
     XCTAssertTrue(second.isHidden)

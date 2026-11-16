@@ -22,7 +22,8 @@ import Testing
   }
 
   @Test func backendFailuresUseLocalizedInspectorDetailsRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       InspectorDetailsModel.failureMessage(for: error)
         == InspectorDetailsL10n.string("Inspector details could not be loaded. Try again."))

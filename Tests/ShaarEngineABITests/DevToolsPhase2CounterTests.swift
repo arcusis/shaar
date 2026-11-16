@@ -32,14 +32,16 @@ import Testing
 
 @Test func phase2ReplyFlagsRequireJSONBooleans() {
   for field in ["truncated", "hasMore"] {
-    let payload = #"{"schemaVersion":1,"commandID":14,"items":[],"truncated":false,"hasMore":false}"#
+    let payload =
+      #"{"schemaVersion":1,"commandID":14,"items":[],"truncated":false,"hasMore":false}"#
       .replacingOccurrences(of: "\"\(field)\":false", with: "\"\(field)\":1")
     #expect(
       ShaarDevToolsPhase2Reply.decode(
         Data(payload.utf8), command: .domCounters) == nil)
   }
 
-  let resource = #"{"schemaVersion":1,"commandID":16,"items":[],"body":"x","base64Encoded":1,"truncated":false}"#
+  let resource =
+    #"{"schemaVersion":1,"commandID":16,"items":[],"body":"x","base64Encoded":1,"truncated":false}"#
   #expect(
     ShaarDevToolsPhase2Reply.decode(
       Data(resource.utf8), command: .resourceContent(url: "https://example.test/a.js")) == nil)
@@ -50,7 +52,8 @@ import Testing
     sequence: 1, kind: 14, profileID: Data("profile".utf8), sessionID: Data(),
     windowID: Data("window".utf8), tabID: Data("tab".utf8),
     payloadJSON: Data(
-      #"{"schemaVersion":1,"kind":"panelEvent","eventID":15,"leaseID":42,"data":{"isLocalStorage":true,"truncated":1}}"#.utf8))
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":15,"leaseID":42,"data":{"isLocalStorage":true,"truncated":1}}"#
+        .utf8))
   #expect(
     ShaarDevToolsPhase2EventRouter.decode(
       event, scope: ShaarNavigationScope(profileID: "profile"),

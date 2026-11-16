@@ -229,11 +229,13 @@ private struct FakeStorageKeychainABISymbols: ShaarSymbolResolving {
       let function = fakeStorageKeychainEngineCreate as @convention(c) () -> UInt32
       return unsafeBitCast(function, to: UnsafeRawPointer.self)
     case "shaar_submit":
-      let function: @convention(c) (
+      let function:
+        @convention(c) (
           OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
           shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
           UnsafeMutablePointer<shaar_error>?
-      ) -> shaar_error_code = invalidResultSlice
+        ) -> shaar_error_code =
+          invalidResultSlice
           ? fakeStorageKeychainSubmitInvalidSlice
           : shortErrorStruct
             ? fakeStorageKeychainSubmitShortError
@@ -367,7 +369,9 @@ struct StorageKeychainTests {
         nativeScope: shaar_scope(
           size: UInt32(MemoryLayout<shaar_scope>.size), profile: profile,
           private_session: nil)))
-    await #expect(throws: ShaarEngineError.invalidEvent("storage-keychain result does not match request")) {
+    await #expect(
+      throws: ShaarEngineError.invalidEvent("storage-keychain result does not match request")
+    ) {
       try await transport.submitStorageKeychain(
         profileID: UUID(), operation: ShaarStorageKeychainAdapter.identityOperation,
         arguments: Data(#"{"schemaVersion":1}"#.utf8))

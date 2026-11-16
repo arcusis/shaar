@@ -8,17 +8,23 @@ import Testing
 
 @Suite struct InspectorInteractionEvidenceTests {
   @Test func nativeAndDOMInputMustMatchTheirTrustContractWithoutActivation() {
-    #expect(InspectorInteractionEvidence.acceptsInput(
-      trusted: true, activated: 0, usesDOMEvents: false))
-    #expect(InspectorInteractionEvidence.acceptsInput(
-      trusted: false, activated: 0, usesDOMEvents: true))
-    #expect(!InspectorInteractionEvidence.acceptsInput(
-      trusted: false, activated: 0, usesDOMEvents: false))
-    #expect(!InspectorInteractionEvidence.acceptsInput(
-      trusted: true, activated: 0, usesDOMEvents: true))
-    #expect(!InspectorInteractionEvidence.acceptsInput(
-      trusted: true, activated: 1, usesDOMEvents: false))
-    #expect(!InspectorInteractionEvidence.acceptsInput(
-      trusted: nil, activated: 0, usesDOMEvents: false))
+    #expect(
+      InspectorInteractionEvidence.acceptsInput(
+        trusted: true, activated: 0, usesDOMEvents: false))
+    #expect(
+      InspectorInteractionEvidence.acceptsInput(
+        trusted: false, activated: 0, usesDOMEvents: true))
+    #expect(
+      !InspectorInteractionEvidence.acceptsInput(
+        trusted: false, activated: 0, usesDOMEvents: false))
+    #expect(
+      !InspectorInteractionEvidence.acceptsInput(
+        trusted: true, activated: 0, usesDOMEvents: true))
+    #expect(
+      !InspectorInteractionEvidence.acceptsInput(
+        trusted: true, activated: 1, usesDOMEvents: false))
+    #expect(
+      !InspectorInteractionEvidence.acceptsInput(
+        trusted: nil, activated: 0, usesDOMEvents: false))
   }
 }

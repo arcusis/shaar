@@ -33,7 +33,8 @@ final class DownloadsModel {
     for error: Error?, language: BrowserLanguage = .currentLaunchLanguage
   ) -> String? {
     guard error != nil else { return nil }
-    return PanelsL10n.string("Could not complete this download action. Try again.", language: language)
+    return PanelsL10n.string(
+      "Could not complete this download action. Try again.", language: language)
   }
 
   func items(in profileID: UUID) -> [BrowserDownload] {

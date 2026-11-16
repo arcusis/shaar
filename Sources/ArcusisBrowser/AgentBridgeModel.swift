@@ -324,7 +324,8 @@ final class AgentBridgeModel {
   }
 
   func copySetup(
-    for client: Client, pasteboard: any AgentBridgePasteboard = SystemAgentBridgePasteboard(.general),
+    for client: Client,
+    pasteboard: any AgentBridgePasteboard = SystemAgentBridgePasteboard(.general),
     clearAfter: Duration = .seconds(120)
   ) {
     guard let command = setupCommand(for: client) else { return }

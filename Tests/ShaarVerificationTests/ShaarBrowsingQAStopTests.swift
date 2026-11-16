@@ -8,15 +8,20 @@ import Testing
 
 @Suite @MainActor struct ShaarBrowsingQAStopTests {
   @Test func stopLoadingProbeRequiresAnInFlightNavigationAndPreservedCommittedPage() {
-    #expect(ShaarBrowsingQA.stopLoadingPassed(
-      started: true, accepted: true, loadingEnded: true, committedPagePreserved: true))
-    #expect(!ShaarBrowsingQA.stopLoadingPassed(
-      started: false, accepted: true, loadingEnded: true, committedPagePreserved: true))
-    #expect(!ShaarBrowsingQA.stopLoadingPassed(
-      started: true, accepted: false, loadingEnded: true, committedPagePreserved: true))
-    #expect(!ShaarBrowsingQA.stopLoadingPassed(
-      started: true, accepted: true, loadingEnded: false, committedPagePreserved: true))
-    #expect(!ShaarBrowsingQA.stopLoadingPassed(
-      started: true, accepted: true, loadingEnded: true, committedPagePreserved: false))
+    #expect(
+      ShaarBrowsingQA.stopLoadingPassed(
+        started: true, accepted: true, loadingEnded: true, committedPagePreserved: true))
+    #expect(
+      !ShaarBrowsingQA.stopLoadingPassed(
+        started: false, accepted: true, loadingEnded: true, committedPagePreserved: true))
+    #expect(
+      !ShaarBrowsingQA.stopLoadingPassed(
+        started: true, accepted: false, loadingEnded: true, committedPagePreserved: true))
+    #expect(
+      !ShaarBrowsingQA.stopLoadingPassed(
+        started: true, accepted: true, loadingEnded: false, committedPagePreserved: true))
+    #expect(
+      !ShaarBrowsingQA.stopLoadingPassed(
+        started: true, accepted: true, loadingEnded: true, committedPagePreserved: false))
   }
 }

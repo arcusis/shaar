@@ -250,8 +250,10 @@ final class DeveloperPageModel {
           } else if let result {
             call.resume(.success(DeveloperCallValue(result)))
           } else {
-            call.resume(.failure(DeveloperModeFailure(
-              InspectorToolsL10n.string("The developer tools returned no result."))))
+            call.resume(
+              .failure(
+                DeveloperModeFailure(
+                  InspectorToolsL10n.string("The developer tools returned no result."))))
           }
         }
       }

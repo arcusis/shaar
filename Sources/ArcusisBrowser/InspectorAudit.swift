@@ -161,7 +161,8 @@ final class InspectorAuditModel {
       return
     } catch {
       guard operationID == requestID, !Task.isCancelled,
-        inspector.documentGeneration == generation else { return }
+        inspector.documentGeneration == generation
+      else { return }
       failure = Self.failureMessage(for: error)
     }
   }

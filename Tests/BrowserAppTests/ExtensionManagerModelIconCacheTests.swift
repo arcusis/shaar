@@ -28,7 +28,8 @@ struct ExtensionManagerModelIconCacheTests {
     let item = try JSONDecoder().decode(
       ManagedExtension.self,
       from: Data(
-        #"{"id":"\#(extensionID)","name":"Example","version":"2.0","description":"","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[]}"#.utf8))
+        #"{"id":"\#(extensionID)","name":"Example","version":"2.0","description":"","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[]}"#
+          .utf8))
     let removedID = String(repeating: "b", count: 32)
     let result = ExtensionManagerModel.updatedIconCache(
       extensions: [item],

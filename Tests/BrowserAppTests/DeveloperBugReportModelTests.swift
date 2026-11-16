@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Foundation
 import BrowserCore
 import ChromiumBridge
+import Foundation
 import Testing
 
 @testable import ArcusisBrowser
@@ -80,8 +80,13 @@ struct DeveloperBugReportModelTests {
   }
 
   @Test func consoleMessagesRedactCommonCredentialForms() {
+    let fixtureJWT = [
+      "eyJhbGciOiJIUzI1NiJ9",
+      "eyJzdWIiOiJ1c2VyIn0",
+      "signatureValue123",
+    ].joined(separator: ".")
     let raw = """
-      request failed Authorization: Bearer fixture-bearer {"access_token":"fixture-json-token"} https://report-user:fixture-url-password@report.localhost/callback?custom=fixture-url-query#fixture-fragment&code=fixture-code&STATE=fixture-state eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signatureValue123
+      request failed Authorization: Bearer fixture-bearer {"access_token":"fixture-json-token"} https://report-user:fixture-url-password@report.localhost/callback?custom=fixture-url-query#fixture-fragment&code=fixture-code&STATE=fixture-state \(fixtureJWT)
       Cookie: session=fixture-cookie
       Password: fixture password with spaces
       """
@@ -93,7 +98,7 @@ struct DeveloperBugReportModelTests {
       "fixture-bearer", "fixture-json-token", "fixture-query", "fixture-code", "fixture-state",
       "fixture-cookie", "fixture password with spaces", "fixture-url-password",
       "fixture-url-query", "fixture-fragment",
-      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signatureValue123",
+      fixtureJWT,
     ] {
       #expect(!value.contains(secret), "\(secret)")
     }
@@ -149,10 +154,15 @@ private final class BugReportModelRuntime: ARCChromiumRuntime {
     completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
   ) {
     if method == "Runtime.evaluate" {
-      completion(["result": ["value": [
-        "url": "https://example.test/report", "title": "Example", "console": [],
-        "viewport": [:],
-      ]]], nil)
+      completion(
+        [
+          "result": [
+            "value": [
+              "url": "https://example.test/report", "title": "Example", "console": [],
+              "viewport": [:],
+            ]
+          ]
+        ], nil)
     } else if method == "Page.captureScreenshot" {
       let pngHeader = Data([137, 80, 78, 71, 13, 10, 26, 10]).base64EncodedString()
       completion(["data": pngHeader], nil)

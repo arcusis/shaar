@@ -25,17 +25,18 @@ struct JavaScriptDialogTests {
     throws -> JavaScriptDialogRequest
   {
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    return try #require(JavaScriptDialogRequest(payload: [
-      "schemaVersion": 1,
-      "id": "request-1",
-      "profileID": store.session.selectedSpace.profileID.uuidString,
-      "tabID": tab.id.uuidString,
-      "pageURL": tab.url.absoluteString,
-      "origin": "https://example.com",
-      "dialogType": kind.rawValue,
-      "message": "Enter a value",
-      "defaultPrompt": "initial",
-    ]))
+    return try #require(
+      JavaScriptDialogRequest(payload: [
+        "schemaVersion": 1,
+        "id": "request-1",
+        "profileID": store.session.selectedSpace.profileID.uuidString,
+        "tabID": tab.id.uuidString,
+        "pageURL": tab.url.absoluteString,
+        "origin": "https://example.com",
+        "dialogType": kind.rawValue,
+        "message": "Enter a value",
+        "defaultPrompt": "initial",
+      ]))
   }
 
   @Test func parsesAndPresentsDialogForSelectedTab() throws {

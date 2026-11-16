@@ -87,7 +87,7 @@ class FetchShaarTestEngineTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(result.stdout, "")
-            self.assertIn("Refusing symlinked Shaar test engine cache directory", result.stderr)
+            self.assertIn("Shaar test engine cache root must not be a symlink", result.stderr)
             self.assertEqual(list(outside.iterdir()), [])
 
     def test_symlinked_build_directory_fails_before_download(self):
@@ -121,7 +121,7 @@ class FetchShaarTestEngineTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(result.stdout, "")
-            self.assertIn("Refusing symlinked Shaar test engine cache directory", result.stderr)
+            self.assertIn("Shaar test engine cache root must not be a symlink", result.stderr)
             self.assertEqual(list(outside.iterdir()), [])
 
     def test_symlinked_archive_cache_is_rejected_without_reading_target(self):

@@ -20,6 +20,8 @@ test("font CSS ignores inherited family names", () => {
 
 test("font requests abort after their configured timeout", async () => {
   const originalFetch = globalThis.fetch;
+  // AbortSignal.timeout uses an unrefed timer; the mocked fetch has no socket to keep Node alive.
+  const keepAlive = setTimeout(() => {}, 100);
   globalThis.fetch = (_input, init) =>
     new Promise((_resolve, reject) => {
       const signal = init?.signal;
@@ -34,6 +36,7 @@ test("font requests abort after their configured timeout", async () => {
       name: "TimeoutError",
     });
   } finally {
+    clearTimeout(keepAlive);
     globalThis.fetch = originalFetch;
   }
 });

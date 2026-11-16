@@ -2,13 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import {
-  commandInterfaceName,
-  release,
-  repository,
-  type SitePage,
-  upcomingRelease,
-} from "../content";
+import { commandInterfaceName, release, repository, type SitePage } from "../content";
 import { ShaarDemo } from "./demo";
 import { Landscape, SkyControl } from "./landscape";
 import { Layout } from "./layout";
@@ -30,7 +24,7 @@ function Hero(): string {
     <div class="hero-bottom"><p>Shaar (<span lang="he" dir="rtl">שער</span>) means gateway in Hebrew</p>${SkyControl()}</div>
   </section>
   <div class="hero-window">${ShaarDemo()}</div>
-  <div class="beta-strip"><p>Shaar is in public beta. Expect bugs, and report them on GitHub.</p><a href="/changelog/">Preview what's coming in ${upcomingRelease.version}</a></div>`;
+  <div class="beta-strip"><p>Shaar is in public beta. Expect bugs, and report them on GitHub.</p><a href="/changelog/">What's in ${release.version}</a></div>`;
 }
 
 function OpenSource(): string {
@@ -44,7 +38,7 @@ function OpenSource(): string {
 function Finale(): string {
   return `<section class="finale" aria-labelledby="finale-title"><img src="/assets/shaar-icon.png" width="88" height="88" alt="" loading="lazy">
     <h2 id="finale-title">Download Shaar for Mac</h2>${DownloadButton()}
-    <p class="finale-meta mono">Current release ${release.version} · macOS 26 or later · Apple silicon · <a href="/changelog/">Preview ${upcomingRelease.version}</a></p></section>`;
+    <p class="finale-meta mono">Current release ${release.version} · macOS 26 or later · Apple silicon · <a href="/changelog/">Release notes</a></p></section>`;
 }
 
 export function HomePage(fontFiles?: string[]): string {

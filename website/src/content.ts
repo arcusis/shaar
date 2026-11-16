@@ -7,18 +7,15 @@ export const siteOrigin = "https://shaar.arcusis.com";
 export const appcast = "https://arcusis.github.io/shaar/appcast.xml";
 export const commandInterfaceName = "Nativ";
 
-// Published release snapshot. Update alongside a published release, not an unreleased version bump.
+// Current public release. Asset names follow scripts/release_feed.py: Shaar_<version>_aarch64.dmg and Shaar-<version>-macos.zip.
 export const release = {
-  version: "0.1.0",
-  date: "2026-10-31",
-  label: "31 October 2026",
-  size: "180 MB",
-  url: `${repository}/releases/tag/v0.1.0`,
-  dmg: `${repository}/releases/download/v0.1.0/Shaar_0.1.0_aarch64.dmg`,
-  zip: `${repository}/releases/download/v0.1.0/Shaar-0.1.0-macos.zip`,
+  version: "0.2.0",
+  url: `${repository}/releases/tag/v0.2.0`,
+  dmg: `${repository}/releases/download/v0.2.0/Shaar_0.2.0_aarch64.dmg`,
+  zip: `${repository}/releases/download/v0.2.0/Shaar-0.2.0-macos.zip`,
 };
 
-// Upcoming release copy is a preview until its signed assets are published.
+// Release-note groups for the current public beta. The download itself is `release`.
 export const upcomingRelease = {
   version: "0.2.0",
   highlights: [
@@ -50,7 +47,6 @@ export const upcomingRelease = {
       items: [
         "JavaScript dialogs and HTTP Basic authentication use Shaar sheets.",
         "Camera, microphone, location, notifications and MIDI requests ask for permission.",
-        "Password, card and address save prompts and autofill support common forms.",
         "Protocol handlers ask before opening apps; Bluetooth and Serial use device pickers.",
       ],
     },

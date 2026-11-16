@@ -7,99 +7,88 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parseHTML } from "linkedom";
 import { HomePage } from "../src/components/home";
-import { tourFeatures } from "../src/components/tour";
+import { tourCards, tourFeatures } from "../src/components/tour";
+import { release } from "../src/content";
+import { Pages } from "../src/pages";
 import { initializeTour } from "../src/tour";
 
-test("every release feature has a screenshot, named choices and live feedback", () => {
+test("homepage tour keeps a short list of distinct screenshots and a thumbnail grid", () => {
   const document = parseHTML(HomePage()).document;
+  assert.ok(tourFeatures.length >= 8 && tourFeatures.length <= 10);
   const articles = [...document.querySelectorAll<HTMLElement>("[data-tour-feature]")];
+  const cards = [...document.querySelectorAll<HTMLElement>(".tour-card")];
   assert.equal(articles.length, tourFeatures.length);
-  assert.equal(new Set(tourFeatures.map((feature) => feature.id)).size, tourFeatures.length);
-  const withoutCapture = new Set(["widevine", "devtools"]);
-  for (const article of articles) {
-    assert.ok(article.id);
-    assert.ok(article.querySelector(`h3#${article.id}-title`));
-    const feature = tourFeatures.find((item) => item.id === article.id);
-    assert.ok(feature);
-    const shot = article.querySelector("img");
-    if (withoutCapture.has(article.id)) {
-      assert.equal(feature.shot, undefined, article.id);
-      assert.equal(shot, null, article.id);
-      assert.match(article.textContent ?? "", /No .+ screenshot in the 0\.2\.0 set/, article.id);
-    } else {
-      assert.equal(shot?.getAttribute("src"), `/assets/screens/${feature.shot?.file}`, article.id);
-      assert.ok(shot?.getAttribute("alt"), article.id);
-      assert.equal(shot?.getAttribute("alt")?.includes("pending"), false, article.id);
+  assert.equal(cards.length, tourCards.length);
+  assert.equal(document.querySelector("[data-tour-preview], .tour-preview"), null);
+  assert.equal(document.querySelector(".tour-capture-gap"), null);
+
+  const files: string[] = [];
+  for (const [nodes, items] of [
+    [articles, tourFeatures],
+    [cards, tourCards],
+  ] as const) {
+    for (const node of nodes) {
+      const item = items.find((entry) => entry.id === node.id);
+      assert.ok(item, node.id);
+      const shot = node.querySelector("img");
+      assert.equal(shot?.getAttribute("src"), `/assets/screens/${item.shot.file}`, node.id);
+      assert.equal(shot?.getAttribute("width"), String(Math.round(item.shot.width / 2)), node.id);
+      assert.ok(shot?.getAttribute("alt"));
+      files.push(item.shot.file);
     }
-    assert.equal(article.textContent?.includes("REFERENCE CAPTURE"), false, article.id);
-    assert.ok(
-      article.querySelectorAll('button[type="button"][aria-pressed]').length >= 2,
-      article.id,
-    );
-    assert.ok(article.querySelector('[role="status"] [data-tour-output]'), article.id);
-    const previews = [...article.querySelectorAll<HTMLElement>("[data-tour-preview]")];
-    assert.equal(previews.length, article.querySelectorAll("[data-choice]").length, article.id);
-    assert.equal(previews.filter((preview) => !preview.hidden).length, 1, article.id);
-    assert.equal(
-      article.querySelector("[style]"),
-      null,
-      `${article.id} must respect style-src 'self'`,
-    );
   }
+  assert.equal(new Set(files).size, files.length, "each section needs its own screenshot");
+  const text = document.documentElement.textContent ?? "";
+  assert.equal(text.includes("REFERENCE CAPTURE"), false);
+  assert.equal(text.includes("45 bytes"), false);
+  assert.equal(text.includes("parity-user"), false);
+  assert.equal(text.includes("127.0.0.1"), false);
+  assert.equal(text.includes("0.1.0"), false);
+  assert.match(text, /v0\.2\.0 beta available/);
+  assert.match(text, /Current release 0\.2\.0/);
+  assert.match(text, /Shaar 0\.2\.0 · MPL-2\.0/);
+  assert.equal(text.includes("Preview what's coming"), false);
+  assert.equal(text.includes("Preview 0.2.0"), false);
 });
 
-test("tour controls update visual state and screen-reader status", () => {
+test("download and changelog treat 0.2.0 as the current release", () => {
+  const pages = Pages("", "", "");
+  const download = pages.find((page) => page.path === "/download/");
+  const changelog = pages.find((page) => page.path === "/changelog/");
+  assert.ok(download);
+  assert.ok(changelog);
+  assert.match(download.body, new RegExp(release.dmg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(download.body, /Shaar-0\.2\.0-macos\.zip/);
+  assert.match(download.body, /Shaar 0\.2\.0/);
+  assert.equal(download.body.includes("0.1.0"), false);
+  assert.equal(download.body.includes("Coming in"), false);
+  assert.equal(changelog.body.includes("Coming soon"), false);
+  assert.equal(changelog.body.includes("0.1.0"), false);
+  assert.match(changelog.body, /Current release/);
+});
+
+test("tour reveal stays inert when motion is reduced", () => {
   const dom = parseHTML(HomePage());
   Object.assign(globalThis, {
     document: dom.document,
-    window: { matchMedia: () => ({ matches: true, addEventListener: () => {} }) },
+    window: {
+      matchMedia: () => ({ matches: true, addEventListener: () => {} }),
+      addEventListener: () => {},
+      requestAnimationFrame: () => 0,
+    },
   });
   initializeTour();
-
-  for (const article of dom.document.querySelectorAll<HTMLElement>("[data-tour-feature]")) {
-    const buttons = [...article.querySelectorAll<HTMLButtonElement>("[data-choice]")];
-    const previews = [...article.querySelectorAll<HTMLElement>("[data-tour-preview]")];
-    const last = buttons.at(-1);
-    assert.ok(last);
-    last.click();
-    assert.equal(last.getAttribute("aria-pressed"), "true", article.id);
-    assert.equal(buttons[0].getAttribute("aria-pressed"), "false", article.id);
-    assert.equal(article.querySelector("[data-tour-output]")?.textContent, last.dataset.message);
-    assert.equal(previews.filter((preview) => !preview.hidden).length, 1, article.id);
-    assert.equal(previews.at(-1)?.hidden, false, article.id);
-  }
-
-  const hebrew = dom.document.querySelector<HTMLElement>("#hebrew .tour-live");
-  assert.equal(hebrew?.dir, "rtl");
-  assert.equal(hebrew?.lang, "he");
-});
-
-test("tour arrow keys move focus and selection", () => {
-  const dom = parseHTML(HomePage());
-  Object.assign(globalThis, {
-    document: dom.document,
-    window: { matchMedia: () => ({ matches: true, addEventListener: () => {} }) },
-  });
-  initializeTour();
-  const buttons = [...dom.document.querySelectorAll<HTMLButtonElement>("#spaces [data-choice]")];
-  assert.equal(buttons.length, 3);
-  let focused = false;
-  buttons[1].focus = () => {
-    focused = true;
-  };
-  const event = new dom.Event("keydown", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "key", { value: "ArrowRight" });
-  buttons[0].dispatchEvent(event);
-  assert.equal(focused, true);
-  assert.equal(buttons[1].getAttribute("aria-pressed"), "true");
-  assert.equal(event.defaultPrevented, true);
+  assert.equal(dom.document.documentElement.dataset.tourMotion, undefined);
+  assert.ok(dom.document.querySelector("#spaces img"));
+  assert.ok(dom.document.querySelector("#hebrew img"));
 });
 
 test("tour stays readable without JavaScript and honors reduced motion", () => {
   const document = parseHTML(HomePage()).document;
   assert.ok(document.querySelector("#spaces h3"));
   assert.ok(document.querySelector("#hebrew img"));
+  assert.ok(document.querySelector("#downloads img"));
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-  assert.match(styles, /html:not\(\[data-enhanced\]\) \.tour-interaction/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.equal(styles.includes(".tour-preview"), false);
 });

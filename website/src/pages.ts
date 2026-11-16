@@ -15,20 +15,19 @@ export function Pages(license: string, notice: string, thirdPartyNotices: string
       heading: "Download Shaar",
       description:
         "Shaar for Apple silicon Macs running macOS 26 or later. Free and open source, in public beta.",
-      body: `<div class="download-panel"><img src="/assets/shaar-icon.png" width="96" height="96" alt="Shaar app icon"><div><h2>Shaar ${release.version}</h2><p>Apple silicon · macOS 26 or later</p><a class="button" href="${release.dmg}">Download .dmg <span aria-hidden="true">↓</span></a><p class="download-size">${release.size} · Published ${release.label}</p></div></div>
+      body: `<div class="download-panel"><img src="/assets/shaar-icon.png" width="96" height="96" alt="Shaar app icon"><div><h2>Shaar ${release.version}</h2><p>Apple silicon · macOS 26 or later</p><a class="button" href="${release.dmg}">Download .dmg <span aria-hidden="true">↓</span></a></div></div>
         <aside class="callout"><h2>Public beta</h2><p>Shaar works for daily browsing but still has bugs and missing features. <a href="${repository}/issues">Report problems and ideas</a>.</p></aside>
         <h2>Install</h2><ol class="install-steps"><li><strong>Open the disk image.</strong> Download the DMG above on an Apple silicon Mac running macOS 26 or later.</li><li><strong>Drag Shaar to Applications.</strong> The published app is Developer ID signed and notarized by Apple.</li><li><strong>Open Shaar from Applications.</strong> Create a profile and a Space, then start browsing.</li></ol>
         <p>Prefer an archive? <a href="${release.zip}">Download the ZIP</a>. Intel Macs, Windows and Linux are not currently supported.</p>
         <h2>Updates</h2><p>Release builds use Sparkle for automatic updates. The update feed remains at <a href="${appcast}">${appcast}</a>.</p>
-        <h2>Coming in ${upcomingRelease.version}</h2><p>Spaces, extension consent, native web prompts, media playback and recovery tools. <a href="/#spaces">Explore the feature previews</a> or read the <a href="/changelog/">upcoming release notes</a>. The download above is ${release.version}.</p>
-        <div class="related-links"><a href="/changelog/">Read release notes ↗</a><a href="/verification/">Security & verification ↗</a><a href="/building/">Build from source ↗</a><a href="${repository}/releases">All published releases ↗</a></div>`,
+        <div class="related-links"><a href="/changelog/">Read release notes ↗</a><a href="/#spaces">Explore Shaar ${release.version} ↗</a><a href="/verification/">Security & verification ↗</a><a href="/building/">Build from source ↗</a><a href="${repository}/releases">All published releases ↗</a></div>`,
     },
     {
       path: "/changelog/",
       title: "Changelog",
       heading: "Changelog",
-      description: "Preview of Shaar 0.2.0, plus the current published download.",
-      body: `<article class="release-notes"><div class="release-heading"><h2>${upcomingRelease.version} <span class="tag">Coming soon</span></h2></div><p>Preview of the next public beta. Features and wording may change before release. <a href="/#spaces">Explore the interactive feature tour</a>. Feedback belongs in <a href="${repository}/issues">GitHub Issues</a>.</p>${upcomingRelease.tour.map((group) => `<h3>${escapeHtml(group.heading)}</h3><ul>${group.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`).join("")}<h3>Further improvements</h3><ul>${upcomingRelease.highlights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul><p>Planned for macOS 26 or later on Apple silicon. DRM support in the public build awaits CDM licensing.</p><a class="text-link" href="${repository}/issues/3572">Follow the 0.2.0 release checklist ↗</a></article><p class="source-note">Current published download: <a href="/download/">Shaar ${release.version}</a>. <a href="${release.url}">Published ${release.version} release notes and assets</a>.</p>`,
+      description: `Release notes for Shaar ${release.version}.`,
+      body: `<article class="release-notes"><div class="release-heading"><h2>${release.version} <span class="tag">Current release</span></h2></div><p>Public beta for macOS 26 or later on Apple silicon. <a href="/#spaces">See it on the homepage</a>. Feedback belongs in <a href="${repository}/issues">GitHub Issues</a>.</p>${upcomingRelease.tour.map((group) => `<h3>${escapeHtml(group.heading)}</h3><ul>${group.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`).join("")}<h3>Further improvements</h3><ul>${upcomingRelease.highlights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul><p>DRM support in the public build awaits CDM licensing.</p><a class="text-link" href="${repository}/issues/3572">0.2.0 release checklist ↗</a></article><p class="source-note"><a href="/download/">Download Shaar ${release.version}</a>. <a href="${release.url}">Release ${release.version} notes and assets</a>.</p>`,
     },
     {
       path: "/building/",

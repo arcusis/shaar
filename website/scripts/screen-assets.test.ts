@@ -7,7 +7,7 @@ import { statSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { HomePage } from "../src/components/home";
-import { tourFeatures } from "../src/components/tour";
+import { tourCards, tourFeatures } from "../src/components/tour";
 import { websiteScreenAssets } from "./screen-assets";
 
 test("site build includes only screenshots referenced by page content", () => {
@@ -20,8 +20,7 @@ test("site build includes only screenshots referenced by page content", () => {
   assert.ok(!assets.includes("hero.png"));
   assert.ok(!assets.includes("page-arcusis.png"));
   assert.ok(!assets.includes("page-github.png"));
-  for (const feature of tourFeatures) {
-    if (!feature.shot) continue;
+  for (const feature of [...tourFeatures, ...tourCards]) {
     assert.ok(assets.includes(feature.shot.file), feature.id);
   }
 });
@@ -32,9 +31,9 @@ test("homepage tour uses smaller lossless WebP screenshots", () => {
   assert.equal(home.includes("capture pending"), false);
   const seen = new Set<string>();
 
-  for (const feature of tourFeatures) {
+  for (const feature of [...tourFeatures, ...tourCards]) {
     const shot = feature.shot;
-    if (!shot || seen.has(shot.file)) continue;
+    if (seen.has(shot.file)) continue;
     seen.add(shot.file);
     assert.ok(shot.file.endsWith(".webp"), feature.id);
     assert.ok(home.includes(`/assets/screens/${shot.file}`), feature.id);

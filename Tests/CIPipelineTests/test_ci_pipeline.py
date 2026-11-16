@@ -98,6 +98,9 @@ class PipelineGateTests(unittest.TestCase):
                     f"#expect(after < before * {threshold})",
                     (ROOT / "Tests/BrowserCoreTests" / name).read_text(),
                 )
+            open_pages = (base / "Tests/BrowserCoreTests/CommandOpenPageSetTests.swift").read_text()
+            self.assertIn("tabCount: 50_000", open_pages)
+            self.assertIn("for sample in 0..<9", open_pages)
             self.assertNotIn("-  #expect(after < before", patch_text)
             contract = (base / "Tests/ShaarEngineABITests/OperationCodeContractTests.swift").read_text()
             self.assertIn("shaar_operation_contract_values", contract)

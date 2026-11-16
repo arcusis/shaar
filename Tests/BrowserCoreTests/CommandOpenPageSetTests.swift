@@ -9,23 +9,32 @@ import Testing
 @testable import BrowserCore
 
 @Test func commandOpenPageSetFocusedBenchmark() throws {
-  let session = try commandOpenPageSetSession(tabCount: 4_000)
+  let session = try commandOpenPageSetSession(tabCount: 50_000)
   let expected = legacyOpenPageKeys(in: session)
-  #expect(expected.count == 4_012)
+  #expect(expected.count == 50_012)
   #expect(CommandLauncher.openPageKeys(in: session) == expected)
 
   _ = legacyOpenPageKeys(in: session)
   _ = CommandLauncher.openPageKeys(in: session)
-  let iterations = 25
+  let iterations = 5
   var beforeSamples: [Double] = []
   var afterSamples: [Double] = []
-  for _ in 0..<5 {
-    let beforeStart = threadCPUSeconds()
-    for _ in 0..<iterations { _ = legacyOpenPageKeys(in: session) }
-    beforeSamples.append(threadCPUSeconds() - beforeStart)
-    let afterStart = threadCPUSeconds()
-    for _ in 0..<iterations { _ = CommandLauncher.openPageKeys(in: session) }
-    afterSamples.append(threadCPUSeconds() - afterStart)
+  for sample in 0..<9 {
+    if sample.isMultiple(of: 2) {
+      let beforeStart = threadCPUSeconds()
+      for _ in 0..<iterations { _ = legacyOpenPageKeys(in: session) }
+      beforeSamples.append(threadCPUSeconds() - beforeStart)
+      let afterStart = threadCPUSeconds()
+      for _ in 0..<iterations { _ = CommandLauncher.openPageKeys(in: session) }
+      afterSamples.append(threadCPUSeconds() - afterStart)
+    } else {
+      let afterStart = threadCPUSeconds()
+      for _ in 0..<iterations { _ = CommandLauncher.openPageKeys(in: session) }
+      afterSamples.append(threadCPUSeconds() - afterStart)
+      let beforeStart = threadCPUSeconds()
+      for _ in 0..<iterations { _ = legacyOpenPageKeys(in: session) }
+      beforeSamples.append(threadCPUSeconds() - beforeStart)
+    }
   }
   let before = median(beforeSamples)
   let after = median(afterSamples)
@@ -55,7 +64,7 @@ private func legacyOpenPageKeys(in session: BrowserSession) -> Set<String> {
 private func commandOpenPageSetSession(tabCount: Int) throws -> BrowserSession {
   let profile = BrowserProfile(name: "Personal")
   let tabs = (0..<tabCount).map { index in
-    BrowserTab(url: URL(string: "https://example.com/tab-\(index)")!)
+    BrowserTab(url: URL(string: "https://e.test/\(index)")!)
   }
   let space = BrowserSpace(
     profileID: profile.id, name: "Main", symbol: "house", tint: .ocean, tabs: tabs)

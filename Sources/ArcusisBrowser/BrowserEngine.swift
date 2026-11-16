@@ -78,6 +78,11 @@ final class BrowserEngine {
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var receivingNativeSelection = false
+  /// True while an engine-opened tab is adopted inside the event callback.
+  /// InsertDetachedTabAt still holds TabStripModel's reentrancy guard until
+  /// that callback returns. place-tabs must not run until the next turn.
+  @ObservationIgnored private var adoptingEngineTab = false
+  @ObservationIgnored private var reconcileAfterAdoption = false
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
@@ -595,7 +600,12 @@ final class BrowserEngine {
         height: min(max(size.height, 100), 600))
     }
     store.onSessionChanged = { [weak self] in
-      self?.reconcile()
+      guard let self else { return }
+      if self.adoptingEngineTab {
+        self.scheduleReconcileAfterEngineCallback()
+        return
+      }
+      self.reconcile()
     }
     store.onCloseTab = { [weak self] id in
       guard let self else { return }
@@ -723,17 +733,24 @@ final class BrowserEngine {
       guard let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner),
         let url = URL(string: address.isEmpty ? "about:blank" : address)
       else {
-        self.runtime.discardTabID(identity)
+        // CloseWebContentsAt checks the same guard. Drop the tab next turn.
+        self.discardAdoptedTabAfterEngineCallback(identity)
         return
       }
       self.liveTabs.insert(id)
+      // nativeTabOpened saves, and that save reconciles. Doing it here calls
+      // place-tabs while Chromium is still notifying the insertion.
+      self.adoptingEngineTab = true
       let accepted =
         self.store?.nativeTabOpened(
           BrowserTab(id: id, url: url), profileID: profile,
           openerID: opener.flatMap(UUID.init(uuidString:)), foreground: foreground) ?? false
-      if !accepted {
+      self.adoptingEngineTab = false
+      if accepted {
+        self.scheduleReconcileAfterEngineCallback()
+      } else {
         self.liveTabs.remove(id)
-        self.runtime.discardTabID(identity)
+        self.discardAdoptedTabAfterEngineCallback(identity)
       }
     }
     suspensionTask = Task { [weak self] in
@@ -897,6 +914,28 @@ final class BrowserEngine {
     failedProfiles.remove(profile)
     reconcile()
     return liveTabs.contains(tab) || loadingProfiles.contains(profile)
+  }
+
+  /// Places tabs after InsertDetachedTabAt releases its reentrancy guard.
+  private func scheduleReconcileAfterEngineCallback() {
+    guard !reconcileAfterAdoption else { return }
+    reconcileAfterAdoption = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.reconcileAfterAdoption = false
+      if self.adoptingEngineTab {
+        self.scheduleReconcileAfterEngineCallback()
+        return
+      }
+      self.reconcile()
+    }
+  }
+
+  private func discardAdoptedTabAfterEngineCallback(_ identity: String) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.isClosed else { return }
+      self.runtime.discardTabID(identity)
+    }
   }
 
   func reconcile() {

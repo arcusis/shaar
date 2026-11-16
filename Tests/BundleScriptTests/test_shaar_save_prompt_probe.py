@@ -1,7 +1,9 @@
 """The save-prompt probe only passes after each fixture form reaches its POST handler."""
 
+from contextlib import redirect_stdout
 import http.client
 import importlib.util
+import io
 import json
 from pathlib import Path
 import sqlite3
@@ -263,6 +265,57 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
             self.assertTrue(PROBE.saved_in_profile(evidence, profile_id))
             self.assertFalse(PROBE.saved_in_profile(evidence, "different-profile"))
             self.assertNotIn("secret", repr(evidence))
+
+    def test_stdout_summary_redacts_password_secret_and_keychain_values(self):
+        receipt = {
+            "exitCode": 0,
+            "locale": "en",
+            "passed": True,
+            "submittedForms": ["/password"],
+            "passwordOnly": True,
+            "passwordStoreEvidence": [{
+                "fixtureSecretPresent": True,
+                "secretMaterial": "parity-secret",
+            }],
+            "passwordSaveStoredInSaveProfile": True,
+            "keychainEvidence": {
+                "hostShaarSafeStorageItemAvailable": True,
+                "material": "keychain-secret-value",
+            },
+            "trustedTextDiagnostics": [{
+                "fields": [{"value": "trusted-secret-value"}],
+            }],
+            "trustedInputFailures": ["user supplied secret-token-value"],
+            "storageDiagnostics": ["os_crypt keychain password store parity-secret"],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = Path(temporary) / "receipt.json"
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                PROBE.write_receipt_and_print_summary(receipt_path, receipt)
+            printed = stdout.getvalue()
+            stored = receipt_path.read_text()
+
+        for marker in (
+            "parity-secret", "keychain-secret-value", "trusted-secret-value",
+            "secret-token-value",
+        ):
+            self.assertIn(marker, stored)
+            self.assertNotIn(marker, printed)
+        for key in (
+            "passwordOnly", "passwordStoreEvidence", "passwordSaveStoredInSaveProfile",
+            "keychainEvidence", "trustedTextDiagnostics", "trustedInputFailures",
+            "storageDiagnostics",
+        ):
+            self.assertIn(f'"{key}"', stored)
+            self.assertNotIn(f'"{key}"', printed)
+        self.assertNotIn("keychain", printed.lower())
+        self.assertNotIn("secret", printed.lower())
+        self.assertIn('"exitCode": 0', printed)
+        self.assertIn('"passed": true', printed)
+        self.assertIn('"/password"', printed)
+        self.assertEqual(json.loads(stored)["passwordStoreEvidence"][0]["secretMaterial"],
+                         "parity-secret")
 
 
 if __name__ == "__main__":

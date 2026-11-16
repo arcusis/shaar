@@ -323,6 +323,40 @@ def storage_diagnostics(output):
     return evidence
 
 
+# Fields copied from the stored receipt onto stdout.
+STDOUT_RECEIPT_FIELDS = (
+    "verificationExecutable",
+    "exitCode",
+    "locale",
+    "allWindowsHidden",
+    "windowsOnScreen",
+    "renderSurface",
+    "rows",
+    "submittedForms",
+    "autofillPreferences",
+    "submissionCounts",
+    "diagnosticStages",
+    "screenshots",
+    "crashReports",
+    "passed",
+)
+
+
+def redacted_stdout_summary(receipt):
+    """Return receipt fields that are safe to print."""
+    if not isinstance(receipt, dict):
+        return {}
+    return {key: receipt[key] for key in STDOUT_RECEIPT_FIELDS if key in receipt}
+
+
+def write_receipt_and_print_summary(path, receipt):
+    """Store the full receipt, then print a redacted summary of that file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(receipt, indent=2) + "\n")
+    stored = json.loads(path.read_text())
+    print(json.dumps(redacted_stdout_summary(stored), indent=2))
+
+
 def verification_keychain_evidence(app):
     try:
         with (app / "Contents/Info.plist").open("rb") as stream:
@@ -467,9 +501,7 @@ def main():
         and saved_in_profile(password_evidence, save_profile_id)
         and not crashes,
     }
-    options.receipt.parent.mkdir(parents=True, exist_ok=True)
-    options.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
-    print(json.dumps(receipt, indent=2))
+    write_receipt_and_print_summary(options.receipt, receipt)
     if not receipt["passed"]:
         if result.stderr:
             print(result.stderr[-4000:])

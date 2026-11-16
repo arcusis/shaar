@@ -4,9 +4,9 @@
 
 from contextlib import redirect_stderr
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 import io
 import importlib.util
-import re
 import shutil
 import sys
 import subprocess
@@ -23,6 +23,38 @@ PROBE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PROBE)
 
 GIBIBYTE = 1024 ** 3
+
+
+class ScriptBodyParser(HTMLParser):
+    """Collect the text inside script elements."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._parts = []
+        self._in_script = False
+        self.bodies = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script" and not self._in_script:
+            self._in_script = True
+            self._parts = []
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._in_script:
+            self.bodies.append("".join(self._parts))
+            self._in_script = False
+            self._parts = []
+
+    def handle_data(self, data):
+        if self._in_script:
+            self._parts.append(data)
+
+
+def script_bodies(html):
+    parser = ScriptBodyParser()
+    parser.feed(html)
+    parser.close()
+    return parser.bodies
 
 
 class BrowsingQAReportTests(unittest.TestCase):
@@ -302,8 +334,9 @@ class BrowsingQAReportTests(unittest.TestCase):
         if node is None:
             self.skipTest("Node.js is required to execute the fixture script")
         fixture = PROBE.Fixture.document(None, "/scroll", "").decode()
-        match = re.search(r"<script>(.*?)</script>", fixture, re.DOTALL)
-        self.assertIsNotNone(match)
+        bodies = script_bodies(fixture)
+        self.assertEqual(len(bodies), 1)
+        self.assertEqual(script_bodies("<SCRIPT>ready()</SCRIPT>"), ["ready()"])
         runner = r"""
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -331,7 +364,7 @@ process.stdin.on('end', () => {
 });
 """
         completed = subprocess.run(
-            [node, "-e", runner], input=match.group(1), text=True,
+            [node, "-e", runner], input=bodies[0], text=True,
             capture_output=True, timeout=10, check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)

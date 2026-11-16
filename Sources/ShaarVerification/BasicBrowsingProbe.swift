@@ -24,7 +24,9 @@ enum BasicBrowsingPageEvidence {
 }
 
 enum BasicBrowsingNavigationEvidence {
-  static func searchDestination(_ destination: URL, matches engine: BrowserSearchEngine, query: String)
+  static func searchDestination(
+    _ destination: URL, matches engine: BrowserSearchEngine, query: String
+  )
     -> Bool
   {
     guard let endpoint = URLComponents(string: engine.searchEndpoint.url),
@@ -164,19 +166,23 @@ struct BasicBrowsingProbe {
         _ = await evaluate(
           id.uuidString, "(()=>{const url=\(literal);\(action);return true})()")
         try await Task.sleep(for: .milliseconds(250))
-        let state = await evaluate(
-          id.uuidString,
-          "({href:location.href,marker:document.documentElement.dataset['\(marker)']||''})")
+        let state =
+          await evaluate(
+            id.uuidString,
+            "({href:location.href,marker:document.documentElement.dataset['\(marker)']||''})")
           as? [String: Any]
         let tabs = Set(store.session.spaces.flatMap(\.tabs).map(\.id))
         try expect(
           state?["href"] as? String == originalURL
             && state?["marker"] as? String == ""
             && tabs == originalTabs,
-          "page-initiated \(initiation) navigation to \(URLComponents(string: address)?.scheme ?? "unknown") is blocked")
+          "page-initiated \(initiation) navigation to \(URLComponents(string: address)?.scheme ?? "unknown") is blocked"
+        )
       }
     }
-    return ["page-initiated location, window.open, and link attempts to four unsafe schemes are blocked"]
+    return [
+      "page-initiated location, window.open, and link attempts to four unsafe schemes are blocked"
+    ]
   }
 
   private func assertNoPicker(_ initialWindowCount: Int) throws {
@@ -231,7 +237,8 @@ struct BasicBrowsingProbe {
 
   private func evaluate(
     _ id: String,
-    _ script: String = "({href:location.href,ready:document.readyState,text:document.body?.innerText||''})"
+    _ script: String =
+      "({href:location.href,ready:document.readyState,text:document.body?.innerText||''})"
   ) async -> Any? {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluate(inTabID: id, script: script) { continuation.resume(returning: $0) }

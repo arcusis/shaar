@@ -34,7 +34,8 @@ private final class ManualToastScheduler: InspectorToastScheduling {
   @Test func startsWithExpectedSectionAndMenuState() {
     let presentation = InspectorPresentation()
 
-    #expect(presentation.collapsedSections == ["Code:Layout", "Code:Element overrides", "Code:Tools"])
+    #expect(
+      presentation.collapsedSections == ["Code:Layout", "Code:Element overrides", "Code:Tools"])
     #expect(presentation.codeSections == ["Code:Styles"])
     #expect(!presentation.copyMenuOpen)
     #expect(presentation.toast == nil)

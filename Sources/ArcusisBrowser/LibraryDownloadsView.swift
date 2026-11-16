@@ -241,7 +241,8 @@ struct LibraryDownloadsView: View {
       .focused($focusedActionsID, equals: item.id)
       .opacity(
         Self.actionsAreVisible(itemID: item.id, hoveredID: hoveredID, focusedID: focusedActionsID)
-          ? 1 : 0)
+          ? 1 : 0
+      )
       .accessibilityLabel(PanelsL10n.format("Actions for %@", .string(item.filename)))
     }
     .padding(8).contentShape(Rectangle())

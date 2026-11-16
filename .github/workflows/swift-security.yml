@@ -4,6 +4,8 @@
 
 name: Swift security
 on:
+  push:
+    branches: [production]
   schedule:
     - cron: '23 1 * * *'
   workflow_dispatch:

@@ -47,14 +47,16 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
 
 @Test func downloadIdentitiesMustBeNonEmptyAndUnique() async throws {
   let duplicate = Data(
-    #"{"schemaVersion":1,"downloads":[{"id":"same","url":"https://example.test/a","filename":"a","path":"/tmp/a","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0},{"id":"same","url":"https://example.test/b","filename":"b","path":"/tmp/b","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#.utf8)
+    #"{"schemaVersion":1,"downloads":[{"id":"same","url":"https://example.test/a","filename":"a","path":"/tmp/a","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0},{"id":"same","url":"https://example.test/b","filename":"b","path":"/tmp/b","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#
+      .utf8)
   let duplicateReply = FakeDownloadsTransport(replies: [400: duplicate])
   await #expect(throws: ShaarDownloadsError.malformedResponse) {
     _ = try await ShaarDownloadsAdapter(transport: duplicateReply).list()
   }
 
   let empty = Data(
-    #"{"schemaVersion":1,"downloads":[{"id":"","url":"https://example.test/a","filename":"a","path":"/tmp/a","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#.utf8)
+    #"{"schemaVersion":1,"downloads":[{"id":"","url":"https://example.test/a","filename":"a","path":"/tmp/a","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":0}]}"#
+      .utf8)
   let emptyReply = FakeDownloadsTransport(replies: [400: empty])
   await #expect(throws: (any Error).self) {
     _ = try await ShaarDownloadsAdapter(transport: emptyReply).list()

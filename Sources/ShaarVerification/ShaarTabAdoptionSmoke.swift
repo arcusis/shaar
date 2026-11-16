@@ -130,7 +130,8 @@ struct ShaarTabAdoptionEvidence {
       rendererFailuresAreEmpty: host.contexts.values.allSatisfy {
         $0.store.rendererFailures.isEmpty
       },
-      allWindowsHidden: NSApp.windows.allSatisfy { !$0.isVisible }).passed
+      allWindowsHidden: NSApp.windows.allSatisfy { !$0.isVisible }
+    ).passed
     return [
       "name": name, "passed": passed, "clicked": clicked, "adopted": adopted,
       "trusted": sourceState?["trusted"] ?? "",

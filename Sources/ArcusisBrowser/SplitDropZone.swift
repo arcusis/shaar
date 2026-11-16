@@ -45,7 +45,8 @@ struct SplitDropZone: View {
         }
       }
       .animation(
-        Self.previewAnimation(reduceMotion: reduceMotion, override: accessibilityOverrides.reduceMotion),
+        Self.previewAnimation(
+          reduceMotion: reduceMotion, override: accessibilityOverrides.reduceMotion),
         value: edge)
     }
   }

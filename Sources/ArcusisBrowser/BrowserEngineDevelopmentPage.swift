@@ -76,7 +76,7 @@ extension BrowserEngine {
   }
 
   func cancelDevelopmentProbeTasks() {
-    developmentProbeTasks.values.forEach { $0.cancel() }
+    for task in developmentProbeTasks.values { task.cancel() }
     developmentProbeTasks.removeAll()
   }
 

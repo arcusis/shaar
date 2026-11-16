@@ -292,7 +292,9 @@ struct FirstRunSetupView: View {
       do {
         try await DefaultBrowserService.makeDefault()
         defaultError = nil
-      } catch { defaultError = SettingsL10n.string("Could not set this app as the default browser.") }
+      } catch {
+        defaultError = SettingsL10n.string("Could not set this app as the default browser.")
+      }
       defaultStatus = DefaultBrowserService.isDefault()
     }
   }

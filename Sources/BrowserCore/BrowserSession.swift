@@ -20,9 +20,10 @@ enum SessionFolderValidation {
     return folders.allSatisfy { folder in
       !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && (folder.parentID.map { pinStateByFolderID[$0] == folder.isPinned } ?? true)
-    } && tabs.allSatisfy { tab in
-      tab.folderID.map { pinStateByFolderID[$0] == tab.isPinned } ?? true
     }
+      && tabs.allSatisfy { tab in
+        tab.folderID.map { pinStateByFolderID[$0] == tab.isPinned } ?? true
+      }
   }
 }
 
@@ -418,10 +419,12 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       }
       guard
         SessionFolderValidation.membershipIsValid(folders: space.folders, tabs: space.tabs),
-        SessionFolderValidation.folderItemsMatch(space, makeItems: {
-          space.items(isPinned: true, includingCollapsed: true)
-            + space.items(isPinned: false, includingCollapsed: true)
-        })
+        SessionFolderValidation.folderItemsMatch(
+          space,
+          makeItems: {
+            space.items(isPinned: true, includingCollapsed: true)
+              + space.items(isPinned: false, includingCollapsed: true)
+          })
       else { throw SessionError.invalidState }
     }
   }

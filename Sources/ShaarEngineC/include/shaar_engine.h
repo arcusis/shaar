@@ -4,3 +4,12 @@
 
 // Import the canonical engine ABI declaration from the pinned Chromium source tree.
 #include "../../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
+
+// Keep the Swift operation contract test tied to values compiled from the C ABI.
+#ifdef __cplusplus
+extern "C" {
+#endif
+const uint32_t *shaar_operation_contract_values(size_t *count);
+#ifdef __cplusplus
+}
+#endif

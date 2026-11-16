@@ -14,14 +14,18 @@ import Testing
 }
 
 @Test @MainActor func printCommandRequiresASelectedPageAndNativeSupport() {
-  #expect(!NativeBrowserHost.printCommandIsAvailable(
-    hasSelectedPage: false, commandIsOpen: false, hasNativePrint: true))
-  #expect(NativeBrowserHost.printCommandIsAvailable(
-    hasSelectedPage: true, commandIsOpen: false, hasNativePrint: true))
-  #expect(!NativeBrowserHost.printCommandIsAvailable(
-    hasSelectedPage: true, commandIsOpen: false, hasNativePrint: false))
-  #expect(!NativeBrowserHost.printCommandIsAvailable(
-    hasSelectedPage: true, commandIsOpen: true, hasNativePrint: true))
+  #expect(
+    !NativeBrowserHost.printCommandIsAvailable(
+      hasSelectedPage: false, commandIsOpen: false, hasNativePrint: true))
+  #expect(
+    NativeBrowserHost.printCommandIsAvailable(
+      hasSelectedPage: true, commandIsOpen: false, hasNativePrint: true))
+  #expect(
+    !NativeBrowserHost.printCommandIsAvailable(
+      hasSelectedPage: true, commandIsOpen: false, hasNativePrint: false))
+  #expect(
+    !NativeBrowserHost.printCommandIsAvailable(
+      hasSelectedPage: true, commandIsOpen: true, hasNativePrint: true))
 }
 
 @Test @MainActor func nativePrintIsSuppressedForHiddenVerificationHosts() {
@@ -98,14 +102,16 @@ import Testing
 @Test @MainActor func nativeMenuTitlesResolveToHebrewCatalogEntries() {
   let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
   let groups = menu.items.compactMap(\.submenu)
-  let identifiers = groups.compactMap { group -> String? in
-    guard group.identifier?.rawValue != ProductIdentity.name else { return nil }
-    return group.identifier?.rawValue
-  } + groups.flatMap(\.items).compactMap { item -> String? in
-    guard let identifier = item.identifier?.rawValue else { return nil }
-    if item.representedObject as? String == BrowserMenuCommand.search.rawValue { return nil }
-    return identifier == "copyCurrentURL:" ? item.title : identifier
-  }
+  let identifiers =
+    groups.compactMap { group -> String? in
+      guard group.identifier?.rawValue != ProductIdentity.name else { return nil }
+      return group.identifier?.rawValue
+    }
+    + groups.flatMap(\.items).compactMap { item -> String? in
+      guard let identifier = item.identifier?.rawValue else { return nil }
+      if item.representedObject as? String == BrowserMenuCommand.search.rawValue { return nil }
+      return identifier == "copyCurrentURL:" ? item.title : identifier
+    }
   for identifier in identifiers {
     let key: String
     switch identifier {
@@ -126,7 +132,7 @@ import Testing
         arguments: [.string(ProductIdentity.name)]) != key)
   }
   #expect(
-      BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
+    BrowserLocalization.string("Search or enter address", table: "Shell", language: .hebrew)
       != "Search or enter address")
   #expect(
     BrowserLocalization.string("Open File…", table: "Settings", language: .english)
@@ -150,7 +156,7 @@ import Testing
     NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: true)
       == .reopenClosedWindow)
   #expect(
-      NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: false)
+    NativeBrowserHost.reopenClosedShortcutCommand(canReopenTab: false, hasClosedWindow: false)
       == nil)
 }
 
@@ -163,7 +169,9 @@ import Testing
   defer { host.detach() }
   var snapshotSession = workspace.workspace.windows[0].session
   let spaceID = snapshotSession.selectedSpaceID
-  for tab in snapshotSession.selectedSpace.tabs where !tab.isPinned { snapshotSession.closeTab(tab.id) }
+  for tab in snapshotSession.selectedSpace.tabs where !tab.isPinned {
+    snapshotSession.closeTab(tab.id)
+  }
   for closed in snapshotSession.recentlyClosedTabs(in: spaceID) {
     _ = snapshotSession.reopenClosedTab(closed.id, in: spaceID)
   }
@@ -442,7 +450,8 @@ import Testing
   #expect(item("Select All")?.action == NSSelectorFromString("selectAll:"))
   #expect(item("Undo")?.target == nil && item("Paste")?.target == nil)
   #expect(item("Paste and Match Style")?.target == nil)
-  #expect(item("Emoji & Symbols")?.action == #selector(NSApplication.orderFrontCharacterPalette(_:)))
+  #expect(
+    item("Emoji & Symbols")?.action == #selector(NSApplication.orderFrontCharacterPalette(_:)))
   #expect(item("Emoji & Symbols")?.keyEquivalent == "e")
   #expect(item("Emoji & Symbols")?.keyEquivalentModifierMask == .function)
   #expect(item("Emoji & Symbols")?.target == nil)

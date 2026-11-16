@@ -17,8 +17,9 @@ struct HTTPAuthSheet: View {
         .font(.title2.weight(.semibold))
       Text(
         PanelsL10n.format(
-          "%@ is requesting your username and password.", .string(request.host)))
-        .foregroundStyle(.secondary)
+          "%@ is requesting your username and password.", .string(request.host))
+      )
+      .foregroundStyle(.secondary)
       if !request.realm.isEmpty {
         LabeledContent(PanelsL10n.string("Realm"), value: request.realm)
           .textSelection(.enabled)
@@ -35,7 +36,7 @@ struct HTTPAuthSheet: View {
         Button(PanelsL10n.string("Cancel"), role: .cancel) {
           resolve(username: nil, password: nil)
         }
-          .keyboardShortcut(.cancelAction)
+        .keyboardShortcut(.cancelAction)
         Spacer()
         Button(PanelsL10n.string("Sign In")) {
           resolve(username: username, password: password)

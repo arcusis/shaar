@@ -60,7 +60,8 @@ struct DeviceChooserRequest: Identifiable, Equatable, Sendable {
   var displayOrigin: String {
     guard let host = origin.host() else { return pageURL.absoluteString }
     let normalizedHost = host.lowercased()
-    let formattedHost = normalizedHost.contains(":") && !normalizedHost.hasPrefix("[")
+    let formattedHost =
+      normalizedHost.contains(":") && !normalizedHost.hasPrefix("[")
       ? "[\(normalizedHost)]" : normalizedHost
     let port = origin.port.flatMap { port -> Int? in
       if (origin.scheme == "http" && port == 80) || (origin.scheme == "https" && port == 443) {
@@ -238,8 +239,9 @@ struct DeviceChooserConsent: View {
   init(store: BrowserStore, request: DeviceChooserRequest, initialSelection: String? = nil) {
     self.store = store
     self.request = request
-    _selection = State(initialValue: DeviceChooserSelection(
-      options: request.options, revision: request.revision, selectedOptionID: initialSelection))
+    _selection = State(
+      initialValue: DeviceChooserSelection(
+        options: request.options, revision: request.revision, selectedOptionID: initialSelection))
   }
 
   private var liveRequest: DeviceChooserRequest {
@@ -264,8 +266,9 @@ struct DeviceChooserConsent: View {
           .keyboardShortcut(.cancelAction)
         Spacer()
         Button(PanelsL10n.string("Connect")) {
-          resolve(optionID: selection.selectedOptionID(
-            for: presented.options, revision: presented.revision))
+          resolve(
+            optionID: selection.selectedOptionID(
+              for: presented.options, revision: presented.revision))
         }
         .disabled(!canConnect(presented))
       }
@@ -296,7 +299,8 @@ struct DeviceChooserConsent: View {
         LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(presented.options) { option in
             Button {
-              selection.select(option.optionID, from: presented.options, revision: presented.revision)
+              selection.select(
+                option.optionID, from: presented.options, revision: presented.revision)
             } label: {
               optionLabel(option, options: presented.options)
             }

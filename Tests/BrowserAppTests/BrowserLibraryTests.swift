@@ -48,7 +48,8 @@ struct BrowserLibraryTests {
   @Test func importReadErrorsUseLocalizedFallbackAndKeepKnownImporterMessages() {
     let fallback = "The selected file could not be read. Try another file."
     #expect(
-      LibraryPanel.importErrorMessage(CocoaError(.fileReadNoPermission)) == PanelsL10n.string(fallback))
+      LibraryPanel.importErrorMessage(CocoaError(.fileReadNoPermission))
+        == PanelsL10n.string(fallback))
     let knownError = BrowserImport.ImportError.unsupported
     #expect(LibraryPanel.importErrorMessage(knownError) == knownError.localizedDescription)
   }
@@ -78,12 +79,14 @@ struct BrowserLibraryTests {
     let beforeStart = ContinuousClock.now
     var beforeCount = 0
     for _ in 0..<10 {
-      beforeCount += items.filter {
-        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
-      }.count
-      beforeCount += items.filter {
-        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
-      }.count
+      beforeCount +=
+        items.filter {
+          LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+        }.count
+      beforeCount +=
+        items.filter {
+          LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: "Needle")
+        }.count
     }
     let before = beforeStart.duration(to: .now)
 

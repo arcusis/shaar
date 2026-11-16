@@ -164,12 +164,16 @@ enum PlatformParityVerdicts {
     if enabled == "false" {
       return PlatformParityDecision(
         passed: true, disposition: "pass",
-        evidence: "Google Safe Browsing is disabled in Shaar's ungoogled Chromium build; Shaar does not claim Safe Browsing protection.")
+        evidence:
+          "Google Safe Browsing is disabled in Shaar's ungoogled Chromium build; Shaar does not claim Safe Browsing protection."
+      )
     }
     if preferenceFilePresent {
       return PlatformParityDecision(
         passed: true, disposition: "pass",
-        evidence: "Google Safe Browsing is not included in Shaar's ungoogled Chromium build; Shaar does not claim Safe Browsing protection.")
+        evidence:
+          "Google Safe Browsing is not included in Shaar's ungoogled Chromium build; Shaar does not claim Safe Browsing protection."
+      )
     }
     return PlatformParityDecision(
       passed: false, disposition: "probe",

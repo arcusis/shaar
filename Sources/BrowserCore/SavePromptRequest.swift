@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Foundation
 import CoreFoundation
+import Foundation
 
 /// A password, card, or address save offer from Chromium. The payload never carries a
 /// password, a full card number, or a profile path.

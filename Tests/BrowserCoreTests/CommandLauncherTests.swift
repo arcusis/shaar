@@ -16,10 +16,11 @@ import Testing
     in: fixture.session, favoriteIDs: Set([fixture.favoriteID]))
 
   #expect(
-    keys == Set([
-      "https://open.example", "https://pinned.example", "https://closed.example",
-      "https://favorite.example",
-    ]))
+    keys
+      == Set([
+        "https://open.example", "https://pinned.example", "https://closed.example",
+        "https://favorite.example",
+      ]))
 }
 
 @Test func mostVisitedOpenPageSetFocusedBenchmark() throws {

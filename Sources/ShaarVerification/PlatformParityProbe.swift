@@ -365,7 +365,8 @@ enum PlatformParityRenderSurfacePolicy {
     guard let context, let page = pageURL(check) else { return ParitySnapshot() }
     trimTabs(in: context)
     var snapshot = ParitySnapshot()
-    let renderWindow = PlatformParityRenderSurfacePolicy.presentsFrames(forPath: check.path)
+    let renderWindow =
+      PlatformParityRenderSurfacePolicy.presentsFrames(forPath: check.path)
       ? context.window : nil
     let priorRenderWindowState = renderWindow.map {
       (alphaValue: $0.alphaValue, ignoresMouseEvents: $0.ignoresMouseEvents)
@@ -1063,7 +1064,8 @@ enum PlatformParityRenderSurfacePolicy {
     let outcome = text(snapshot.result["outcome"])
     if !outcome.isEmpty { parts.append("outcome \(outcome)") }
     for key in [
-      "name", "message", "stage", "state", "widevine", "clearkey", "code", "title", "create", "peer",
+      "name", "message", "stage", "state", "widevine", "clearkey", "code", "title", "create",
+      "peer",
     ] {
       let value = text(snapshot.result[key])
       if !value.isEmpty { parts.append("\(key) \(value)") }
@@ -1451,8 +1453,10 @@ private enum SurfaceGuard {
 extension NSWindow {
   @objc(parity_orderFront:) fileprivate func parityOrderFront(_ sender: Any?) {
     if SurfaceGuard.isInvisibleRenderingSurface(self) {
-      guard let implementation = class_getMethodImplementation(
-        NSWindow.self, #selector(NSWindow.parityOrderFront(_:))) else { return }
+      guard
+        let implementation = class_getMethodImplementation(
+          NSWindow.self, #selector(NSWindow.parityOrderFront(_:)))
+      else { return }
       let original = unsafeBitCast(
         implementation, to: (@convention(c) (AnyObject, Selector, Any?) -> Void).self)
       original(self, #selector(NSWindow.parityOrderFront(_:)), sender)

@@ -36,8 +36,9 @@ import Testing
       JSONSerialization.jsonObject(with: Data(contentsOf: preferences[0])) as? [String: Any])
     let autofill = try #require(values["autofill"] as? [String: Any])
 
-    #expect(preferences[0].deletingLastPathComponent().lastPathComponent
-      == "Profile \(profileID.uuidString.lowercased())")
+    #expect(
+      preferences[0].deletingLastPathComponent().lastPathComponent
+        == "Profile \(profileID.uuidString.lowercased())")
     #expect(values["credentials_enable_service"] as? Bool == true)
     #expect(autofill["profile_enabled"] as? Bool == true)
     #expect(autofill["credit_card_enabled"] as? Bool == true)

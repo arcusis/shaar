@@ -8,9 +8,10 @@ import Testing
 
 @Suite struct ShaarBrowsingEdgeProbeMediaTests {
   @Test func videoMustBeUnpausedToPassTheMediaProbe() {
-    #expect(ShaarBrowsingEdgeProbe.videoIsPlaying([
-      "video": true, "paused": false, "videoWidth": 320,
-    ]))
+    #expect(
+      ShaarBrowsingEdgeProbe.videoIsPlaying([
+        "video": true, "paused": false, "videoWidth": 320,
+      ]))
     #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying(["video": true, "paused": true]))
     #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying(["video": true]))
     #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying(["video": false, "paused": false]))

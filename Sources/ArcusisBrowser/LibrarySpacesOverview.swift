@@ -201,9 +201,11 @@ private struct LibrarySpaceCardHeader: View {
       .buttonStyle(.plain)
       .help(PanelsL10n.format("Select %@", .string(space.name)))
       .accessibilityLabel(
-        PanelsL10n.format("Select Space %@, Profile %@", .string(space.name), .string(profileName)))
+        PanelsL10n.format("Select Space %@, Profile %@", .string(space.name), .string(profileName))
+      )
       .accessibilityAddTraits(
-        LibrarySpacesOverview.spaceSelectionTraits(isSelected: store.session.selectedSpaceID == space.id))
+        LibrarySpacesOverview.spaceSelectionTraits(
+          isSelected: store.session.selectedSpaceID == space.id))
       Button {
         guard
           LibrarySpacesOverviewModel.canEdit(
@@ -352,7 +354,8 @@ private struct LibrarySpaceItemsView: View {
     .buttonStyle(.plain)
     .help("\(tab.title)\n\(tab.url.absoluteString)")
     .accessibilityLabel(
-      LibrarySpaceItemsAccessibility.tabLabel(title: tab.title, address: tab.url.absoluteString))
+      LibrarySpaceItemsAccessibility.tabLabel(title: tab.title, address: tab.url.absoluteString)
+    )
     .accessibilityAddTraits(selected ? .isSelected : [])
   }
 }

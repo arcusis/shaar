@@ -22,12 +22,13 @@ struct PrivatePageSleepingTests {
     }
     let downloads = DownloadsModel()
     for index in 0..<1_000 {
-      downloads.changed([
-        "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
-        "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
-        "paused": false, "dangerous": false, "offTheRecord": false,
-        "received": 0.0, "total": -1.0, "startTime": Double(index),
-      ], profileID: profileID)
+      downloads.changed(
+        [
+          "id": UUID().uuidString, "filename": "file-\(index)", "path": "",
+          "url": "https://download.example/file", "state": DownloadState.downloading.rawValue,
+          "paused": false, "dangerous": false, "offTheRecord": false,
+          "received": 0.0, "total": -1.0, "startTime": Double(index),
+        ], profileID: profileID)
     }
     let page = PrivatePageSession(
       runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,

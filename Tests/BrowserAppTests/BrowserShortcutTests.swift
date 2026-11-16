@@ -243,7 +243,10 @@ import Testing
       windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
       isARepeat: false, keyCode: 48)!
   }
-  for modifiers in [NSEvent.ModifierFlags(), .control, .control.union(.command), .control.union(.shift).union(.option)] {
+  for modifiers in [
+    NSEvent.ModifierFlags(), .control, .control.union(.command),
+    .control.union(.shift).union(.option),
+  ] {
     #expect(!PreviousTabShortcutRouting.route(event(.keyDown, modifiers), store: store))
   }
   #expect(!PreviousTabShortcutRouting.route(event(.keyUp, [.control, .shift]), store: store))
@@ -261,7 +264,10 @@ import Testing
       windowNumber: 0, context: nil, characters: "1", charactersIgnoringModifiers: "1",
       isARepeat: false, keyCode: 18)!
   }
-  for modifiers in [NSEvent.ModifierFlags(), .command.union(.shift), .command.union(.option), .command.union(.control)] {
+  for modifiers in [
+    NSEvent.ModifierFlags(), .command.union(.shift), .command.union(.option),
+    .command.union(.control),
+  ] {
     #expect(!TabNumberShortcutRouting.route(event(.keyDown, modifiers), store: store))
   }
   #expect(!TabNumberShortcutRouting.route(event(.keyUp, .command), store: store))

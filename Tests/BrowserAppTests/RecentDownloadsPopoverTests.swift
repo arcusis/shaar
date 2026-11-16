@@ -21,8 +21,9 @@ struct RecentDownloadsPopoverTests {
           received: 1, total: 1, startTime: Double(index)))
     }
 
-    #expect(RecentDownloadsPopover.presentedItems(downloads).map(\.filename) == [
-      "item-5.txt", "item-4.txt", "item-3.txt", "item-2.txt", "item-1.txt",
-    ])
+    #expect(
+      RecentDownloadsPopover.presentedItems(downloads).map(\.filename) == [
+        "item-5.txt", "item-4.txt", "item-3.txt", "item-2.txt", "item-1.txt",
+      ])
   }
 }

@@ -168,7 +168,7 @@ final class WebsitePermissionPromptProbe {
     // Chromium auto-allows mailto to the system handler before Shaar's custom
     // protocol consent delegate. Only the web+ scheme proves this prompt path.
     for (scheme, registrationPath, target) in [
-      ("web+shaarparity", "protocol", "web+shaarparity:hello"),
+      ("web+shaarparity", "protocol", "web+shaarparity:hello")
     ] {
       let source = fixture.appending(path: registrationPath)
       guard engine?.navigateCurrentPage(to: source) == true,
@@ -202,8 +202,9 @@ final class WebsitePermissionPromptProbe {
   private func run(_ page: FixturePage) async -> Check {
     var check = Check(name: page.name, kind: page.kind)
     var url = fixture.appending(path: page.path)
-    if page.name == "media-deny", var components = URLComponents(
-      url: url, resolvingAgainstBaseURL: false)
+    if page.name == "media-deny",
+      var components = URLComponents(
+        url: url, resolvingAgainstBaseURL: false)
     {
       // A distinct origin forces a fresh device-consent decision after Allow.
       components.host = "localhost"
@@ -255,14 +256,16 @@ final class WebsitePermissionPromptProbe {
       }
       await pause(100)
     }
-    let prompted = check.captured && check.kinds.contains("camera")
+    let prompted =
+      check.captured && check.kinds.contains("camera")
       && check.kinds.contains("microphone")
     if page.name == "media-allow" {
       mediaAllowPrompted = prompted
       mediaTracks = mediaTracksReady(check.result)
     } else if page.name == "media-deny" {
       mediaDenyPrompted = prompted
-      mediaDenied = check.result["outcome"] as? String == "rejected"
+      mediaDenied =
+        check.result["outcome"] as? String == "rejected"
         && check.result["name"] as? String == "NotAllowedError"
     }
     return check

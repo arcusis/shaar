@@ -99,7 +99,8 @@ public struct ExternalAppRequest: Identifiable, Equatable, Sendable {
   private static func normalizedApplicationName(_ name: String?) -> String?? {
     guard let name else { return .some(nil) }
     let displayName = String(name.unicodeScalars.filter { !isBidiFormattingControl($0) })
-    guard !displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+    guard
+      !displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
     else { return nil }
     let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard trimmed.utf8.count <= 256 else { return nil }

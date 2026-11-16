@@ -27,23 +27,28 @@ import Testing
 @Test func folderMembershipLookupValidatesParentsAndTabs() {
   let root = BrowserFolder(name: "Root", isPinned: true)
   let child = BrowserFolder(name: "Child", parentID: root.id, isPinned: true)
-  let tab = BrowserTab(url: URL(string: "https://example.test")!, isPinned: true, folderID: child.id)
+  let tab = BrowserTab(
+    url: URL(string: "https://example.test")!, isPinned: true, folderID: child.id)
 
   #expect(SessionFolderValidation.membershipIsValid(folders: [root, child], tabs: [tab]))
-  #expect(!SessionFolderValidation.membershipIsValid(
-    folders: [root, BrowserFolder(name: "Child", parentID: root.id)], tabs: [tab]))
-  #expect(!SessionFolderValidation.membershipIsValid(
-    folders: [root], tabs: [BrowserTab(url: tab.url, isPinned: true, folderID: child.id)]))
+  #expect(
+    !SessionFolderValidation.membershipIsValid(
+      folders: [root, BrowserFolder(name: "Child", parentID: root.id)], tabs: [tab]))
+  #expect(
+    !SessionFolderValidation.membershipIsValid(
+      folders: [root], tabs: [BrowserTab(url: tab.url, isPinned: true, folderID: child.id)]))
 }
 
 @Test func sessionValidationSkipsFolderTraversalWhenNoFoldersExist() {
   let space = BrowserSession.fresh().selectedSpace
   var traversals = 0
 
-  let matches = SessionFolderValidation.folderItemsMatch(space, makeItems: {
-    traversals += 1
-    return []
-  })
+  let matches = SessionFolderValidation.folderItemsMatch(
+    space,
+    makeItems: {
+      traversals += 1
+      return []
+    })
 
   #expect(matches)
   #expect(traversals == 0)

@@ -70,7 +70,8 @@ struct PrivatePageSessionTests {
     defer { page.stopSleepingTabWatch() }
 
     page.navigationFailed("Connection failed")
-    page.tabChanged(tabID, url: "about:blank", title: "", loading: false, back: false, forward: false)
+    page.tabChanged(
+      tabID, url: "about:blank", title: "", loading: false, back: false, forward: false)
     #expect(page.failure == "Connection failed")
 
     page.tabChanged(

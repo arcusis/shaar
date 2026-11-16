@@ -15,7 +15,8 @@ import Testing
     }
     #expect(!PlatformParityRenderSurfacePolicy.presentsFrames(forPath: "/eme"))
     #expect(PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: true))
-    #expect(!PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: false))
+    #expect(
+      !PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: false))
     #expect(!PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 1, ignoresMouseEvents: true))
   }
 

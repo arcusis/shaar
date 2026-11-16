@@ -70,7 +70,9 @@ struct ShaarHistoryAdapterTests {
 
   @Test func queryRejectsVisitCountBelowReturnedTimestamps() async throws {
     let fake = FakeHistoryEngine(
-      reply: #"{"schemaVersion":1,"entries":[{"url":"https://example.test/","title":"A","visitCount":0,"visits":[1]}]}"#)
+      reply:
+        #"{"schemaVersion":1,"entries":[{"url":"https://example.test/","title":"A","visitCount":0,"visits":[1]}]}"#
+    )
     await #expect(
       throws: ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row")
     ) {

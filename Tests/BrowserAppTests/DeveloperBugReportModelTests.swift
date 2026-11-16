@@ -80,8 +80,13 @@ struct DeveloperBugReportModelTests {
   }
 
   @Test func consoleMessagesRedactCommonCredentialForms() {
+    let fixtureJWT = [
+      "eyJhbGciOiJIUzI1NiJ9",
+      "eyJzdWIiOiJ1c2VyIn0",
+      "signatureValue123",
+    ].joined(separator: ".")
     let raw = """
-      request failed Authorization: Bearer fixture-bearer {"access_token":"fixture-json-token"} https://report-user:fixture-url-password@report.localhost/callback?custom=fixture-url-query#fixture-fragment&code=fixture-code&STATE=fixture-state eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signatureValue123
+      request failed Authorization: Bearer fixture-bearer {"access_token":"fixture-json-token"} https://report-user:fixture-url-password@report.localhost/callback?custom=fixture-url-query#fixture-fragment&code=fixture-code&STATE=fixture-state \(fixtureJWT)
       Cookie: session=fixture-cookie
       Password: fixture password with spaces
       """
@@ -93,7 +98,7 @@ struct DeveloperBugReportModelTests {
       "fixture-bearer", "fixture-json-token", "fixture-query", "fixture-code", "fixture-state",
       "fixture-cookie", "fixture password with spaces", "fixture-url-password",
       "fixture-url-query", "fixture-fragment",
-      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signatureValue123",
+      fixtureJWT,
     ] {
       #expect(!value.contains(secret), "\(secret)")
     }

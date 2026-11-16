@@ -109,6 +109,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length > 0:
             self.rfile.read(min(length, 65536))
+        if self.path in ("/address", "/card", "/password"):
+            self.path = "/saved"
         self.do_GET()
 
     def do_GET(self):
@@ -313,30 +315,35 @@ class Handler(BaseHTTPRequestHandler):
             return page("handled", "", "finish({outcome:'handled', href:location.href});"), html, []
         if route == "/address":
             return page("address", """
-              <form action="/saved" method="post">
-                <input name="name" autocomplete="name" value="Parity Probe">
-                <input name="street-address" autocomplete="street-address" value="1 Loopback Road">
-                <input name="address-level2" autocomplete="address-level2" value="Local">
-                <input name="postal-code" autocomplete="postal-code" value="00000">
-                <input name="email" autocomplete="email" value="parity@localhost">
-                <button id="parity-action" type="submit" style="position:fixed;left:8px;top:8px;width:180px;height:48px">Save address</button>
+              <form action="/address" method="post" autocomplete="on">
+                <input id="address-name" name="name" autocomplete="name">
+                <input id="address-street" name="street-address" autocomplete="street-address">
+                <input id="address-city" name="address-level2" autocomplete="address-level2">
+                <input id="address-region" name="address-level1" autocomplete="address-level1">
+                <input id="address-postal" name="postal-code" autocomplete="postal-code">
+                <input id="address-country" name="country-name" autocomplete="country-name">
+                <input id="address-email" name="email" type="email" autocomplete="email">
+                <button id="parity-action" type="submit" style="position:fixed;right:8px;bottom:8px;width:180px;height:48px">Save address</button>
               </form>
             """, ""), html, []
         if route == "/card":
             return page("card", """
-              <form action="/saved" method="post">
-                <input name="cc-name" autocomplete="cc-name" value="Parity Probe">
-                <input name="cc-number" autocomplete="cc-number" value="4111111111111111">
-                <input name="cc-exp" autocomplete="cc-exp" value="12/30">
-                <button id="parity-action" type="submit" style="position:fixed;left:8px;top:8px;width:180px;height:48px">Pay</button>
+              <form action="/card" method="post" autocomplete="on">
+                <input id="card-name" name="cc-name" autocomplete="cc-name">
+                <input id="card-number" name="cc-number" inputmode="numeric" autocomplete="cc-number">
+                <input id="card-exp-month" name="cc-exp-month" autocomplete="cc-exp-month">
+                <input id="card-exp-year" name="cc-exp-year" autocomplete="cc-exp-year">
+                <button id="parity-action" type="submit" style="position:fixed;right:8px;bottom:8px;width:180px;height:48px">Pay</button>
               </form>
             """, ""), html, []
         if route == "/password":
             return page("password", """
-              <form action="/saved" method="post">
-                <input name="username" autocomplete="username" value="parity-user">
-                <input name="password" type="password" autocomplete="current-password" value="parity-secret">
-                <button id="parity-action" type="submit" style="position:fixed;left:8px;top:8px;width:180px;height:48px">Sign in</button>
+              <form action="/password" method="post" autocomplete="on">
+                <label for="username">Email or username</label>
+                <input id="username" name="username" autocomplete="username">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password">
+                <button id="parity-action" type="submit" style="position:fixed;right:8px;bottom:8px;width:180px;height:48px">Sign in</button>
               </form>
             """, ""), html, []
         if route == "/saved":
@@ -851,6 +858,22 @@ def check_fixtures(http_base, https_base):
         raise SystemExit("pwa fixture missing worker")
     if b"submitted" not in fetch(http_base + "/saved").read():
         raise SystemExit("saved fixture missing")
+    autofill_forms = {
+        "address": ("address-name", "address-street", "address-city", "address-postal"),
+        "card": ("card-name", "card-number", "card-exp-month", "card-exp-year"),
+        "password": ("username", "password"),
+    }
+    for route, field_ids in autofill_forms.items():
+        url = http_base + "/" + route
+        form = fetch(url).read()
+        if f'action="/{route}"'.encode() not in form or any(
+            f'id="{field_id}"'.encode() not in form for field_id in field_ids
+        ):
+            raise SystemExit(f"{route} autofill form missing trusted-input fields")
+        submitted = urllib.request.urlopen(
+            urllib.request.Request(url, data=b"probe=1"), timeout=5).read()
+        if b"outcome:'submitted'" not in submitted:
+            raise SystemExit(f"{route} autofill form did not submit")
     partition = fetch(http_base + "/partition-a").read()
     if b"http://localhost:" not in partition:
         raise SystemExit("partition fixture missing iframe")

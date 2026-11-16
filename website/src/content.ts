@@ -74,48 +74,6 @@ export const upcomingRelease = {
   ],
 };
 
-// Real Shaar screenshots (live Chromium pages, captured offscreen at 2x by the
-// website screenshot harness). Files live in website/screens/; the build falls back to
-// the repository's .github/assets/ when a file is missing.
-export const screens = {
-  hero: {
-    file: "hero.png",
-    width: 2880,
-    height: 1920,
-    alt: "Shaar in the Work Space on arcusis.com, with its tabs in the sidebar",
-  },
-  spaces: {
-    file: "spaces.webp",
-    width: 2880,
-    height: 1920,
-    alt: "Shaar in the Hasbara Space, in its own color, on hasbara.co.il",
-  },
-  profiles: {
-    file: "profiles.webp",
-    width: 1800,
-    height: 1464,
-    alt: "Shaar Settings showing the Work profile used by the Work, Hasbara and Freight Spaces, and a separate Personal profile",
-  },
-  launcher: {
-    file: "command-t.webp",
-    width: 2880,
-    height: 1920,
-    alt: `${commandInterfaceName} searching for freight across history, open tabs and Spaces`,
-  },
-  siteControls: {
-    file: "site-controls.webp",
-    width: 2880,
-    height: 1920,
-    alt: "Site control center on arcusis.com with permissions, the secure connection and reload actions",
-  },
-  extensions: {
-    file: "extensions.webp",
-    width: 2880,
-    height: 1920,
-    alt: "Shaar on arcusis.com with Dark Reader and Bitwarden from the Chrome Web Store in the toolbar",
-  },
-} as const;
-
 export interface SitePage {
   path: string;
   title: string;

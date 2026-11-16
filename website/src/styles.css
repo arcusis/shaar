@@ -2055,6 +2055,15 @@ html:not([data-enhanced]) .tour-interaction {
   color: var(--ink-3);
   text-transform: uppercase;
 }
+.tour-capture-gap {
+  display: flex;
+  align-items: center;
+  min-height: 220px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 16px;
+  line-height: 1.45;
+}
 @media (min-width: 961px) and (prefers-reduced-motion: no-preference) {
   [data-tour-motion] .tour-feature .tour-copy {
     opacity: 0;

@@ -15,12 +15,23 @@ test("every release feature has a screenshot, named choices and live feedback", 
   const articles = [...document.querySelectorAll<HTMLElement>("[data-tour-feature]")];
   assert.equal(articles.length, tourFeatures.length);
   assert.equal(new Set(tourFeatures.map((feature) => feature.id)).size, tourFeatures.length);
+  const withoutCapture = new Set(["widevine", "devtools"]);
   for (const article of articles) {
     assert.ok(article.id);
     assert.ok(article.querySelector(`h3#${article.id}-title`));
+    const feature = tourFeatures.find((item) => item.id === article.id);
+    assert.ok(feature);
     const shot = article.querySelector("img");
-    assert.ok(shot?.getAttribute("src")?.startsWith("/assets/screens/"), article.id);
-    assert.ok(shot?.getAttribute("alt"), article.id);
+    if (withoutCapture.has(article.id)) {
+      assert.equal(feature.shot, undefined, article.id);
+      assert.equal(shot, null, article.id);
+      assert.match(article.textContent ?? "", /No .+ screenshot in the 0\.2\.0 set/, article.id);
+    } else {
+      assert.equal(shot?.getAttribute("src"), `/assets/screens/${feature.shot?.file}`, article.id);
+      assert.ok(shot?.getAttribute("alt"), article.id);
+      assert.equal(shot?.getAttribute("alt")?.includes("pending"), false, article.id);
+    }
+    assert.equal(article.textContent?.includes("REFERENCE CAPTURE"), false, article.id);
     assert.ok(
       article.querySelectorAll('button[type="button"][aria-pressed]').length >= 2,
       article.id,

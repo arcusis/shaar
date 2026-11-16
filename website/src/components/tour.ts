@@ -2,23 +2,29 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import { existsSync } from "node:fs";
-import { commandInterfaceName, screens } from "../content";
+import { commandInterfaceName } from "../content";
 import { escapeHtml } from "../html";
+
+interface TourShot {
+  file: string;
+  width: number;
+  height: number;
+  alt: string;
+}
 
 interface TourFeature {
   id: string;
   category: string;
   title: string;
   description: string;
-  capture: string;
-  fallback: keyof typeof screens;
   choices: readonly [string, string, string][];
+  shot?: TourShot;
+  captureNote?: string;
   note?: string;
 }
 
-// Capture names are stable handoff points for web-screens-020. Matching WebP or
-// PNG files in website/screens/ replace fallbacks without changing markup.
+// Each shot is a shaar.48 capture from thefourcraft/web-screens-020. Widevine and
+// Developer Tools have no frame in that set, so those sections do not borrow another screen.
 export const tourFeatures: TourFeature[] = [
   {
     id: "spaces",
@@ -26,8 +32,12 @@ export const tourFeatures: TourFeature[] = [
     title: "A Space for every part of your day",
     description:
       "Keep tabs, pinned pages and folders in a colored Space. Switch without losing your place.",
-    capture: "tour-spaces",
-    fallback: "spaces",
+    shot: {
+      file: "spaces.webp",
+      width: 2880,
+      height: 1920,
+      alt: "Shaar in the Hasbara Space on hasbara.co.il, with the sidebar open",
+    },
     choices: [
       ["Hasbara", "Hasbara Space · research stays here", "blue"],
       ["Work", "Work Space · Arcusis and GitHub tabs", "green"],
@@ -40,8 +50,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Profiles keep accounts apart",
     description:
       "Cookies, sign-ins, history and extensions belong to a profile. Spaces can share one profile or use separate ones.",
-    capture: "tour-profiles",
-    fallback: "profiles",
+    shot: {
+      file: "profiles.webp",
+      width: 1800,
+      height: 1464,
+      alt: "Shaar Settings showing the Work profile, with three Spaces, and a separate Personal profile",
+    },
     choices: [
       ["Work", "Work profile · Work and Freight Spaces", "green"],
       ["Personal", "Personal profile · Hasbara Space", "blue"],
@@ -53,8 +67,12 @@ export const tourFeatures: TourFeature[] = [
     title: `${commandInterfaceName} is one shortcut away`,
     description:
       "Command-T searches open tabs, history, bookmarks and browser actions. Use arrows and Return to jump in.",
-    capture: "tour-launcher",
-    fallback: "launcher",
+    shot: {
+      file: "command-t.webp",
+      width: 2880,
+      height: 1920,
+      alt: `${commandInterfaceName} searching for freight across open tabs, history and Spaces on arcusis.com`,
+    },
     choices: [
       ["Open tabs", "2 open tabs ready to switch", "green"],
       ["History", "Recent pages ready to revisit", "blue"],
@@ -67,8 +85,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Bring your extensions",
     description:
       "Install from Chrome Web Store. Shaar asks for consent before adding an extension to a profile.",
-    capture: "tour-extensions",
-    fallback: "extensions",
+    shot: {
+      file: "web-store-bitwarden-consent.webp",
+      width: 1100,
+      height: 1300,
+      alt: "Shaar consent sheet for adding Bitwarden Password Manager from the Chrome Web Store to the Work profile",
+    },
     choices: [
       ["Web Store", "Chrome Web Store · choose Add to Chrome", "green"],
       ["Review", "Shaar consent sheet · review permissions", "amber"],
@@ -81,8 +103,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Downloads stay in reach",
     description:
       "The Downloads drawer shows progress, then lets you open a file or reveal it in Finder.",
-    capture: "tour-downloads",
-    fallback: "siteControls",
+    shot: {
+      file: "downloads-light.webp",
+      width: 640,
+      height: 520,
+      alt: "Shaar Downloads drawer with Shaar-0.2.0.dmg downloading",
+    },
     choices: [
       ["Downloading", "Shaar.dmg · downloading 64%", "amber"],
       ["Complete", "Shaar.dmg · ready to open", "green"],
@@ -95,8 +121,12 @@ export const tourFeatures: TourFeature[] = [
     title: "A private window has its own session",
     description:
       "Private windows isolate cookies, history and cache from normal browsing. Close them to end that session.",
-    capture: "tour-private",
-    fallback: "spaces",
+    shot: {
+      file: "private-window-light.webp",
+      width: 2200,
+      height: 1440,
+      alt: "Shaar private window on its start page, with private protections listed",
+    },
     choices: [
       ["Normal", "Normal window · profile history on", "green"],
       ["Private", "Private window · separate temporary session", "blue"],
@@ -108,8 +138,12 @@ export const tourFeatures: TourFeature[] = [
     category: "03 / Browse with control",
     title: "Web dialogs feel at home",
     description: "JavaScript alert, confirm and prompt requests appear as native Shaar sheets.",
-    capture: "tour-dialogs",
-    fallback: "siteControls",
+    shot: {
+      file: "javascript-dialog.webp",
+      width: 1040,
+      height: 880,
+      alt: "Shaar JavaScript alert sheet from arcusis.com saying Welcome to Shaar 0.2.0",
+    },
     choices: [
       ["Alert", "This page says: Your changes are saved.", "green"],
       ["Confirm", "This page asks: Continue? · Cancel or OK", "amber"],
@@ -121,8 +155,12 @@ export const tourFeatures: TourFeature[] = [
     category: "03 / Browse with control",
     title: "Protected sites can ask you to sign in",
     description: "HTTP Basic authentication opens a dedicated username and password sheet.",
-    capture: "tour-basic-auth",
-    fallback: "siteControls",
+    shot: {
+      file: "basic-auth.webp",
+      width: 1040,
+      height: 880,
+      alt: "Shaar sign-in sheet asking for a username and password for arcusis.com, realm Members",
+    },
     choices: [
       ["Request", "Protected page requests credentials", "amber"],
       ["Sign in", "Username and password sent to this site", "green"],
@@ -135,8 +173,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Site access stays your choice",
     description:
       "Camera, microphone, location, notifications and MIDI requests each get a clear site permission prompt.",
-    capture: "tour-permissions",
-    fallback: "siteControls",
+    shot: {
+      file: "permission-camera-mic-location.webp",
+      width: 1000,
+      height: 1120,
+      alt: "Shaar permission prompt asking to allow camera, microphone and location for arcusis.com",
+    },
     choices: [
       ["Camera", "Camera access requested by this site", "green"],
       ["Mic", "Microphone access requested by this site", "blue"],
@@ -151,8 +193,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Save details. Fill them when needed.",
     description:
       "Shaar can ask to save passwords, payment cards and addresses, then offer saved details on return visits.",
-    capture: "tour-autofill",
-    fallback: "profiles",
+    shot: {
+      file: "save-password.webp",
+      width: 720,
+      height: 392,
+      alt: "Shaar save-password prompt for parity-user on a local page, with Not now, Never for this site and Save",
+    },
     choices: [
       ["Passwords", "Save password? · Save, Not now or Never", "green"],
       ["Cards", "Save payment card? · Review before saving", "blue"],
@@ -165,8 +211,12 @@ export const tourFeatures: TourFeature[] = [
     category: "03 / Browse with control",
     title: "Web links can open apps with consent",
     description: "A site asking to handle a protocol gets an explicit Shaar confirmation first.",
-    capture: "tour-protocols",
-    fallback: "siteControls",
+    shot: {
+      file: "protocol-handler.webp",
+      width: 1000,
+      height: 1080,
+      alt: "Shaar consent sheet asking whether to open one mailto link from arcusis.com in Mail",
+    },
     choices: [
       ["Request", "This site wants to open a link in another app", "amber"],
       ["Allow", "Open link with the selected app", "green"],
@@ -178,8 +228,12 @@ export const tourFeatures: TourFeature[] = [
     category: "03 / Browse with control",
     title: "Pick the device you mean",
     description: "Bluetooth and Serial requests show a device picker, with a clear way to cancel.",
-    capture: "tour-devices",
-    fallback: "siteControls",
+    shot: {
+      file: "device-chooser-bluetooth.webp",
+      width: 1000,
+      height: 840,
+      alt: "Shaar Bluetooth device chooser for arcusis.com, explaining that macOS has not allowed Bluetooth for Shaar",
+    },
     choices: [
       ["Bluetooth", "Choose a nearby Bluetooth device", "blue"],
       ["Serial", "Choose a connected Serial device", "amber"],
@@ -192,8 +246,12 @@ export const tourFeatures: TourFeature[] = [
     title: "The web can play",
     description:
       "Video and audio play in page. Move a video into picture-in-picture and keep it visible while you browse.",
-    capture: "tour-video",
-    fallback: "hero",
+    shot: {
+      file: "picture-in-picture.webp",
+      width: 712,
+      height: 400,
+      alt: "Shaar picture-in-picture controls, with pause, ten-second skip and close",
+    },
     choices: [
       ["Play", "Video playing in its tab", "green"],
       ["Picture in Picture", "Video floats above other windows", "blue"],
@@ -206,8 +264,8 @@ export const tourFeatures: TourFeature[] = [
     title: "Ready for protected playback",
     description:
       "The engine supports Widevine playback when a licensed CDM is included in the build.",
-    capture: "tour-widevine",
-    fallback: "hero",
+    captureNote:
+      "No Widevine screenshot in the 0.2.0 set. The public build does not include a licensed CDM.",
     choices: [
       ["Open video", "Standard video plays now", "green"],
       ["Protected title", "Widevine CDM required for this title", "amber"],
@@ -220,8 +278,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Quiet tabs can sleep",
     description:
       "Choose when inactive tabs sleep and which sites stay awake. Active, pinned and playing tabs remain awake.",
-    capture: "tour-sleeping-tabs",
-    fallback: "spaces",
+    shot: {
+      file: "sleeping-tabs-settings.webp",
+      width: 1800,
+      height: 1464,
+      alt: "Shaar Settings, General, showing sleeping tabs, a two-hour discard time and sites that never sleep",
+    },
     choices: [
       ["Active", "This tab stays awake", "green"],
       ["Inactive", "Inactive tab is sleeping to save memory", "blue"],
@@ -234,8 +296,12 @@ export const tourFeatures: TourFeature[] = [
     title: "A safer route comes first",
     description:
       "Shaar tries HTTPS before an insecure public page and warns before continuing over HTTP.",
-    capture: "tour-https-first",
-    fallback: "siteControls",
+    shot: {
+      file: "https-first-warning.webp",
+      width: 2880,
+      height: 1920,
+      alt: "Shaar warning that trackertest.org does not support a secure connection, with Continue to site and Go back",
+    },
     choices: [
       ["HTTPS", "Secure connection available", "green"],
       ["HTTP warning", "Insecure connection · review before continuing", "amber"],
@@ -248,8 +314,8 @@ export const tourFeatures: TourFeature[] = [
     title: "Developer Tools are one F12 away",
     description:
       "Inspect Elements, Console, Network and more in Chromium Developer Tools, alongside Shaar panels.",
-    capture: "tour-devtools",
-    fallback: "hero",
+    captureNote:
+      "No Developer Tools screenshot in the 0.2.0 set. The offscreen host does not paint the F12 panel.",
     choices: [
       ["Elements", "Inspect page structure and styles", "green"],
       ["Console", "Read messages and run JavaScript", "blue"],
@@ -262,8 +328,12 @@ export const tourFeatures: TourFeature[] = [
     category: "05 / Stay in flow",
     title: "Stop a page when you need to",
     description: "The toolbar can stop a loading page without closing its tab. Reload when ready.",
-    capture: "tour-stop-loading",
-    fallback: "hero",
+    shot: {
+      file: "stop-loading.webp",
+      width: 2880,
+      height: 1920,
+      alt: "Shaar toolbar showing Stop while arcusis.com is open in the Work Space",
+    },
     choices: [
       ["Loading", "Page is loading · Stop available", "amber"],
       ["Stop", "Loading stopped · tab stays open", "blue"],
@@ -276,8 +346,12 @@ export const tourFeatures: TourFeature[] = [
     title: "Pick up where you left off",
     description:
       "Quit and relaunch to restore your session. Reopen a closed tab or window when you change your mind.",
-    capture: "tour-restore",
-    fallback: "spaces",
+    shot: {
+      file: "sleeping-tabs-settings.webp",
+      width: 1800,
+      height: 1464,
+      alt: "Shaar Settings, General, with On startup set to Restore windows and tabs",
+    },
     choices: [
       ["Relaunch", "Spaces and tabs restored", "green"],
       ["Reopen tab", "Closed tab returned", "blue"],
@@ -290,8 +364,12 @@ export const tourFeatures: TourFeature[] = [
     title: "At home in Hebrew",
     description:
       "Shaar supports Hebrew and right-to-left interface layouts, including browser sheets and Developer Tools.",
-    capture: "tour-hebrew",
-    fallback: "profiles",
+    shot: {
+      file: "hebrew-window.webp",
+      width: 2880,
+      height: 1920,
+      alt: "Shaar in Hebrew, with the sidebar on the right, showing arcusis.com",
+    },
     choices: [
       ["English", "Settings · Profiles · Downloads", "green"],
       ["עברית", "הגדרות · פרופילים · הורדות", "blue"],
@@ -299,20 +377,13 @@ export const tourFeatures: TourFeature[] = [
   },
 ];
 
-function captureFile(feature: TourFeature): string | undefined {
-  return ["webp", "png"]
-    .map((extension) => `${feature.capture}.${extension}`)
-    .find((file) => existsSync(new URL(`../../screens/${file}`, import.meta.url)));
-}
-
 function screenshot(feature: TourFeature): string {
-  const capture = captureFile(feature);
-  const fallback = screens[feature.fallback];
-  const file = capture ?? fallback.file;
-  const alt = capture
-    ? `Shaar 0.2.0 showing ${feature.title.toLowerCase()}`
-    : `Existing Shaar screenshot: ${fallback.alt}. Feature-specific capture pending.`;
-  return `<img src="/assets/screens/${file}" width="${fallback.width}" height="${fallback.height}" loading="lazy" decoding="async" alt="${escapeHtml(alt)}">`;
+  const label = feature.category.replace(/^\d+ \/ /, "");
+  const shot = feature.shot;
+  if (!shot) {
+    return `<p class="tour-capture-gap">${escapeHtml(feature.captureNote ?? "")}</p><figcaption class="mono">Shaar 0.2.0 · ${escapeHtml(label)}</figcaption>`;
+  }
+  return `<img src="/assets/screens/${shot.file}" width="${shot.width}" height="${shot.height}" loading="lazy" decoding="async" alt="${escapeHtml(shot.alt)}"><figcaption class="mono">Shaar 0.2.0 · ${escapeHtml(label)}</figcaption>`;
 }
 
 function preview(feature: TourFeature, choiceIndex: number): string {
@@ -363,7 +434,7 @@ function feature(feature: TourFeature, index: number): string {
       <h3 id="${feature.id}-title">${escapeHtml(feature.title)}</h3><p class="tour-description">${escapeHtml(feature.description)}</p>
       <div class="tour-interaction"><p class="tour-try mono">INTERACTIVE PREVIEW <span aria-hidden="true">↘</span></p><div class="tour-options" role="group" aria-label="${escapeHtml(feature.title)} options">${feature.choices.map(([label, message, tone], choiceIndex) => `<button type="button" data-choice="${choiceIndex}" data-message="${escapeHtml(message)}" data-tone="${tone}" aria-pressed="${choiceIndex === 0}">${escapeHtml(label)}</button>`).join("")}</div><div class="tour-preview-stack">${feature.choices.map((_, choiceIndex) => preview(feature, choiceIndex)).join("")}</div><div class="tour-live" role="status" aria-live="polite"><span class="tour-live-dot" aria-hidden="true"></span><span data-tour-output>${escapeHtml(first[1])}</span></div></div>
       ${feature.note ? `<p class="tour-note">${escapeHtml(feature.note)}</p>` : ""}
-    </div><figure class="tour-image">${screenshot(feature)}<figcaption class="mono">${captureFile(feature) ? `SHAAR 0.2.0 · ${escapeHtml(feature.category.replace(/^\d+ \/ /, ""))}` : "SHAAR APP · REFERENCE CAPTURE"}</figcaption></figure>
+    </div><figure class="tour-image">${screenshot(feature)}</figure>
   </article>`;
 }
 

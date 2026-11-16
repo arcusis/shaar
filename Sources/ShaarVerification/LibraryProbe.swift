@@ -71,6 +71,13 @@ final class LibraryProbe {
   }
 
   func run() async throws -> [String] {
+    defer {
+      // Native bookmark removal opens this sheet; later fixtures need a free panel route.
+      if case .library = store.sheet {
+        store.sheet = nil
+        store.sheetDidDismiss()
+      }
+    }
     do {
       try await exercise()
       try report(error: nil)

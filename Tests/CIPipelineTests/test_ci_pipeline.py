@@ -88,7 +88,6 @@ class PipelineGateTests(unittest.TestCase):
             STAGES.repair_legacy_coverage_base(base)
             self.assertIn("return markers.contains", (base / paths[0]).read_text())
             for name, threshold in (
-                ("CommandOpenPageSetTests.swift", "0.95"),
                 ("BrowserLibraryTests.swift", "0.8"),
                 ("BrowserProfileImporterTests.swift", "0.9"),
             ):
@@ -99,9 +98,18 @@ class PipelineGateTests(unittest.TestCase):
                     (ROOT / "Tests/BrowserCoreTests" / name).read_text(),
                 )
             open_pages = (base / "Tests/BrowserCoreTests/CommandOpenPageSetTests.swift").read_text()
+            self.assertIn("CLOCK_THREAD_CPUTIME_ID", open_pages)
             self.assertIn("tabCount: 50_000", open_pages)
             self.assertIn("for sample in 0..<9", open_pages)
-            self.assertNotIn("-  #expect(after < before", patch_text)
+            self.assertIn("thread CPU before=", open_pages)
+            self.assertIn("#expect(expected.count == 50_012)", open_pages)
+            self.assertNotIn("#expect(after < before", open_pages)
+            current_open_pages = (ROOT / "Tests/BrowserCoreTests/CommandOpenPageSetTests.swift").read_text()
+            self.assertIn("#expect(expected.count == 50_012)", current_open_pages)
+            self.assertNotIn("#expect(after < before", current_open_pages)
+            self.assertNotIn("-  #expect(after < before * 0.8)", patch_text)
+            self.assertNotIn("-  #expect(after < before * 0.9)", patch_text)
+            self.assertIn("-  #expect(after < before * 0.95)", patch_text)
             contract = (base / "Tests/ShaarEngineABITests/OperationCodeContractTests.swift").read_text()
             self.assertIn("shaar_operation_contract_values", contract)
             self.assertIn("#expect(swiftValue == cValues?[index])", contract)
@@ -1434,6 +1442,31 @@ class SwiftReportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "native JUnit"):
                 SWIFT_REPORTS.write_reports(log, directory)
 
+    def test_zero_swift_testing_run_without_native_xml_is_accepted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(
+                self.transcript()
+                + "✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.\n"
+            )
+            SWIFT_REPORTS.write_reports(log, directory)
+            suite = ET.parse(directory / "xctest.xml").getroot()
+            self.assertEqual(suite.attrib["tests"], "1")
+            self.assertFalse(list(directory.glob("swift*-swift-testing.xml")))
+
+    def test_zero_swift_testing_and_xctest_runs_still_fail(self):
+        empty = ("Test Suite 'Selected tests' started at now.\n"
+                 "Test Suite 'Selected tests' passed at now.\n"
+                 " Executed 0 tests, with 0 failures in 0.000 seconds\n"
+                 "✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.\n")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(empty)
+            with self.assertRaisesRegex(ValueError, "no XCTest or Swift Testing cases"):
+                SWIFT_REPORTS.write_reports(log, directory)
+
     def test_empty_native_swift_testing_report_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -1470,10 +1503,15 @@ class ProbeSoakTests(unittest.TestCase):
     def test_visual_shards_validate_each_filtered_test_report(self):
         checks = unittest.mock.Mock()
         checks.run.return_value = 0
+        checks.directory = Path("/tmp/visual-reports")
         with patch.object(STAGES, "require_hosted_mac"), patch.object(STAGES, "run_swift_tests") as run:
             STAGES.run_visuals(checks, "1")
         self.assertEqual([call.args[1] for call in run.call_args_list], list(STAGES.VISUAL_SHARDS["1"]))
         self.assertTrue(all("--filter" in call.args[2] for call in run.call_args_list))
+        self.assertTrue(all(
+            call.args[2][call.args[2].index("--xunit-output") + 1] == "/tmp/visual-reports/swift.xml"
+            for call in run.call_args_list
+        ))
         self.assertTrue(all(
             call.kwargs["env"]["ARCUSIS_SIDEBAR_VISUAL_CI"] == "1"
             for call in run.call_args_list

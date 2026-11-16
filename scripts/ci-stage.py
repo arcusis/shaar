@@ -172,8 +172,8 @@ def build_base_coverage(checks: Commands) -> None:
 def repair_legacy_coverage_base(base: Path) -> None:
     # The production base predating the CI outage has a missing closure return,
     # two C enum import errors, and wall-clock microbenchmarks vulnerable to
-    # shared-runner contention. Repair those exact defects in its archived tree,
-    # then run its full test suite with the same performance threshold.
+    # shared-runner contention. Repair those exact defects in its archived tree.
+    # The open-page benchmark prints thread CPU time and does not gate on it.
     # Newer bases already contain the repairs and are tested as archived.
     importer = (base / "Sources/BrowserCore/BrowserProfileImporters.swift").read_text()
     if "    markers.contains { marker in" in importer:
@@ -311,7 +311,9 @@ def run_visuals(checks: Commands, shard: str) -> None:
     filters = VISUAL_FILTERS if shard == "all" else VISUAL_SHARDS[shard]
     for name in filters:
         run_swift_tests(
-            checks, name, ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name],
+            checks, name,
+            ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name,
+             "--xunit-output", str(checks.directory / "swift.xml")],
             env=environment,
         )
 

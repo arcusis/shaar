@@ -73,24 +73,23 @@ def write_reports(log: Path, directory: Path) -> None:
     text = log.read_text()
     cases = xctest_cases(text, allow_empty=True)
     native = sorted(directory.glob("swift*-swift-testing.xml"))
-    if "Test run with " in text and not native:
+    # XCTest-only filters still start Swift Testing, which reports zero tests and
+    # writes no native JUnit XML. A run that executed Swift Testing cases must.
+    expected_native_count = sum(int(match.group(1)) for match in SWIFT_TEST_TOTAL.finditer(text))
+    if expected_native_count > 0 and not native:
         raise ValueError("Swift Testing ran without producing its native JUnit XML")
     native_case_count = 0
     for report in native:
         native_case_count += sum(1 for _ in ET.parse(report).iter("testcase"))
-    expected_native_count = sum(int(match.group(1)) for match in SWIFT_TEST_TOTAL.finditer(text))
     if not cases and native_case_count == 0:
         raise ValueError("Test filter selected no XCTest or Swift Testing cases")
-    if "Test run with " in text and native_case_count == 0:
+    if expected_native_count > 0 and native_case_count == 0:
         raise ValueError(
             "Swift Testing ran but its native JUnit XML contains no test cases "
             f"(log reports {expected_native_count} tests but native XML contains "
             f"{native_case_count} cases)"
         )
-    native_test_count = 0
-    for report in native:
-        root = ET.parse(report).getroot()
-        native_test_count += sum(1 for _ in root.iter("testcase"))
+    native_test_count = native_case_count
     if expected_native_count != native_test_count:
         raise ValueError(
             f"Swift Testing log reports {expected_native_count} tests but native XML contains "

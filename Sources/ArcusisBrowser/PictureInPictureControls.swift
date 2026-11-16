@@ -32,9 +32,11 @@ final class PictureInPictureControls {
   private var gesture: (frame: CGRect, edges: PictureInPictureGeometry.Edges)?
   private let visibleFrameForWindow: (NSWindow) -> CGRect?
 
-  init(visibleFrameForWindow: @escaping (NSWindow) -> CGRect? = { window in
-    (window.screen ?? NSScreen.main)?.visibleFrame
-  }) {
+  init(
+    visibleFrameForWindow: @escaping (NSWindow) -> CGRect? = { window in
+      (window.screen ?? NSScreen.main)?.visibleFrame
+    }
+  ) {
     self.visibleFrameForWindow = visibleFrameForWindow
     view.onControl = { [weak self] in self?.press($0) }
     view.onGesture = { [weak self] in self?.handle($0) }

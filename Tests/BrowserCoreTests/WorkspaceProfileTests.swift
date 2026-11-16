@@ -57,10 +57,13 @@ import Testing
     let validation = try clock.measure {
       for _ in 0..<5 { try workspace.validate() }
     }
-    print("workspaceFavoritePageValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
-    let oldSeconds = Double(oldLookup.components.seconds)
+    print(
+      "workspaceFavoritePageValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
+    let oldSeconds =
+      Double(oldLookup.components.seconds)
       + Double(oldLookup.components.attoseconds) / 1e18
-    let validationSeconds = Double(validation.components.seconds)
+    let validationSeconds =
+      Double(validation.components.seconds)
       + Double(validation.components.attoseconds) / 1e18
     #expect(validationSeconds < oldSeconds * 3)
   }
@@ -84,10 +87,14 @@ import Testing
     let validation = try clock.measure {
       for _ in 0..<5 { try workspace.validate() }
     }
-    print("workspaceSpaceDefinitionValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
-    let oldSeconds = Double(oldLookup.components.seconds)
+    print(
+      "workspaceSpaceDefinitionValidationBenchmark: old lookup \(oldLookup), validation \(validation)"
+    )
+    let oldSeconds =
+      Double(oldLookup.components.seconds)
       + Double(oldLookup.components.attoseconds) / 1e18
-    let validationSeconds = Double(validation.components.seconds)
+    let validationSeconds =
+      Double(validation.components.seconds)
       + Double(validation.components.attoseconds) / 1e18
     #expect(validationSeconds * 2 < oldSeconds)
   }

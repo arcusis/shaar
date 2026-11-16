@@ -383,7 +383,8 @@ struct ShaarNavigationAdapterTests {
     let rawInteger = 9_007_199_254_740_993
     let rawGeneration = UInt64(rawInteger)
     let payload = Data(
-      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":9007199254740993,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":9007199254740993,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#.utf8)
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-1","generation":9007199254740993,"url":null,"title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":9007199254740993,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+        .utf8)
 
     let snapshot = try ShaarNavigationSnapshot.decode(payload)
     #expect(snapshot.generation == rawGeneration)
@@ -444,7 +445,8 @@ struct ShaarNavigationAdapterTests {
           .stop, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
           tabID: "tab", completion: { continuation.resume(returning: $0) })
       } catch {
-        continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
+        continuation.resume(
+          returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
       }
     }
     #expect(result == .failure(.invalidEvent("short navigation error")))
@@ -461,7 +463,8 @@ struct ShaarNavigationAdapterTests {
           .reload, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
           tabID: "tab", completion: { continuation.resume(returning: $0) })
       } catch {
-        continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
+        continuation.resume(
+          returning: .failure(error as? ShaarEngineError ?? .invalidEvent("submit failed")))
       }
     }
     #expect(result == .failure(.invalidEvent("invalid navigation result payload")))

@@ -46,18 +46,22 @@ struct ShaarBrowsingEdgeProbeScalarTests {
   }
 
   @Test func videoVerdictRejectsPausedFramesEvenWhenTheyHaveDimensions() {
-    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
-      "video": true, "paused": true, "videoWidth": 320,
-    ]))
-    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
-      "video": true, "paused": false, "videoWidth": 0,
-    ]))
-    #expect(!ShaarBrowsingEdgeProbe.videoIsPlaying([
-      "video": true, "videoWidth": 320,
-    ]))
-    #expect(ShaarBrowsingEdgeProbe.videoIsPlaying([
-      "video": true, "paused": false, "videoWidth": 320,
-    ]))
+    #expect(
+      !ShaarBrowsingEdgeProbe.videoIsPlaying([
+        "video": true, "paused": true, "videoWidth": 320,
+      ]))
+    #expect(
+      !ShaarBrowsingEdgeProbe.videoIsPlaying([
+        "video": true, "paused": false, "videoWidth": 0,
+      ]))
+    #expect(
+      !ShaarBrowsingEdgeProbe.videoIsPlaying([
+        "video": true, "videoWidth": 320,
+      ]))
+    #expect(
+      ShaarBrowsingEdgeProbe.videoIsPlaying([
+        "video": true, "paused": false, "videoWidth": 320,
+      ]))
   }
 
   @Test func scrollFailureNeedsAnObservedScrollEventToBeAttributable() {

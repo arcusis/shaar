@@ -102,8 +102,8 @@ struct SidebarLayoutKeyTests {
   }
 }
 
-private extension Duration {
-  var seconds: Double {
+extension Duration {
+  fileprivate var seconds: Double {
     let components = components
     return Double(components.seconds) + Double(components.attoseconds) / 1e18
   }

@@ -28,44 +28,49 @@ import Testing
 
   @Test(arguments: ["error", "mediaPrompted", "mediaTracks", "mediaDenied", "hidden", "surface"])
   func passedRequiresEveryMediaAndHiddenSurfaceCheck(_ failingCheck: String) {
-    #expect(!verdict(
-      error: failingCheck == "error" ? "fixture failed" : nil,
-      mediaPrompted: failingCheck != "mediaPrompted",
-      mediaTracks: failingCheck != "mediaTracks",
-      mediaDenied: failingCheck != "mediaDenied",
-      hidden: failingCheck != "hidden",
-      unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
-      promptedNames: prompts,
-      rememberedKinds: ["geolocation", "notifications", "midi"]))
+    #expect(
+      !verdict(
+        error: failingCheck == "error" ? "fixture failed" : nil,
+        mediaPrompted: failingCheck != "mediaPrompted",
+        mediaTracks: failingCheck != "mediaTracks",
+        mediaDenied: failingCheck != "mediaDenied",
+        hidden: failingCheck != "hidden",
+        unexpectedSurfaces: failingCheck == "surface" ? ["NSOpenPanel"] : [],
+        promptedNames: prompts,
+        rememberedKinds: ["geolocation", "notifications", "midi"]))
   }
 
   @Test func extraPromptNamesDoNotSubstituteForARequiredPrompt() {
-    #expect(!verdict(
-      promptedNames: prompts.filter { $0 != "midi" } + ["clipboard"],
-      rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: ["web+shaarparity"]))
+    #expect(
+      !verdict(
+        promptedNames: prompts.filter { $0 != "midi" } + ["clipboard"],
+        rememberedKinds: ["geolocation", "notifications", "midi"],
+        openedProtocols: ["web+shaarparity"]))
   }
 
   @Test func passedRequiresShaarWebProtocolRegistration() {
-    #expect(!verdict(
-      promptedNames: prompts,
-      rememberedKinds: ["geolocation", "notifications", "midi"]))
+    #expect(
+      !verdict(
+        promptedNames: prompts,
+        rememberedKinds: ["geolocation", "notifications", "midi"]))
   }
 
   @Test(arguments: ["geolocation", "notifications", "midi"])
   func passedFailsWhenAnyRequestedPromptIsMissing(_ missing: String) {
-    #expect(!verdict(
-      promptedNames: prompts.filter { $0 != missing },
-      rememberedKinds: ["geolocation", "notifications", "midi"],
-      openedProtocols: ["web+shaarparity"]))
+    #expect(
+      !verdict(
+        promptedNames: prompts.filter { $0 != missing },
+        rememberedKinds: ["geolocation", "notifications", "midi"],
+        openedProtocols: ["web+shaarparity"]))
   }
 
   @Test(arguments: ["geolocation", "notifications", "midi"])
   func passedRequiresEachDecisionToBeRemembered(_ missing: String) {
-    #expect(!verdict(
-      promptedNames: prompts,
-      rememberedKinds: ["geolocation", "notifications", "midi"].filter { $0 != missing },
-      openedProtocols: ["web+shaarparity"]))
+    #expect(
+      !verdict(
+        promptedNames: prompts,
+        rememberedKinds: ["geolocation", "notifications", "midi"].filter { $0 != missing },
+        openedProtocols: ["web+shaarparity"]))
   }
 
   private func verdict(

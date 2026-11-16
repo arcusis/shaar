@@ -172,7 +172,8 @@ struct RecentDownloadsPopover: View {
 
   private func accessibilityLabel(for item: BrowserDownload, stateLabel: String) -> String {
     let progress = Self.progressAccessibilityValue(for: item, language: .currentLaunchLanguage)
-    let details = item.state == .downloading && !item.dangerous
+    let details =
+      item.state == .downloading && !item.dangerous
       ? [progress, byteStatus(item)].compactMap { $0 } : []
     let formatter = ListFormatter()
     formatter.locale = PanelsL10n.formattingLocale()

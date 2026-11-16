@@ -107,7 +107,8 @@ struct BrowserEngineDevToolsTests {
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let runtime = DevToolsEngineRuntime()
     runtime.tabWindows[tab.id.uuidString] = "inspect-window"
-    runtime.toggleError = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    runtime.toggleError = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     let engine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), windowID: "inspect-window", store: store)
     engine.liveTabs.insert(tab.id)

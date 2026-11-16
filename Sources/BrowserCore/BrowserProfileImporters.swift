@@ -268,9 +268,10 @@ private func groupedHistory(
   date: (BrowserImportSQLite.Value) -> Date?
 ) -> [BrowserImportItem] {
   var groupIndexes: [String: Int] = [:]
-  var groups: [(
-    address: String, title: String, visits: [Date], needsSort: Bool, lastVisit: Date?
-  )] = []
+  var groups:
+    [(
+      address: String, title: String, visits: [Date], needsSort: Bool, lastVisit: Date?
+    )] = []
   var addressCache = BrowserImportAddressCache()
   for row in rows {
     guard let address = row["url"]?.string else { continue }
@@ -284,9 +285,11 @@ private func groupedHistory(
     } else {
       index = groups.count
       groupIndexes[address] = index
-      groups.append((
-        address: address, title: row["title"]?.string ?? "", visits: [], needsSort: false,
-        lastVisit: nil))
+      groups.append(
+        (
+          address: address, title: row["title"]?.string ?? "", visits: [], needsSort: false,
+          lastVisit: nil
+        ))
     }
     let title = row["title"]?.string ?? ""
     if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

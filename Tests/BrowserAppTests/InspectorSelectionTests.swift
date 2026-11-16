@@ -16,14 +16,17 @@ import Testing
   }
 
   @Test func boundsAncestorAndFrameCountsAndText() {
-    #expect(selection(
-      frames: Array(repeating: "frame", count: 8),
-      ancestors: Array(repeating: .init(id: 1, label: String(repeating: "a", count: 100)), count: 32)
-    ).valid)
+    #expect(
+      selection(
+        frames: Array(repeating: "frame", count: 8),
+        ancestors: Array(
+          repeating: .init(id: 1, label: String(repeating: "a", count: 100)), count: 32)
+      ).valid)
     #expect(!selection(frames: Array(repeating: "frame", count: 9)).valid)
-    #expect(!selection(
-      ancestors: Array(repeating: .init(id: 1, label: "ancestor"), count: 33)
-    ).valid)
+    #expect(
+      !selection(
+        ancestors: Array(repeating: .init(id: 1, label: "ancestor"), count: 33)
+      ).valid)
     #expect(!selection(ancestors: [.init(id: 1, label: String(repeating: "a", count: 101))]).valid)
   }
 
@@ -32,7 +35,8 @@ import Testing
     #expect(!selection(css: String(repeating: "c", count: 16_385)).valid)
     #expect(selection(label: String(repeating: "l", count: 512)).valid)
     #expect(!selection(label: String(repeating: "l", count: 513)).valid)
-    #expect(selection(classNames: Array(repeating: String(repeating: "c", count: 128), count: 8)).valid)
+    #expect(
+      selection(classNames: Array(repeating: String(repeating: "c", count: 128), count: 8)).valid)
     #expect(!selection(classNames: Array(repeating: "class", count: 9)).valid)
   }
 

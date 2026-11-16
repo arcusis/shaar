@@ -103,7 +103,8 @@ struct WebShareRequest: Identifiable, Equatable {
   private static func hasEmptyExplicitPort(_ origin: URL) -> Bool {
     let absolute = origin.absoluteString
     guard let schemeEnd = absolute.range(of: "://")?.upperBound else { return false }
-    let authorityEnd = absolute[schemeEnd...].firstIndex(where: { "/?#".contains($0) })
+    let authorityEnd =
+      absolute[schemeEnd...].firstIndex(where: { "/?#".contains($0) })
       ?? absolute.endIndex
     return absolute[schemeEnd..<authorityEnd].hasSuffix(":")
   }

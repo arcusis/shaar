@@ -65,9 +65,21 @@ import Testing
       "activeSimulations": ["device": "phone"],
     ]
     let invalidMetadata: [[String: Any]] = [
-      { var value = valid; value["engineVersion"] = ""; return value }(),
-      { var value = valid; value["viewport"] = "390x844"; return value }(),
-      { var value = valid; value["activeSimulations"] = ["phone"]; return value }(),
+      {
+        var value = valid
+        value["engineVersion"] = ""
+        return value
+      }(),
+      {
+        var value = valid
+        value["viewport"] = "390x844"
+        return value
+      }(),
+      {
+        var value = valid
+        value["activeSimulations"] = ["phone"]
+        return value
+      }(),
     ]
 
     for metadata in invalidMetadata {

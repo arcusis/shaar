@@ -65,8 +65,10 @@ final class LocalExtensionInstallProbe {
       return checks
     } catch {
       try? write(
-        ["passed": false, "checks": checks, "phase": phase,
-         "error": error.localizedDescription],
+        [
+          "passed": false, "checks": checks, "phase": phase,
+          "error": error.localizedDescription,
+        ],
         name: "local-extension-install.json")
       throw error
     }
@@ -91,7 +93,8 @@ final class LocalExtensionInstallProbe {
     }
     guard developerModeReply == .updated else {
       throw LocalExtensionInstallProbeFailure(
-        "Local MV3 developer mode did not finish enabling: \(manager.status ?? "engine refused the request").")
+        "Local MV3 developer mode did not finish enabling: \(manager.status ?? "engine refused the request")."
+      )
     }
     manager.loadUnpacked(at: fixture, tabID: tabID)
 
@@ -117,10 +120,11 @@ final class LocalExtensionInstallProbe {
       let installed = manager.extensions.contains {
         $0.name == LocalExtensionInstallProbeEvidence.extensionName
       }
-      let mismatch = observedConsent.map {
-        "profile=\($0.profileID == profileID), tab=\($0.tabID == tabID), "
-          + "source=\($0.sourceURL == sourceURL), current=\($0.matches(store.session))"
-      } ?? "no request observed"
+      let mismatch =
+        observedConsent.map {
+          "profile=\($0.profileID == profileID), tab=\($0.tabID == tabID), "
+            + "source=\($0.sourceURL == sourceURL), current=\($0.matches(store.session))"
+        } ?? "no request observed"
       throw LocalExtensionInstallProbeFailure(
         "Local MV3 consent did not settle on its source tab and profile (\(mismatch); "
           + "selectedTab=\(currentPage?.tab.id == tabID), "
@@ -191,9 +195,11 @@ final class LocalExtensionInstallProbe {
       "name": LocalExtensionInstallProbeEvidence.extensionName,
       "version": "1.0",
       "host_permissions": ["http://127.0.0.1/*"],
-      "content_scripts": [[
-        "matches": ["http://127.0.0.1/*"], "js": ["content.js"],
-      ]],
+      "content_scripts": [
+        [
+          "matches": ["http://127.0.0.1/*"], "js": ["content.js"],
+        ]
+      ],
     ]
     let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
     try manifestData.write(to: folder.appending(path: "manifest.json"), options: .atomic)

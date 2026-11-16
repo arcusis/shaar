@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Foundation
 import BrowserCore
 import ChromiumBridge
+import Foundation
 import Testing
 
 @testable import ArcusisBrowser
@@ -12,7 +12,8 @@ import Testing
 @Suite @MainActor
 struct DeveloperPerformanceModelTests {
   @Test func runtimeSimulationFailuresUseLocalizedRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       DeveloperPageModel.failureMessage(for: error)
         == InspectorToolsL10n.string("Could not apply developer settings. Try again."))

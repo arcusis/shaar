@@ -61,11 +61,12 @@ import Testing
   }
 
   @Test func shellAuditRejectsJSONBooleanContainerCount() throws {
-    let data = try JSONSerialization.data(withJSONObject: [
-      "stage": "tab-0", "containerCount": true, "layerBacked": [true],
-      "attached": true, "attachedInWindow": true, "nativeHidden": false,
-      "rawWindowSibling": false,
-    ] as [String: Any])
+    let data = try JSONSerialization.data(
+      withJSONObject: [
+        "stage": "tab-0", "containerCount": true, "layerBacked": [true],
+        "attached": true, "attachedInWindow": true, "nativeHidden": false,
+        "rawWindowSibling": false,
+      ] as [String: Any])
     let shellAudit = try #require(
       JSONSerialization.jsonObject(with: data) as? [String: Any])
     #expect(!PrivateMultiTabEvidence.liveShellAudit(shellAudit, stage: "tab-0"))
@@ -228,12 +229,15 @@ import Testing
       !PrivateMultiTabEvidence.liveSearch(
         ["host": "search.example", "ready": "complete", "textLength": 100], host: "search.example"))
     for invalidLength: Any in [true, 101.5, "101"] {
-      #expect(!PrivateMultiTabEvidence.liveSearch([
-        "host": "search.example", "ready": "complete", "textLength": invalidLength,
-      ], host: "search.example"))
+      #expect(
+        !PrivateMultiTabEvidence.liveSearch(
+          [
+            "host": "search.example", "ready": "complete", "textLength": invalidLength,
+          ], host: "search.example"))
     }
-    #expect(!PrivateMultiTabEvidence.liveSearch(
-      ["host": "", "ready": "complete", "textLength": 101], host: ""))
+    #expect(
+      !PrivateMultiTabEvidence.liveSearch(
+        ["host": "", "ready": "complete", "textLength": 101], host: ""))
   }
 
   @Test func bitmapLightSamplesDistinguishWhiteFromBlack() throws {

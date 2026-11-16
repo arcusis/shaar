@@ -97,7 +97,8 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
     BrowserFavorite(profileID: profile.id, originalURL: URL(string: "https://example.com")!)
   }
   let pages = favorites.map {
-    BrowserFavoritePage(favoriteID: $0.id, tab: BrowserTab(url: URL(string: "https://example.com")!))
+    BrowserFavoritePage(
+      favoriteID: $0.id, tab: BrowserTab(url: URL(string: "https://example.com")!))
   }
   let spaces = favorites.enumerated().map { index, favorite in
     BrowserSpace(
@@ -115,9 +116,11 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
     }
   }
   let validation = try clock.measure { for _ in 0..<5 { try session.validate() } }
-  let oldSeconds = Double(oldLookup.components.seconds)
+  let oldSeconds =
+    Double(oldLookup.components.seconds)
     + Double(oldLookup.components.attoseconds) / 1e18
-  let validationSeconds = Double(validation.components.seconds)
+  let validationSeconds =
+    Double(validation.components.seconds)
     + Double(validation.components.attoseconds) / 1e18
   print("selectedFavoriteValidationBenchmark: old lookup \(oldLookup), validation \(validation)")
   #expect(validationSeconds * 2 < oldSeconds)
@@ -147,11 +150,15 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
     }
   }
   let validationDuration = try clock.measure { for _ in 0..<5 { try session.validate() } }
-  let oldSeconds = Double(oldLookupDuration.components.seconds)
+  let oldSeconds =
+    Double(oldLookupDuration.components.seconds)
     + Double(oldLookupDuration.components.attoseconds) / 1e18
-  let validationSeconds = Double(validationDuration.components.seconds)
+  let validationSeconds =
+    Double(validationDuration.components.seconds)
     + Double(validationDuration.components.attoseconds) / 1e18
-  print("favoritePageValidationBenchmark: old lookup \(oldLookupDuration), validation \(validationDuration)")
+  print(
+    "favoritePageValidationBenchmark: old lookup \(oldLookupDuration), validation \(validationDuration)"
+  )
   #expect(validationSeconds * 2 < oldSeconds)
 }
 

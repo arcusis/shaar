@@ -22,8 +22,10 @@ import Testing
 }
 
 @Test func webShareRequestResolvesRelativeURLAgainstTheRequestingPage() throws {
-  let request = try #require(WebShareRequest(payload: sharePayload(
-    url: "../shared?source=web-share")))
+  let request = try #require(
+    WebShareRequest(
+      payload: sharePayload(
+        url: "../shared?source=web-share")))
 
   #expect(request.url == URL(string: "https://example.com/shared?source=web-share"))
 }

@@ -46,7 +46,9 @@ struct BrowserEngineDevelopmentPageTests {
     #expect(engine.developmentPages[tabID]?.detectedFramework == nil)
 
     runtime.replies[1](
-      ["result": ["value": "{\"resourcePaths\":[\"/_next/static/app.js\"],\"documentMarkers\":[]}"]], nil)
+      [
+        "result": ["value": "{\"resourcePaths\":[\"/_next/static/app.js\"],\"documentMarkers\":[]}"]
+      ], nil)
     try await Task.sleep(for: .milliseconds(10))
     #expect(engine.developmentPages[tabID]?.detectedFramework == .nextJS)
     engine.developerModels.removeValue(forKey: tabID)?.close()

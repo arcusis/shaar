@@ -76,13 +76,15 @@ struct InspectorDetailsView: View {
           .buttonStyle(.plain)
           .accessibilityAddTraits(
             InspectorComponentAccessibility.traits(
-              isSelected: model.selectedComponent == branch.id))
+              isSelected: model.selectedComponent == branch.id)
+          )
           .help(
             InspectorDetailsL10n.format(
               "Inspect %1$@ data", arguments: [.string(branch.entry.name)]
-            ))
-            .accessibilityAddTraits(
-              Self.componentSelectionTraits(isSelected: model.selectedComponent == branch.id))
+            )
+          )
+          .accessibilityAddTraits(
+            Self.componentSelectionTraits(isSelected: model.selectedComponent == branch.id))
         }
         if let limit = tree.limit {
           Text(InspectorDetailsL10n.string(limit)).font(.system(size: 10))

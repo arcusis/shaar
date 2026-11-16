@@ -16,11 +16,12 @@ final class NativeBrowserMenu: NSMenu {
         || modifiers == [.command, .option]
     {
       for section in items.compactMap(\.submenu) {
-        guard let index = section.items.firstIndex(where: {
-          $0.keyEquivalent.lowercased() == "n"
-            && $0.keyEquivalentModifierMask.intersection([.command, .option, .control, .shift])
-              == modifiers
-        }), section.items[index].isEnabled
+        guard
+          let index = section.items.firstIndex(where: {
+            $0.keyEquivalent.lowercased() == "n"
+              && $0.keyEquivalentModifierMask.intersection([.command, .option, .control, .shift])
+                == modifiers
+          }), section.items[index].isEnabled
         else { continue }
         section.performActionForItem(at: index)
         return true
@@ -75,7 +76,8 @@ private final class DownloadDirectoryContinuation: @unchecked Sendable {
 }
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
+    sharePage,
     print, closeWindow, addFavorite
   case openFile
   case reopenClosed, reopenClosedWindow, recentlyClosed, bookmarkPage, bookmarks, history,
@@ -626,8 +628,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     switch command {
     case .quit: quit()
     case .newWindow:
-      do { _ = try newWindow(from: activeContext?.id ?? workspace.workspace.focusedWindowID) }
-      catch { report(error) }
+      do { _ = try newWindow(from: activeContext?.id ?? workspace.workspace.focusedWindowID) } catch
+      { report(error) }
     case .reopenClosedWindow:
       guard let closedWindow = lastClosedWindowSnapshot else { return true }
       do {
@@ -861,7 +863,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
           report(
             NSError(
               domain: "com.arcusis.browser.print", code: 1,
-              userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")]))
+              userInfo: [NSLocalizedDescriptionKey: ShellL10n.string("Could not open print panel")])
+          )
           return
         }
       }
@@ -907,7 +910,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow, .previousWindow,
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .reopenClosedWindow, .nextWindow,
+      .previousWindow,
       .openFile, .settings, .quit, .checkForUpdates:
       break
     case .fullScreen: context.window.toggleFullScreen(nil)

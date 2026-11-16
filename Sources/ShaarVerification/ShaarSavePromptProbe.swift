@@ -70,7 +70,8 @@ final class ShaarSavePromptRenderSurface {
         path: "Profile \(profileID.uuidString.lowercased())", directoryHint: .isDirectory)
       try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
       let preferencesURL = directory.appending(path: "Preferences")
-      var preferences = (try? JSONSerialization.jsonObject(with: Data(contentsOf: preferencesURL)))
+      var preferences =
+        (try? JSONSerialization.jsonObject(with: Data(contentsOf: preferencesURL)))
         as? [String: Any] ?? [:]
       preferences["credentials_enable_service"] = true
       var autofill = preferences["autofill"] as? [String: Any] ?? [:]
@@ -144,11 +145,14 @@ final class ShaarSavePromptRenderSurface {
       hideWindows()
       let hidden = NSApp.windows.allSatisfy { !$0.isVisible }
       let onScreen = windowsOnScreen()
-      let surfacePresentedSafely = rows.count == scenarios.count
+      let surfacePresentedSafely =
+        rows.count == scenarios.count
         && rows.allSatisfy { $0["renderSurfacePresentedSafely"] as? Bool == true }
-      let surfaceOrderedOut = rows.count == scenarios.count
+      let surfaceOrderedOut =
+        rows.count == scenarios.count
         && rows.allSatisfy { $0["renderSurfaceOrderedOut"] as? Bool == true }
-      let renderFramesCaptured = rows.count == scenarios.count
+      let renderFramesCaptured =
+        rows.count == scenarios.count
         && rows.allSatisfy { $0["renderFrameCaptured"] as? Bool == true }
       let passed =
         rows.count == scenarios.count
@@ -191,7 +195,8 @@ final class ShaarSavePromptRenderSurface {
               base: neverBase, outputURL: outputURL))
         case .neverPassword:
           rows.append(
-            await neverPassword(context: caseContext, runtime: runtime, base: neverBase,
+            await neverPassword(
+              context: caseContext, runtime: runtime, base: neverBase,
               outputURL: outputURL))
         }
       }
@@ -223,7 +228,8 @@ final class ShaarSavePromptRenderSurface {
     } else {
       renderFrameCaptured = false
     }
-    let valuesEntered = opened
+    let valuesEntered =
+      opened
       ? await trustedText(
         [("username", "parity-user"), ("password", "parity-secret")],
         context: context, runtime: runtime)
@@ -238,7 +244,8 @@ final class ShaarSavePromptRenderSurface {
     }
     let saveProfileID = context.engine.siteControlTarget?.profileID.uuidString
     if saved && cleared { try? await Task.sleep(for: .seconds(1)) }
-    let loginEvidence = saved
+    let loginEvidence =
+      saved
       ? await filledLogin(context: context, runtime: runtime, base: base)
       : (false, false, false, false)
     let loginProfileID = context.engine.siteControlTarget?.profileID.uuidString
@@ -292,19 +299,25 @@ final class ShaarSavePromptRenderSurface {
       let prefix = decision == .save ? "parity" : "dismiss"
       fields = [("username", "\(prefix)-user"), ("password", "\(prefix)-secret")]
     case .card:
-      fields = [("card-name", "Probe \(decision.rawValue)"),
+      fields = [
+        ("card-name", "Probe \(decision.rawValue)"),
         ("card-number", "4111111111111111"), ("card-exp-month", "12"),
-        ("card-exp-year", Self.cardExpiryYear(relativeTo: .now))]
+        ("card-exp-year", Self.cardExpiryYear(relativeTo: .now)),
+      ]
     case .address:
-      fields = [("address-name", "Probe \(decision.rawValue)"),
+      fields = [
+        ("address-name", "Probe \(decision.rawValue)"),
         ("address-street", "1 \(decision.rawValue) Loopback Road"),
         ("address-city", "Mountain View"), ("address-region", "CA"),
         ("address-postal", "94043"), ("address-country", "United States"),
-        ("address-email", "parity@example.com")]
+        ("address-email", "parity@example.com"),
+      ]
     }
-    let valuesEntered = opened
+    let valuesEntered =
+      opened
       ? await trustedText(fields, context: context, runtime: runtime) : false
-    let clicked = valuesEntered
+    let clicked =
+      valuesEntered
       ? await trustedClick(context: context, runtime: runtime) : false
     let prompt = clicked ? await waitForPrompt(in: context, kind: kind) : nil
     let screenshot = prompt?.kind == kind && capturePrompt(name: name, outputURL: outputURL)
@@ -325,7 +338,8 @@ final class ShaarSavePromptRenderSurface {
     let surfaceOrderedOut = renderSurface?.orderOutAndRestore() ?? false
     hideWindows()
     let passed =
-      opened && valuesEntered && clicked && prompt?.kind == kind && offscreen && actionSent && cleared
+      opened && valuesEntered && clicked && prompt?.kind == kind && offscreen && actionSent
+      && cleared
       && screenshot && neverAvailabilityMatchesKind && surfacePresentedSafely && renderFrameCaptured
       && surfaceOrderedOut
     return [
@@ -359,7 +373,8 @@ final class ShaarSavePromptRenderSurface {
     } else {
       firstFrameCaptured = false
     }
-    let valuesEntered = opened
+    let valuesEntered =
+      opened
       ? await trustedText(
         [("username", "never-user"), ("password", "never-secret")],
         context: context, runtime: runtime)
@@ -388,14 +403,17 @@ final class ShaarSavePromptRenderSurface {
     } else {
       secondFrameCaptured = false
     }
-    let resubmittedValuesEntered = reopened
+    let resubmittedValuesEntered =
+      reopened
       ? await trustedText(
         [("username", "never-user"), ("password", "never-secret")],
         context: context, runtime: runtime)
       : false
-    let resubmitted = resubmittedValuesEntered
+    let resubmitted =
+      resubmittedValuesEntered
       ? await trustedClick(context: context, runtime: runtime) : false
-    let suppressed = resubmitted
+    let suppressed =
+      resubmitted
       ? await waitForNoPrompt(in: context, duration: .seconds(2)) : false
     let secondSurfaceOrderedOut = secondSurface?.orderOutAndRestore() ?? false
     hideWindows()
@@ -403,7 +421,8 @@ final class ShaarSavePromptRenderSurface {
     let renderFrameCaptured = firstFrameCaptured && secondFrameCaptured
     let surfaceOrderedOut = firstSurfaceOrderedOut && secondSurfaceOrderedOut
     return [
-      "name": "password-never", "passed": opened && valuesEntered && clicked
+      "name": "password-never",
+      "passed": opened && valuesEntered && clicked
         && visibleOffscreen && neverClicked && cleared && reopened
         && resubmittedValuesEntered && resubmitted && suppressed
         && screenshot && neverButtonAvailable && surfacePresentedSafely
@@ -493,8 +512,8 @@ final class ShaarSavePromptRenderSurface {
     for (elementID, text) in fields {
       let accepted = await withCheckedContinuation { continuation in
         runtime.submitTrustedProbeText(
-          inTabID: tab.uuidString, elementID: elementID, text: text)
-        { continuation.resume(returning: $0) }
+          inTabID: tab.uuidString, elementID: elementID, text: text
+        ) { continuation.resume(returning: $0) }
       }
       if !accepted { return false }
     }

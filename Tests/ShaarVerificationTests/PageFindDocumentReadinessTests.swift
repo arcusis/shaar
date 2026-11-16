@@ -8,18 +8,22 @@ import Testing
 
 @Suite struct PageFindDocumentReadinessTests {
   @Test func targetRequiresAuthoredFixtureCompletedLoadAndRequestedText() {
-    #expect(PageFindDocumentReadiness.isReady([
-      "fixture": "v1", "ready": "complete", "text": true,
-    ]))
-    #expect(!PageFindDocumentReadiness.isReady([
-      "fixture": "v2", "ready": "complete", "text": true,
-    ]))
-    #expect(!PageFindDocumentReadiness.isReady([
-      "fixture": "v1", "ready": "loading", "text": true,
-    ]))
-    #expect(!PageFindDocumentReadiness.isReady([
-      "fixture": "v1", "ready": "complete", "text": false,
-    ]))
+    #expect(
+      PageFindDocumentReadiness.isReady([
+        "fixture": "v1", "ready": "complete", "text": true,
+      ]))
+    #expect(
+      !PageFindDocumentReadiness.isReady([
+        "fixture": "v2", "ready": "complete", "text": true,
+      ]))
+    #expect(
+      !PageFindDocumentReadiness.isReady([
+        "fixture": "v1", "ready": "loading", "text": true,
+      ]))
+    #expect(
+      !PageFindDocumentReadiness.isReady([
+        "fixture": "v1", "ready": "complete", "text": false,
+      ]))
     #expect(!PageFindDocumentReadiness.isReady(["fixture": "v1", "ready": "complete"]))
   }
 }

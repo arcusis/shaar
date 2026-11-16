@@ -16,7 +16,8 @@ import Testing
     #expect(NativeHostViewportValidation.accountID(fromCookie: "accountant=alpha; token=x") == nil)
     #expect(NativeHostViewportValidation.accountID(fromCookie: "account; token=x") == nil)
     #expect(NativeHostViewportValidation.accountID(fromCookie: "account=; token=x") == nil)
-    #expect(NativeHostViewportValidation.accountID(fromCookie: "account=alpha; account=beta") == nil)
+    #expect(
+      NativeHostViewportValidation.accountID(fromCookie: "account=alpha; account=beta") == nil)
     #expect(NativeHostViewportValidation.accountID(fromCookie: "theme=dark") == nil)
   }
 
@@ -50,10 +51,12 @@ import Testing
       "resizeEventCount": 3, "mediaQueryChangeEventCount": 4,
       "pageFocusEventCount": 2, "pageBlurEventCount": 1, "devicePixelRatio": 2.0,
     ])
-    #expect(fields == HostViewportDocumentFields(
-      accountID: "acct-42", instance: "document-7", cssWidth: 1280, cssHeight: 720,
-      pageVisibilityState: "hidden", resizeEventCount: 3, mediaQueryChangeEventCount: 4,
-      pageFocusEventCount: 2, pageBlurEventCount: 1, devicePixelRatio: 2.0))
+    #expect(
+      fields
+        == HostViewportDocumentFields(
+          accountID: "acct-42", instance: "document-7", cssWidth: 1280, cssHeight: 720,
+          pageVisibilityState: "hidden", resizeEventCount: 3, mediaQueryChangeEventCount: 4,
+          pageFocusEventCount: 2, pageBlurEventCount: 1, devicePixelRatio: 2.0))
   }
 
   @Test func viewportDocumentRejectsWrongFixtureAndMissingAccount() {

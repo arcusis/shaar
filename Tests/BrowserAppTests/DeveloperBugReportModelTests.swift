@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import Foundation
 import BrowserCore
 import ChromiumBridge
+import Foundation
 import Testing
 
 @testable import ArcusisBrowser
@@ -149,10 +149,15 @@ private final class BugReportModelRuntime: ARCChromiumRuntime {
     completion: @escaping @MainActor @Sendable ([String: Any]?, (any Error)?) -> Void
   ) {
     if method == "Runtime.evaluate" {
-      completion(["result": ["value": [
-        "url": "https://example.test/report", "title": "Example", "console": [],
-        "viewport": [:],
-      ]]], nil)
+      completion(
+        [
+          "result": [
+            "value": [
+              "url": "https://example.test/report", "title": "Example", "console": [],
+              "viewport": [:],
+            ]
+          ]
+        ], nil)
     } else if method == "Page.captureScreenshot" {
       let pngHeader = Data([137, 80, 78, 71, 13, 10, 26, 10]).base64EncodedString()
       completion(["data": pngHeader], nil)

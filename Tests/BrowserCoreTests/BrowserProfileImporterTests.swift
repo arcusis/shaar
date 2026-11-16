@@ -466,7 +466,8 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   for _ in 0..<4 {
     rowCount += try BrowserImportSQLite.rows(
       at: database,
-      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id").count
+      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id"
+    ).count
   }
   print("sqliteRowMaterializationFocusedBenchmark: \(start.duration(to: .now))")
   #expect(rowCount == 120_012)

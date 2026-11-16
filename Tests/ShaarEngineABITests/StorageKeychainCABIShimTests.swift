@@ -11,13 +11,14 @@ private let noOpStorageKeychainReply:
     UnsafeMutableRawPointer?, UnsafePointer<shaar_result>?
   ) -> Void = { _, _ in }
 
-private let fakeStorageKeychainSubmitSuccess: @convention(c) (
-  OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
-  shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
-  UnsafeMutablePointer<shaar_error>?
-) -> shaar_error_code = { _, _, _, _, _, _, _, _, _, _ in
-  shaar_error_code(rawValue: 0)
-}
+private let fakeStorageKeychainSubmitSuccess:
+  @convention(c) (
+    OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+    shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+    UnsafeMutablePointer<shaar_error>?
+  ) -> shaar_error_code = { _, _, _, _, _, _, _, _, _, _ in
+    shaar_error_code(rawValue: 0)
+  }
 
 @Test func storageKeychainCShimRejectsMissingRequiredPointers() {
   let invalidArgument = UInt32(shaar_error_code(rawValue: 1).rawValue)

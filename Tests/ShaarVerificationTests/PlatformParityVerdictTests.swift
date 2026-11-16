@@ -189,12 +189,15 @@ struct PlatformParityVerdictTests {
   }
 
   @Test func pdfNavigationWaitsForViewerContentOrDownload() {
-    #expect(!PlatformParityVerdicts.pdfViewerObservationIsComplete(
-      committedURL: "http://127.0.0.1:8080/page.pdf", pageText: "", downloads: []))
-    #expect(PlatformParityVerdicts.pdfViewerObservationIsComplete(
-      committedURL: "http://127.0.0.1:8080/page.pdf", pageText: "Parity PDF", downloads: []))
-    #expect(PlatformParityVerdicts.pdfViewerObservationIsComplete(
-      committedURL: "", pageText: "", downloads: ["parity.pdf"]))
+    #expect(
+      !PlatformParityVerdicts.pdfViewerObservationIsComplete(
+        committedURL: "http://127.0.0.1:8080/page.pdf", pageText: "", downloads: []))
+    #expect(
+      PlatformParityVerdicts.pdfViewerObservationIsComplete(
+        committedURL: "http://127.0.0.1:8080/page.pdf", pageText: "Parity PDF", downloads: []))
+    #expect(
+      PlatformParityVerdicts.pdfViewerObservationIsComplete(
+        committedURL: "", pageText: "", downloads: ["parity.pdf"]))
   }
 
   @Test func listedExtensionWithoutAnInstallFails() {

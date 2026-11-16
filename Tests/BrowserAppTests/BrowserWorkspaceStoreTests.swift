@@ -502,7 +502,8 @@ struct BrowserWorkspaceStoreTests {
     let retiredStore = try #require(manager.stores[secondID])
     let spaceID = retiredStore.session.selectedSpaceID
     let replacementProfileID = try #require(
-      retiredStore.session.profiles.first { $0.id != retiredStore.session.selectedSpace.profileID }?.id)
+      retiredStore.session.profiles.first { $0.id != retiredStore.session.selectedSpace.profileID }?
+        .id)
     try manager.removeWindow(secondID)
     let before = manager.workspace
 

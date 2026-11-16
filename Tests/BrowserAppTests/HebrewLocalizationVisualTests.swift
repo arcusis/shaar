@@ -271,22 +271,24 @@ final class HebrewLocalizationVisualTests: XCTestCase {
       appearance: light)
 
     for kind in [JavaScriptDialogKind.alert, .confirm, .prompt] {
-      let javascript = try XCTUnwrap(JavaScriptDialogRequest(payload: [
-        "id": "visual-dialog-\(kind.rawValue)", "profileID": profileID.uuidString,
-        "tabID": tab.id.uuidString, "pageURL": tab.url.absoluteString,
-        "origin": "https://example.test", "dialogType": kind.rawValue,
-        "message": "Enter a value", "defaultPrompt": "",
-      ]))
+      let javascript = try XCTUnwrap(
+        JavaScriptDialogRequest(payload: [
+          "id": "visual-dialog-\(kind.rawValue)", "profileID": profileID.uuidString,
+          "tabID": tab.id.uuidString, "pageURL": tab.url.absoluteString,
+          "origin": "https://example.test", "dialogType": kind.rawValue,
+          "message": "Enter a value", "defaultPrompt": "",
+        ]))
       try capture(
         JavaScriptDialogSheet(request: javascript, store: store),
         name: "v02-javascript-\(kind.rawValue).png", size: size, appearance: light)
     }
 
-    let auth = try XCTUnwrap(HTTPAuthRequest(payload: [
-      "id": "visual-auth", "profileID": profileID.uuidString,
-      "tabID": tab.id.uuidString, "windowID": "visual-window",
-      "host": "example.test", "realm": "Members",
-    ]))
+    let auth = try XCTUnwrap(
+      HTTPAuthRequest(payload: [
+        "id": "visual-auth", "profileID": profileID.uuidString,
+        "tabID": tab.id.uuidString, "windowID": "visual-window",
+        "host": "example.test", "realm": "Members",
+      ]))
     try capture(
       HTTPAuthSheet(store: store, request: auth), name: "v02-basic-auth.png",
       size: size, appearance: light)
@@ -315,13 +317,14 @@ final class HebrewLocalizationVisualTests: XCTestCase {
       ("card", "2", "Personal card", "card"),
       ("address", "3", "Home address", "address"),
     ] {
-      let save = try XCTUnwrap(SavePromptRequest(payload: [
-        "schemaVersion": 1, "kind": "savePromptRequested", "id": id,
-        "prompt": kind, "origin": "https://example.test",
-        "pageURL": tab.url.absoluteString, "detail": detail, "update": false,
-        "profileID": profileID.uuidString, "tabID": tab.id.uuidString,
-        "windowID": "visual-window",
-      ]))
+      let save = try XCTUnwrap(
+        SavePromptRequest(payload: [
+          "schemaVersion": 1, "kind": "savePromptRequested", "id": id,
+          "prompt": kind, "origin": "https://example.test",
+          "pageURL": tab.url.absoluteString, "detail": detail, "update": false,
+          "profileID": profileID.uuidString, "tabID": tab.id.uuidString,
+          "windowID": "visual-window",
+        ]))
       let savePanel = ShaarSavePromptPanel()
       savePanel.show(save) { _ in }
       let saveContent = try XCTUnwrap(savePanel.contentView)
@@ -343,8 +346,9 @@ final class HebrewLocalizationVisualTests: XCTestCase {
       }.padding(16),
       name: "v02-extensions.png", size: NSSize(width: 460, height: 320), appearance: light)
 
-    let browserExtension = try XCTUnwrap(BrowserExtension(
-      id: String(repeating: "a", count: 32), name: "Sample Notes", version: "1.0"))
+    let browserExtension = try XCTUnwrap(
+      BrowserExtension(
+        id: String(repeating: "a", count: 32), name: "Sample Notes", version: "1.0"))
     let install = try XCTUnwrap(
       ExtensionInstallRequest(
         id: "visual-install", profileID: profileID, tabID: tab.id,

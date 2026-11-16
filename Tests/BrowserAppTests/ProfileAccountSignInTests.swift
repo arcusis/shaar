@@ -13,7 +13,8 @@ import Testing
 @Suite @MainActor
 struct ProfileAccountSignInTests {
   @Test func missingSignInPageLoadingLabelIsLocalized() {
-    #expect(ProfileAccountSignInAccessibility.loadingLabel == SettingsL10n.string("Loading sign-in…"))
+    #expect(
+      ProfileAccountSignInAccessibility.loadingLabel == SettingsL10n.string("Loading sign-in…"))
   }
 
   @Test func loadingPageAccessibilityLabelIsLocalized() {

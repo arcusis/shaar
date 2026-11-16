@@ -5,6 +5,7 @@
 import Foundation
 import JavaScriptCore
 import Testing
+
 @testable import ArcusisBrowser
 
 @Suite @MainActor

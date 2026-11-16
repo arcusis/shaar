@@ -147,10 +147,12 @@ final class PictureInPictureControlsTests: XCTestCase {
     let controls = PictureInPictureControls()
     var findCount = 0
 
-    controls.attach(tabID: UUID(), finding: {
-      findCount += 1
-      return video
-    }, video: { nil })
+    controls.attach(
+      tabID: UUID(),
+      finding: {
+        findCount += 1
+        return video
+      }, video: { nil })
     controls.detach()
     await Task.yield()
 
@@ -164,10 +166,12 @@ final class PictureInPictureControlsTests: XCTestCase {
     var controls: PictureInPictureControls? = PictureInPictureControls()
     weak let weakControls = controls
 
-    controls?.attach(tabID: UUID(), finding: {
-      findCount += 1
-      return nil
-    }, video: { nil })
+    controls?.attach(
+      tabID: UUID(),
+      finding: {
+        findCount += 1
+        return nil
+      }, video: { nil })
     await Task.yield()
     XCTAssertEqual(findCount, 1)
 

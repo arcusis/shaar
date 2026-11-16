@@ -110,6 +110,17 @@ final class ProfileDeletionProbe {
     try runtime.openTabID(
       checkTab.uuidString, profileID: freshProfile.uuidString, windowID: checkWindow,
       url: url.absoluteString)
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
+      if let result = await evaluate(checkTab, "location.pathname", runtime: runtime),
+        let data = result.data(using: .utf8),
+        let path = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+          as? String,
+        path == url.path
+      {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
     let freshCookie = await cookieValue(checkTab, runtime: runtime)
     runtime.discardTabID(checkTab.uuidString)
     _ = runtime.closeWindowID(checkWindow)
@@ -121,7 +132,11 @@ final class ProfileDeletionProbe {
       host.workspace.workspace.catalog.profiles.contains(where: { $0.id == survivor })
     else {
       throw ProfileDeletionFailure(
-        "Profile deletion did not clear cookies or preserve the other profile")
+        "Profile deletion did not clear cookies or preserve the other profile "
+          + "(freshCookieEmpty=\(freshCookie == ""), "
+          + "survivorCookieRetained=\(retainedCookie?.contains(survivorCookie) == true), "
+          + "oldDirectoryAbsent=\(!FileManager.default.fileExists(atPath: deletedDirectory.path)))."
+      )
     }
 
     runtime.discardTabID(survivorTab.uuidString)
@@ -164,7 +179,8 @@ final class ProfileDeletionProbe {
   private func cookieValue(_ tab: UUID, runtime: ARCChromiumRuntime) async -> String? {
     guard let value = await evaluate(tab, "document.cookie", runtime: runtime),
       let data = value.data(using: .utf8),
-      let decoded = try? JSONSerialization.jsonObject(with: data) as? String
+      let decoded = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        as? String
     else { return nil }
     return decoded
   }

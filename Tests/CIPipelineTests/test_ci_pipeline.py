@@ -8,7 +8,6 @@ import io
 import json
 import os
 import re
-import subprocess
 from pathlib import Path
 import sys
 import tarfile
@@ -51,7 +50,6 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 class PipelineGateTests(unittest.TestCase):
     def test_legacy_coverage_base_compile_repair_keeps_abi_assertions(self):
-        revision = "e5af6148d144b5d153a38d6b5853537241d9ac35"
         paths = (
             "Sources/BrowserCore/BrowserProfileImporters.swift",
             "Sources/ShaarEngineC/include/shaar_engine.h",
@@ -59,6 +57,21 @@ class PipelineGateTests(unittest.TestCase):
             "Tests/ShaarEngineABITests/OperationCodeContractTests.swift",
             "Tests/ShaarEngineABITests/StorageKeychainCABIShimTests.swift",
         )
+        preimages = {}
+        name = None
+        in_hunk = False
+        for line in (ROOT / "scripts/ci-coverage-base-compile.patch").read_text().splitlines(keepends=True):
+            if line.startswith("diff --git "):
+                name = line.split(" b/", 1)[1].strip()
+                preimages[name] = []
+                in_hunk = False
+            elif line.startswith("@@ "):
+                start = int(re.match(r"@@ -([0-9]+)", line).group(1))
+                preimages[name].extend(["\n"] * (start - 1 - len(preimages[name])))
+                in_hunk = True
+            elif in_hunk and line.startswith((" ", "-")):
+                preimages[name].append(line[1:])
+        self.assertEqual(set(preimages), set(paths))
         temporary_root = ROOT / "build/ci"
         temporary_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temporary_root) as temporary:
@@ -66,8 +79,7 @@ class PipelineGateTests(unittest.TestCase):
             for name in paths:
                 target = base / name
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(subprocess.check_output(
-                    ["git", "show", f"{revision}:{name}"], cwd=ROOT))
+                target.write_text("".join(preimages[name]))
             STAGES.repair_legacy_coverage_base(base)
             STAGES.repair_legacy_coverage_base(base)
             self.assertIn("return markers.contains", (base / paths[0]).read_text())

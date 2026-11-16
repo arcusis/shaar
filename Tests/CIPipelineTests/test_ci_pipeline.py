@@ -54,13 +54,17 @@ class PipelineGateTests(unittest.TestCase):
             "Sources/BrowserCore/BrowserProfileImporters.swift",
             "Sources/ShaarEngineC/include/shaar_engine.h",
             "Sources/ShaarEngineC/shaar_engine.c",
+            "Tests/BrowserCoreTests/CommandOpenPageSetTests.swift",
+            "Tests/BrowserCoreTests/BrowserLibraryTests.swift",
+            "Tests/BrowserCoreTests/BrowserProfileImporterTests.swift",
             "Tests/ShaarEngineABITests/OperationCodeContractTests.swift",
             "Tests/ShaarEngineABITests/StorageKeychainCABIShimTests.swift",
         )
         preimages = {}
         name = None
         in_hunk = False
-        for line in (ROOT / "scripts/ci-coverage-base-compile.patch").read_text().splitlines(keepends=True):
+        patch_text = (ROOT / "scripts/ci-coverage-base-repair.patch").read_text()
+        for line in patch_text.splitlines(keepends=True):
             if line.startswith("diff --git "):
                 name = line.split(" b/", 1)[1].strip()
                 preimages[name] = []
@@ -83,8 +87,21 @@ class PipelineGateTests(unittest.TestCase):
             STAGES.repair_legacy_coverage_base(base)
             STAGES.repair_legacy_coverage_base(base)
             self.assertIn("return markers.contains", (base / paths[0]).read_text())
-            self.assertIn("shaar_operation_contract_values", (base / paths[3]).read_text())
-            self.assertIn("#expect(swiftValue == cValues?[index])", (base / paths[3]).read_text())
+            for name, threshold in (
+                ("CommandOpenPageSetTests.swift", "0.95"),
+                ("BrowserLibraryTests.swift", "0.8"),
+                ("BrowserProfileImporterTests.swift", "0.9"),
+            ):
+                benchmark = (base / "Tests/BrowserCoreTests" / name).read_text()
+                self.assertIn("CLOCK_THREAD_CPUTIME_ID", benchmark)
+                self.assertIn(
+                    f"#expect(after < before * {threshold})",
+                    (ROOT / "Tests/BrowserCoreTests" / name).read_text(),
+                )
+            self.assertNotIn("-  #expect(after < before", patch_text)
+            contract = (base / "Tests/ShaarEngineABITests/OperationCodeContractTests.swift").read_text()
+            self.assertIn("shaar_operation_contract_values", contract)
+            self.assertIn("#expect(swiftValue == cValues?[index])", contract)
 
     def test_ci_gate_reports_missing_required_environment_inputs(self):
         required = {

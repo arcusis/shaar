@@ -170,13 +170,14 @@ def build_base_coverage(checks: Commands) -> None:
 
 
 def repair_legacy_coverage_base(base: Path) -> None:
-    # The production base predating the CI outage has a missing closure return
-    # and two tests that Swift cannot import from C enums. Apply only those
-    # compile repairs to that immutable archive, then run its full test suite.
+    # The production base predating the CI outage has a missing closure return,
+    # two C enum import errors, and wall-clock microbenchmarks vulnerable to
+    # shared-runner contention. Repair those exact defects in its archived tree,
+    # then run its full test suite with the same performance threshold.
     # Newer bases already contain the repairs and are tested as archived.
     importer = (base / "Sources/BrowserCore/BrowserProfileImporters.swift").read_text()
     if "    markers.contains { marker in" in importer:
-        patch = ROOT / "scripts/ci-coverage-base-compile.patch"
+        patch = ROOT / "scripts/ci-coverage-base-repair.patch"
         command = ["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-d", str(base),
                    "-i", str(patch)]
         subprocess.run(["patch", "--dry-run", *command[1:]], check=True)

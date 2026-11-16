@@ -208,3 +208,221 @@ index 676144a5c..7c528ace7 100644
      message: shaar_bytes(data: nil, size: 0))
  
    let result = withUnsafePointer(to: &scope) { scopePointer in
+diff --git a/Tests/BrowserCoreTests/CommandOpenPageSetTests.swift b/Tests/BrowserCoreTests/CommandOpenPageSetTests.swift
+index ed5b183e2..7450e0fb8 100644
+--- a/Tests/BrowserCoreTests/CommandOpenPageSetTests.swift
++++ b/Tests/BrowserCoreTests/CommandOpenPageSetTests.swift
+@@ -2,6 +2,7 @@
+ // License, v. 2.0. If a copy of the MPL was not distributed with this
+ // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ 
++import Darwin
+ import Foundation
+ import Testing
+ 
+@@ -16,26 +17,32 @@ import Testing
+   _ = legacyOpenPageKeys(in: session)
+   _ = CommandLauncher.openPageKeys(in: session)
+   let iterations = 25
+-  var beforeSamples: [Duration] = []
+-  var afterSamples: [Duration] = []
++  var beforeSamples: [Double] = []
++  var afterSamples: [Double] = []
+   for _ in 0..<5 {
+-    let beforeStart = ContinuousClock.now
++    let beforeStart = threadCPUSeconds()
+     for _ in 0..<iterations { _ = legacyOpenPageKeys(in: session) }
+-    beforeSamples.append(beforeStart.duration(to: .now))
+-    let afterStart = ContinuousClock.now
++    beforeSamples.append(threadCPUSeconds() - beforeStart)
++    let afterStart = threadCPUSeconds()
+     for _ in 0..<iterations { _ = CommandLauncher.openPageKeys(in: session) }
+-    afterSamples.append(afterStart.duration(to: .now))
++    afterSamples.append(threadCPUSeconds() - afterStart)
+   }
+   let before = median(beforeSamples)
+   let after = median(afterSamples)
+-  print("commandOpenPageSetFocusedBenchmark: before=\(before), after=\(after)")
++  print("commandOpenPageSetFocusedBenchmark: thread CPU before=\(before)s, after=\(after)s")
+   #expect(after < before * 0.95)
+ }
+ 
+-private func median(_ samples: [Duration]) -> Duration {
++private func median(_ samples: [Double]) -> Double {
+   samples.sorted()[samples.count / 2]
+ }
+ 
++private func threadCPUSeconds() -> Double {
++  var stamp = timespec()
++  precondition(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stamp) == 0)
++  return Double(stamp.tv_sec) + Double(stamp.tv_nsec) / 1_000_000_000
++}
++
+ private func legacyOpenPageKeys(in session: BrowserSession) -> Set<String> {
+   let profileID = session.selectedSpace.profileID
+   let favoriteIDs = Set(session.favorites(for: profileID).map(\.id))
+diff --git a/Tests/BrowserCoreTests/BrowserLibraryTests.swift b/Tests/BrowserCoreTests/BrowserLibraryTests.swift
+index 2dd4d38a7..8d9234f87 100644
+--- a/Tests/BrowserCoreTests/BrowserLibraryTests.swift
++++ b/Tests/BrowserCoreTests/BrowserLibraryTests.swift
+@@ -2,11 +2,19 @@
+ // License, v. 2.0. If a copy of the MPL was not distributed with this
+ // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ 
+-@testable import BrowserCore
+ import CoreFoundation
++import Darwin
+ import Foundation
+ import Testing
+ 
++@testable import BrowserCore
++
++private func threadCPUSeconds() -> Double {
++  var stamp = timespec()
++  precondition(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stamp) == 0)
++  return Double(stamp.tv_sec) + Double(stamp.tv_nsec) / 1_000_000_000
++}
++
+ @Test func historyEntryConstructionFocusedBenchmark() throws {
+   let profile = UUID()
+   let visits = (0..<32).map { NSNumber(value: Double($0 + 1) * 1_000) }
+@@ -165,12 +173,12 @@ import Testing
+   let visitGroups = (0..<100).map { group in
+     (0..<5_000).map { visit in NSNumber(value: Double(group * 5_000 + visit)) }
+   }
+-  var beforeSamples: [Duration] = []
+-  var afterSamples: [Duration] = []
++  var beforeSamples: [Double] = []
++  var afterSamples: [Double] = []
+   var beforeMaximum = 0.0
+   var afterMaximum = 0.0
+   for _ in 0..<3 {
+-    let beforeStart = ContinuousClock.now
++    let beforeStart = threadCPUSeconds()
+     for visits in visitGroups {
+       let valid = visits.allSatisfy {
+         CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite
+@@ -179,12 +187,12 @@ import Testing
+       }
+       if valid { beforeMaximum += visits.map(\.doubleValue).max() ?? 0 }
+     }
+-    beforeSamples.append(beforeStart.duration(to: .now))
+-    let afterStart = ContinuousClock.now
++    beforeSamples.append(threadCPUSeconds() - beforeStart)
++    let afterStart = threadCPUSeconds()
+     for visits in visitGroups {
+       afterMaximum += BrowserHistoryEntry.validatedLatestVisit(in: visits) ?? 0
+     }
+-    afterSamples.append(afterStart.duration(to: .now))
++    afterSamples.append(threadCPUSeconds() - afterStart)
+   }
+   #expect(beforeMaximum == afterMaximum)
+   let before = beforeSamples.sorted()[beforeSamples.count / 2]
+diff --git a/Tests/BrowserCoreTests/BrowserProfileImporterTests.swift b/Tests/BrowserCoreTests/BrowserProfileImporterTests.swift
+index fbfa3bd48..1cd84579a 100644
+--- a/Tests/BrowserCoreTests/BrowserProfileImporterTests.swift
++++ b/Tests/BrowserCoreTests/BrowserProfileImporterTests.swift
+@@ -3,11 +3,18 @@
+ // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ 
+ import CSQLite
++import Darwin
+ import Foundation
+ import Testing
+ 
+ @testable import BrowserCore
+ 
++private func threadCPUSeconds() -> Double {
++  var stamp = timespec()
++  precondition(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stamp) == 0)
++  return Double(stamp.tv_sec) + Double(stamp.tv_nsec) / 1_000_000_000
++}
++
+ @Test func firefoxProfileImportSnapshotBenchmark() throws {
+   let database = try databaseURLProfile(name: "FirefoxSnapshot", databaseName: "places.sqlite")
+   defer { try? FileManager.default.removeItem(at: database.deletingLastPathComponent()) }
+@@ -70,15 +77,15 @@ import Testing
+     #expect(actualRow["l"] as? Double == expectedRow["l"] as? Double)
+   }
+ 
+-  var beforeSamples: [Duration] = []
+-  var afterSamples: [Duration] = []
++  var beforeSamples: [Double] = []
++  var afterSamples: [Double] = []
+   for _ in 0..<5 {
+-    let beforeStart = ContinuousClock.now
++    let beforeStart = threadCPUSeconds()
+     for _ in 0..<3 { _ = legacyHistoryRows(items) }
+-    beforeSamples.append(beforeStart.duration(to: .now))
+-    let afterStart = ContinuousClock.now
++    beforeSamples.append(threadCPUSeconds() - beforeStart)
++    let afterStart = threadCPUSeconds()
+     for _ in 0..<3 { _ = BrowserImport.historyRows(for: items) }
+-    afterSamples.append(afterStart.duration(to: .now))
++    afterSamples.append(threadCPUSeconds() - afterStart)
+   }
+   let before = beforeSamples.sorted()[beforeSamples.count / 2]
+   let after = afterSamples.sorted()[afterSamples.count / 2]
+@@ -133,17 +140,17 @@ private func legacyHistoryRows(_ items: [BrowserImportItem]) -> [[String: Any]]
+   #expect(actual.count == expected.count && actual.count == 10_010)
+   #expect(importOperationSignatures(actual) == importOperationSignatures(expected))
+ 
+-  var beforeSamples: [Duration] = []
+-  var afterSamples: [Duration] = []
++  var beforeSamples: [Double] = []
++  var afterSamples: [Double] = []
+   for _ in 0..<5 {
+-    let beforeStart = ContinuousClock.now
++    let beforeStart = threadCPUSeconds()
+     for _ in 0..<3 { _ = legacyImportOperations(items, otherFolderID: rootFolderID) }
+-    beforeSamples.append(beforeStart.duration(to: .now))
+-    let afterStart = ContinuousClock.now
++    beforeSamples.append(threadCPUSeconds() - beforeStart)
++    let afterStart = threadCPUSeconds()
+     for _ in 0..<3 {
+       _ = BrowserImport.operations(for: items, otherFolderID: rootFolderID)
+     }
+-    afterSamples.append(afterStart.duration(to: .now))
++    afterSamples.append(threadCPUSeconds() - afterStart)
+   }
+   let before = beforeSamples.sorted()[beforeSamples.count / 2]
+   let after = afterSamples.sorted()[afterSamples.count / 2]
+@@ -466,7 +473,8 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
+   for _ in 0..<4 {
+     rowCount += try BrowserImportSQLite.rows(
+       at: database,
+-      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id").count
++      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id"
++    ).count
+   }
+   print("sqliteRowMaterializationFocusedBenchmark: \(start.duration(to: .now))")
+   #expect(rowCount == 120_012)
+@@ -479,22 +487,22 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
+   let acceptsValidAddress = validationCache.accepts(address)
+   let acceptsRepeatedAddress = validationCache.accepts(address)
+   #expect(!rejectsInvalidAddress && acceptsValidAddress && acceptsRepeatedAddress)
+-  var beforeSamples: [Duration] = []
+-  var afterSamples: [Duration] = []
++  var beforeSamples: [Double] = []
++  var afterSamples: [Double] = []
+   var beforeAccepted = 0
+   var afterAccepted = 0
+   for _ in 0..<5 {
+-    let beforeStart = ContinuousClock.now
++    let beforeStart = threadCPUSeconds()
+     for _ in 0..<30_000 {
+       if LibraryAddress.destination(address) != nil { beforeAccepted += 1 }
+     }
+-    beforeSamples.append(beforeStart.duration(to: .now))
++    beforeSamples.append(threadCPUSeconds() - beforeStart)
+     var cache = BrowserImportAddressCache()
+-    let afterStart = ContinuousClock.now
++    let afterStart = threadCPUSeconds()
+     for _ in 0..<30_000 {
+       if cache.accepts(address) { afterAccepted += 1 }
+     }
+-    afterSamples.append(afterStart.duration(to: .now))
++    afterSamples.append(threadCPUSeconds() - afterStart)
+   }
+   #expect(beforeAccepted == afterAccepted && afterAccepted == 150_000)
+   let before = beforeSamples.sorted()[beforeSamples.count / 2]

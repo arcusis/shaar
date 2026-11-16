@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Darwin
 import Foundation
 import Testing
 
@@ -16,24 +17,30 @@ import Testing
   _ = legacyOpenPageKeys(in: session)
   _ = CommandLauncher.openPageKeys(in: session)
   let iterations = 25
-  var beforeSamples: [Duration] = []
-  var afterSamples: [Duration] = []
+  var beforeSamples: [Double] = []
+  var afterSamples: [Double] = []
   for _ in 0..<5 {
-    let beforeStart = ContinuousClock.now
+    let beforeStart = threadCPUSeconds()
     for _ in 0..<iterations { _ = legacyOpenPageKeys(in: session) }
-    beforeSamples.append(beforeStart.duration(to: .now))
-    let afterStart = ContinuousClock.now
+    beforeSamples.append(threadCPUSeconds() - beforeStart)
+    let afterStart = threadCPUSeconds()
     for _ in 0..<iterations { _ = CommandLauncher.openPageKeys(in: session) }
-    afterSamples.append(afterStart.duration(to: .now))
+    afterSamples.append(threadCPUSeconds() - afterStart)
   }
   let before = median(beforeSamples)
   let after = median(afterSamples)
-  print("commandOpenPageSetFocusedBenchmark: before=\(before), after=\(after)")
+  print("commandOpenPageSetFocusedBenchmark: thread CPU before=\(before)s, after=\(after)s")
   #expect(after < before * 0.95)
 }
 
-private func median(_ samples: [Duration]) -> Duration {
+private func median(_ samples: [Double]) -> Double {
   samples.sorted()[samples.count / 2]
+}
+
+private func threadCPUSeconds() -> Double {
+  var stamp = timespec()
+  precondition(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stamp) == 0)
+  return Double(stamp.tv_sec) + Double(stamp.tv_nsec) / 1_000_000_000
 }
 
 private func legacyOpenPageKeys(in session: BrowserSession) -> Set<String> {

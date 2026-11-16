@@ -6,10 +6,14 @@
 
 from pathlib import Path
 import base64
+from io import BytesIO
 import json
 import subprocess
 import tempfile
+import time
 import unittest
+from unittest import mock
+import urllib.error
 import urllib.request
 
 
@@ -34,12 +38,42 @@ RELEASE_QUIT_EXPORTS = (
 
 def fetch_tag_close_manager() -> bytes:
     request = urllib.request.Request(TAG_URL, headers={"User-Agent": "shaar-source-build-test"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        payload = response.read()
-    return base64.b64decode(payload)
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return base64.b64decode(response.read())
+        except urllib.error.HTTPError as error:
+            if error.code not in {429, 500, 502, 503, 504} or attempt == 3:
+                raise
+            time.sleep(2 ** attempt)
 
 
 class PrivateQuitRendererActivationPatchTests(unittest.TestCase):
+    def test_tag_fetch_retries_transient_gateway_failure(self):
+        unavailable = urllib.error.HTTPError(TAG_URL, 503, "unavailable", {}, None)
+        with mock.patch("urllib.request.urlopen", side_effect=[
+            unavailable, unavailable, BytesIO(base64.b64encode(b"tagged source")),
+        ]) as open_url, mock.patch("time.sleep") as sleep:
+            self.assertEqual(fetch_tag_close_manager(), b"tagged source")
+        self.assertEqual(open_url.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+
+    def test_tag_fetch_rejects_permanent_missing_tag(self):
+        missing = urllib.error.HTTPError(TAG_URL, 404, "missing", {}, None)
+        with mock.patch("urllib.request.urlopen", side_effect=missing) as open_url:
+            with self.assertRaises(urllib.error.HTTPError):
+                fetch_tag_close_manager()
+        self.assertEqual(open_url.call_count, 1)
+
+    def test_tag_fetch_rejects_exhausted_transient_failures(self):
+        unavailable = urllib.error.HTTPError(TAG_URL, 503, "unavailable", {}, None)
+        with (mock.patch("urllib.request.urlopen", side_effect=unavailable) as open_url,
+              mock.patch("time.sleep") as sleep):
+            with self.assertRaises(urllib.error.HTTPError):
+                fetch_tag_close_manager()
+        self.assertEqual(open_url.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4])
+
     def test_157_hook_is_pinned_in_the_157_patch_list(self):
         files = [entry["file"] for entry in json.loads(MANIFEST.read_text())["patches"]]
         self.assertIn(str(PATCH.relative_to(ROOT)), files)

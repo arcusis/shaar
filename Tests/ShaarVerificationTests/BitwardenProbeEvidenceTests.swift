@@ -9,12 +9,14 @@ import Testing
 
 @Suite struct BitwardenProbeEvidenceTests {
   @Test func addToChromeMustBeExplicitlyEnabled() {
-    #expect(BitwardenProbeEvidence.hasEnabledAddToChromeButton([
-      ["text": "Add to Chrome", "disabled": false]
-    ]))
-    #expect(!BitwardenProbeEvidence.hasEnabledAddToChromeButton([
-      ["text": "Add to Chrome", "disabled": true]
-    ]))
+    #expect(
+      BitwardenProbeEvidence.hasEnabledAddToChromeButton([
+        ["text": "Add to Chrome", "disabled": false]
+      ]))
+    #expect(
+      !BitwardenProbeEvidence.hasEnabledAddToChromeButton([
+        ["text": "Add to Chrome", "disabled": true]
+      ]))
     for malformed in [
       ["text": "Add to Chrome"],
       ["text": "Add to Chrome", "disabled": "false"],

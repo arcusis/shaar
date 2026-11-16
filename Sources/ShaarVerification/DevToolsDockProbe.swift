@@ -15,7 +15,8 @@ enum DevToolsDockEvidence {
     boolean(state["allWindowsHidden"]) == true
   }
 
-  static func matches(_ state: [AnyHashable: Any], open: Bool, previousWidth: Double? = nil) -> Bool {
+  static func matches(_ state: [AnyHashable: Any], open: Bool, previousWidth: Double? = nil) -> Bool
+  {
     guard boolean(state["open"]) == open,
       let page = number(state["pageWidth"]),
       let host = number(state["containerWidth"]),

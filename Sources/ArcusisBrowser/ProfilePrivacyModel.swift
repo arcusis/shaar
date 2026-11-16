@@ -253,7 +253,8 @@ final class ProfilePrivacyModel {
   func load() async {
     await run(
       progressMessage: "Loading site permissions…",
-      failureMessage: "Could not load profile privacy settings. Try again.") {
+      failureMessage: "Could not load profile privacy settings. Try again."
+    ) {
       try await self.backend.loadProfile(self.profileID)
       try Task.checkCancellation()
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
@@ -267,7 +268,8 @@ final class ProfilePrivacyModel {
   func clear(siteData: Bool) async {
     await run(
       progressMessage: siteData ? "Clearing site data…" : "Clearing cache…",
-      failureMessage: "Could not clear this profile's data. Try again.") {
+      failureMessage: "Could not clear this profile's data. Try again."
+    ) {
       try await self.backend.loadProfile(self.profileID)
       try Task.checkCancellation()
       if siteData {
@@ -284,7 +286,8 @@ final class ProfilePrivacyModel {
     guard sites.contains(where: { $0.id == origin }) else { return }
     await run(
       progressMessage: "Resetting site permissions…",
-      failureMessage: "Could not reset site permissions. Try again.") {
+      failureMessage: "Could not reset site permissions. Try again."
+    ) {
       try await self.backend.loadProfile(self.profileID)
       try Task.checkCancellation()
       try await self.backend.resetPermissions(self.profileID, origin: origin)
@@ -299,7 +302,8 @@ final class ProfilePrivacyModel {
     guard cookiesBlocked != nil, !cookiesManaged else { return }
     await run(
       progressMessage: "Updating third-party cookie setting…",
-      failureMessage: "Could not update the third-party cookie setting. Try again.") {
+      failureMessage: "Could not update the third-party cookie setting. Try again."
+    ) {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
       try Task.checkCancellation()
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)

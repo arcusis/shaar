@@ -10,7 +10,8 @@ import Testing
 struct InspectorDetailsModelTests {
   @Test func rendererAccessibilityReplyCannotSupplyNativeTreeProperties() throws {
     let payload = Data(
-      #"{"aria":[{"name":"aria-label","value":"Save"}],"tabOrder":2,"tabLimit":false,"warnings":[],"role":"button","name":"Spoofed","nameSource":"contents","ignored":true,"properties":[{"name":"focusable","value":"true"}]}"#.utf8)
+      #"{"aria":[{"name":"aria-label","value":"Save"}],"tabOrder":2,"tabLimit":false,"warnings":[],"role":"button","name":"Spoofed","nameSource":"contents","ignored":true,"properties":[{"name":"focusable","value":"true"}]}"#
+        .utf8)
 
     let decoded = try JSONDecoder().decode(InspectorAccessibilityData.self, from: payload)
 

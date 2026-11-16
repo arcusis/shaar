@@ -126,9 +126,10 @@ struct DeviceChooserEngineTests {
       resolvedOptionID = .some(optionID)
     }
     store = nil
-    runtime.onDeviceChooserEvent?(Self.event(
-      id: "chooser-store-released", kind: "deviceChooserUpdated", tabID: tabID,
-      profileID: profileID, url: pageURL))
+    runtime.onDeviceChooserEvent?(
+      Self.event(
+        id: "chooser-store-released", kind: "deviceChooserUpdated", tabID: tabID,
+        profileID: profileID, url: pageURL))
 
     #expect(resolvedID == "chooser-store-released")
     #expect(resolvedWindowID == "chooser-window")

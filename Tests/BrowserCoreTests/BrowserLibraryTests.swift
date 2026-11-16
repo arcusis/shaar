@@ -2,10 +2,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-@testable import BrowserCore
 import CoreFoundation
+import Darwin
 import Foundation
 import Testing
+
+@testable import BrowserCore
+
+private func threadCPUSeconds() -> Double {
+  var stamp = timespec()
+  precondition(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stamp) == 0)
+  return Double(stamp.tv_sec) + Double(stamp.tv_nsec) / 1_000_000_000
+}
 
 @Test func historyEntryConstructionFocusedBenchmark() throws {
   let profile = UUID()
@@ -165,12 +173,12 @@ import Testing
   let visitGroups = (0..<100).map { group in
     (0..<5_000).map { visit in NSNumber(value: Double(group * 5_000 + visit)) }
   }
-  var beforeSamples: [Duration] = []
-  var afterSamples: [Duration] = []
+  var beforeSamples: [Double] = []
+  var afterSamples: [Double] = []
   var beforeMaximum = 0.0
   var afterMaximum = 0.0
   for _ in 0..<3 {
-    let beforeStart = ContinuousClock.now
+    let beforeStart = threadCPUSeconds()
     for visits in visitGroups {
       let valid = visits.allSatisfy {
         CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue.isFinite
@@ -179,12 +187,12 @@ import Testing
       }
       if valid { beforeMaximum += visits.map(\.doubleValue).max() ?? 0 }
     }
-    beforeSamples.append(beforeStart.duration(to: .now))
-    let afterStart = ContinuousClock.now
+    beforeSamples.append(threadCPUSeconds() - beforeStart)
+    let afterStart = threadCPUSeconds()
     for visits in visitGroups {
       afterMaximum += BrowserHistoryEntry.validatedLatestVisit(in: visits) ?? 0
     }
-    afterSamples.append(afterStart.duration(to: .now))
+    afterSamples.append(threadCPUSeconds() - afterStart)
   }
   #expect(beforeMaximum == afterMaximum)
   let before = beforeSamples.sorted()[beforeSamples.count / 2]

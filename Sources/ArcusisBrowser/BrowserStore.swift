@@ -56,6 +56,9 @@ final class BrowserStore {
   var tabDrag: TabDrag?
   @ObservationIgnored var sidebarDragCleanupTask: Task<Void, Never>?
   @ObservationIgnored var tabDragCleanupTask: Task<Void, Never>?
+  /// Grace after the mouse button comes up before a drag is cleared.
+  /// Tests replace this; the production default stays 300 milliseconds.
+  @ObservationIgnored var dragCleanupDelay: Duration = .milliseconds(300)
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
@@ -995,18 +998,22 @@ final class BrowserStore {
     let tabs = space.tabs
     let orderedTabs = space.orderedTabs
     let favorites = session.favorites(for: space.profileID)
-    let pageIDs = orderedTabs.map(\.id) + favorites.compactMap {
-      session.favoritePage(for: $0.id)?.tab.id
-    }
+    let pageIDs =
+      orderedTabs.map(\.id)
+      + favorites.compactMap {
+        session.favoritePage(for: $0.id)?.tab.id
+      }
     let index = number == 9 ? pageIDs.count - 1 : number - 1
     guard pageIDs.indices.contains(index) else { return false }
     let pageID = pageIDs[index]
     if let tabIndex = tabs.firstIndex(where: { $0.id == pageID }) {
       return selectTabByShortcutIndex(tabIndex)
     }
-    guard let favorite = favorites.first(where: {
-      session.favoritePage(for: $0.id)?.tab.id == pageID
-    }), session.selectFavorite(favorite.id, in: space.id) else { return false }
+    guard
+      let favorite = favorites.first(where: {
+        session.favoritePage(for: $0.id)?.tab.id == pageID
+      }), session.selectFavorite(favorite.id, in: space.id)
+    else { return false }
     closeLibraryDrawer()
     dismissPageFind()
     engine?.extensionPanel = nil
@@ -1029,9 +1036,11 @@ final class BrowserStore {
     if let tabIndex = space.tabs.firstIndex(where: { $0.id == nextID }) {
       return selectTabByShortcutIndex(tabIndex)
     }
-    guard let favorite = session.favorites(for: space.profileID).first(where: { favorite in
-      session.favoritePage(for: favorite.id)?.tab.id == nextID
-    }), session.selectFavorite(favorite.id, in: space.id) else { return false }
+    guard
+      let favorite = session.favorites(for: space.profileID).first(where: { favorite in
+        session.favoritePage(for: favorite.id)?.tab.id == nextID
+      }), session.selectFavorite(favorite.id, in: space.id)
+    else { return false }
     closeLibraryDrawer()
     dismissPageFind()
     engine?.extensionPanel = nil
@@ -1153,7 +1162,8 @@ final class BrowserStore {
     consentRequests.removeAll { $0.id == sheetID }
     if presentedConsentID == sheetID { presentedConsentID = nil }
     if presented { sheet = nil }
-    let isCurrent = presented && dialog.matches(session)
+    let isCurrent =
+      presented && dialog.matches(session)
       && rendererFailures[dialog.tabID] == nil
     let allowed = isCurrent && accepted
     if dialog.kind == .beforeUnload && !allowed {
@@ -1465,7 +1475,9 @@ final class BrowserStore {
       return false
     }
     if savePrompt?.id == request.id { return savePrompt == request }
-    guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else { return false }
+    guard savePrompt == nil, request.matches(session, inPrivateWindow: isPrivate) else {
+      return false
+    }
     guard let pageURL = session.selectedPage?.tab.url,
       let cleanedPageURL = cleanedSavePromptPageURL(pageURL)
     else { return false }
@@ -1499,7 +1511,9 @@ final class BrowserStore {
     guard !dismissingSavePrompt, let prompt = savePrompt, prompt.tabID == tabID else { return }
     let currentPageURL = session.page(forTabID: tabID)?.tab.url
     let currentPageMatches = currentPageURL.flatMap(cleanedSavePromptPageURL) == savePromptPageURL
-    guard !prompt.matches(session, inPrivateWindow: isPrivate) || !currentPageMatches else { return }
+    guard !prompt.matches(session, inPrivateWindow: isPrivate) || !currentPageMatches else {
+      return
+    }
     dismissingSavePrompt = true
     resolveSavePrompt(prompt.id, decision: .dismiss)
     dismissingSavePrompt = false

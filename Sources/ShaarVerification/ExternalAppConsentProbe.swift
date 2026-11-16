@@ -114,9 +114,12 @@ final class ExternalAppConsentProbe {
     launchAuditsBeforeQuit = Dictionary(
       uniqueKeysWithValues: evidence.targetByApproval.compactMap { target in
         audit(target).map {
-          (target, LaunchAudit(
-            count: $0.count, matchingCount: $0.matchingCount,
-            allUnremembered: $0.allUnremembered))
+          (
+            target,
+            LaunchAudit(
+              count: $0.count, matchingCount: $0.matchingCount,
+              allUnremembered: $0.allUnremembered)
+          )
         }
       })
   }

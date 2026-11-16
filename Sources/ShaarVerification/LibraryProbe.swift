@@ -125,9 +125,11 @@ final class LibraryProbe {
       try JSONEncoder().encode(ids).write(to: file, options: .atomic)
     } else {
       ids = try LibraryIdentities.decode(from: Data(contentsOf: file))
-      guard LibraryProbeEvidence.hasDistinctIdentityIDs([
-        ids.alpha, ids.beta, ids.shared, ids.folder, ids.bookmarkA, ids.bookmarkB,
-      ]) else {
+      guard
+        LibraryProbeEvidence.hasDistinctIdentityIDs([
+          ids.alpha, ids.beta, ids.shared, ids.folder, ids.bookmarkA, ids.bookmarkB,
+        ])
+      else {
         throw LibraryProbeFailure("Library identity checkpoint contains duplicate IDs.")
       }
       try await wait("native bookmark restart recovery") {
@@ -455,9 +457,10 @@ final class LibraryProbe {
     _ batch: BrowserImportBatch, profile: UUID, otherFolderID: UUID
   ) async throws {
     let succeeded = await withCheckedContinuation { continuation in
-      guard store.library.importBrowserData(
-        batch.items, profile: profile, otherFolderID: otherFolderID,
-        completion: { continuation.resume(returning: $0) })
+      guard
+        store.library.importBrowserData(
+          batch.items, profile: profile, otherFolderID: otherFolderID,
+          completion: { continuation.resume(returning: $0) })
       else {
         continuation.resume(returning: false)
         return

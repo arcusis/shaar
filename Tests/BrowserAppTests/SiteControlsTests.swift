@@ -270,7 +270,9 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(backend.values[.camera] == .allow)
 }
 
-@MainActor @Test func cancelledPermissionWriteRestoresPriorChoiceWithoutPublishingLateFailure() async {
+@MainActor @Test func cancelledPermissionWriteRestoresPriorChoiceWithoutPublishingLateFailure()
+  async
+{
   let backend = FakeSiteBackend()
   let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
   await model.load()

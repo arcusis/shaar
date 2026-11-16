@@ -101,26 +101,24 @@ public enum BrowserImport {
   }
 
   public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {
-    items.compactMap { item in
-      guard item.kind == .history, !item.visitTimes.isEmpty else { return nil }
+    var rows: [[String: Any]] = []
+    rows.reserveCapacity(items.count)
+    for item in items where item.kind == .history && !item.visitTimes.isEmpty {
       var visits: [Double] = []
       visits.reserveCapacity(item.visitTimes.count)
-      var latest: Date?
+      var latest = item.visitTimes[0].timeIntervalSince1970
       for visit in item.visitTimes {
-        visits.append(visit.timeIntervalSince1970 * 1_000)
-        if let current = latest {
-          if current < visit { latest = visit }
-        } else {
-          latest = visit
-        }
+        let seconds = visit.timeIntervalSince1970
+        visits.append(seconds * 1_000)
+        if latest < seconds { latest = seconds }
       }
-      guard let latest else { return nil }
-      return [
+      rows.append([
         "u": item.address, "t": item.title, "n": visits.count,
-        "l": latest.timeIntervalSince1970 * 1_000,
+        "l": latest * 1_000,
         "v": visits, "s": item.source.rawValue,
-      ]
+      ])
     }
+    return rows
   }
 
   public static func operations(for items: [BrowserImportItem], otherFolderID: UUID) -> [[String:

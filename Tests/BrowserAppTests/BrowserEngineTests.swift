@@ -16,7 +16,10 @@ struct BrowserEngineDownloadActionsTests {
 
     let succeeded = BrowserEngine.performDownloadFileAction(
       file, open: true,
-      openFile: { opened.append($0); return true },
+      openFile: {
+        opened.append($0)
+        return true
+      },
       revealFile: { revealed.append($0) })
 
     #expect(succeeded)
@@ -31,7 +34,10 @@ struct BrowserEngineDownloadActionsTests {
 
     let succeeded = BrowserEngine.performDownloadFileAction(
       file, open: false,
-      openFile: { opened.append($0); return true },
+      openFile: {
+        opened.append($0)
+        return true
+      },
       revealFile: { revealed.append($0) })
 
     #expect(succeeded)

@@ -57,8 +57,9 @@ struct InspectorSection<Content: View>: View {
         } label: {
           HStack(spacing: 6) {
             Image(
-              systemName: Self.disclosureSymbol(isCollapsed: isCollapsed))
-              .font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).frame(width: 9)
+              systemName: Self.disclosureSymbol(isCollapsed: isCollapsed)
+            )
+            .font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).frame(width: 9)
             Text(title).font(.system(size: 11, weight: .semibold))
             Spacer(minLength: 0)
           }.contentShape(Rectangle())
@@ -198,7 +199,8 @@ struct InspectorProperty: View {
       .opacity(
         InspectorCopyButtonVisibility.isVisible(
           hovered: hovered, keyboardFocused: copyFocused,
-          accessibilityFocused: copyAccessibilityFocused) ? 1 : 0)
+          accessibilityFocused: copyAccessibilityFocused) ? 1 : 0
+      )
       .accessibilityLabel(InspectorL10n.format("Copy %@", arguments: [.string(copyLabel)]))
       .help(InspectorL10n.format("Copy %@", arguments: [.string(copyLabel)]))
     }.frame(minHeight: 24).contentShape(Rectangle()).onHover { hovered = $0 }.help(value)

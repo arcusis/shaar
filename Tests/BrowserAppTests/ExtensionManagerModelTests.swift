@@ -43,7 +43,8 @@ struct ExtensionManagerModelTests {
       profileID: UUID())
     let extensionID = String(repeating: "a", count: 32)
     model.setIncognitoEnabled(extensionID, enabled: true)
-    model.setSiteAccess(.onClick, extensionID: extensionID, origin: "https://example.test", tabID: nil)
+    model.setSiteAccess(
+      .onClick, extensionID: extensionID, origin: "https://example.test", tabID: nil)
     runtime.complete(1, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
     runtime.complete(0, json: nil, code: 1)
     #expect(model.status == nil)
@@ -98,7 +99,8 @@ struct ExtensionManagerModelTests {
     let extensionID = String(repeating: "a", count: 32)
 
     model.setDeveloperMode(true)
-    model.setSiteAccess(.onClick, extensionID: extensionID, origin: "https://example.test", tabID: nil)
+    model.setSiteAccess(
+      .onClick, extensionID: extensionID, origin: "https://example.test", tabID: nil)
     runtime.complete(1, json: #"{"schemaVersion":1,"updated":true}"#, code: 0)
     runtime.complete(0, json: nil, code: 1)
 

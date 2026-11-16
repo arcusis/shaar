@@ -175,17 +175,35 @@ final class BrowserSplitStoreTests: XCTestCase {
     var session = BrowserSession.fresh()
     let tab = try XCTUnwrap(session.open(URL(string: "https://drag.example")!))
     let store = BrowserStore(session: session)
+    XCTAssertEqual(store.dragCleanupDelay, .milliseconds(300))
+    // Park the grace period. Cancellation is observed directly, not by outwaiting the sleep.
+    store.dragCleanupDelay = .seconds(60)
     let space = store.session.selectedSpaceID
     let item = store.beginTabDrag(tab, spaceID: space, fromSplitPane: false)
+    let firstSidebarTask = try XCTUnwrap(store.sidebarDragCleanupTask)
+    let firstTabTask = try XCTUnwrap(store.tabDragCleanupTask)
 
-    try await Task.sleep(for: .milliseconds(200))
     _ = store.beginTabDrag(tab, spaceID: space, fromSplitPane: false)
-    try await Task.sleep(for: .milliseconds(200))
 
+    XCTAssertTrue(firstSidebarTask.isCancelled)
+    XCTAssertTrue(firstTabTask.isCancelled)
+    let sidebarTask = try XCTUnwrap(store.sidebarDragCleanupTask)
+    let tabTask = try XCTUnwrap(store.tabDragCleanupTask)
+    XCTAssertFalse(sidebarTask.isCancelled)
+    XCTAssertFalse(tabTask.isCancelled)
     XCTAssertEqual(store.sidebarDrag, item)
     XCTAssertEqual(store.tabDrag?.tabID, tab)
-    store.sidebarDragCleanupTask?.cancel()
-    store.tabDragCleanupTask?.cancel()
+
+    // Let the cancelled bodies run. They must leave the replacement drag in place.
+    await Task.yield()
+    XCTAssertTrue(firstSidebarTask.isCancelled)
+    XCTAssertTrue(firstTabTask.isCancelled)
+    XCTAssertFalse(sidebarTask.isCancelled)
+    XCTAssertFalse(tabTask.isCancelled)
+    XCTAssertEqual(store.sidebarDrag, item)
+    XCTAssertEqual(store.tabDrag?.tabID, tab)
+    sidebarTask.cancel()
+    tabTask.cancel()
   }
 
   func testDeinitializingStoreCancelsDragCleanupTasks() throws {

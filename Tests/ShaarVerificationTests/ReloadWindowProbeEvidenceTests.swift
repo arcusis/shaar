@@ -24,6 +24,7 @@ import Testing
         !ReloadWindowProbeEvidence.isCrossSiteLoopbackNavigation(
           source: URL(string: origin)!, destination: destination))
     }
-    #expect(!ReloadWindowProbeEvidence.isCrossSiteLoopbackNavigation(source: source, destination: nil))
+    #expect(
+      !ReloadWindowProbeEvidence.isCrossSiteLoopbackNavigation(source: source, destination: nil))
   }
 }

@@ -43,11 +43,14 @@ struct PageNavigationButtons: View {
         label: ShellL10n.string(loadingPresentation.labelKey)
       ) {
         if let tabID { store.focusSplitTab(tabID) }
-        if state?.loading == true { store.stopCurrentPage() }
-        else { store.reloadCurrentPage() }
+        if state?.loading == true { store.stopCurrentPage() } else { store.reloadCurrentPage() }
       }
-      .disabled(state?.loading == true ? false : (tabID.map { !store.canReloadPage($0) } ?? !store.canReloadCurrentPage))
-      .browserChromeControl(state?.loading == true ? "browser.chrome.stop" : "browser.chrome.reload")
+      .disabled(
+        state?.loading == true
+          ? false : (tabID.map { !store.canReloadPage($0) } ?? !store.canReloadCurrentPage)
+      )
+      .browserChromeControl(
+        state?.loading == true ? "browser.chrome.stop" : "browser.chrome.reload")
     }
   }
 

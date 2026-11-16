@@ -14,25 +14,33 @@ import Testing
       destinationHost: "localhost", destinationBelongsToWindow: true,
       rendererFailuresAreEmpty: true, allWindowsHidden: true)
     #expect(evidence.passed)
-    #expect(!ShaarTabAdoptionEvidence(
-      clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "popup",
-      trustedGesture: "true", destinationMarker: "Cross-site destination loaded",
-      destinationHost: "localhost", destinationBelongsToWindow: true,
-      rendererFailuresAreEmpty: true, allWindowsHidden: true).passed)
-    #expect(!ShaarTabAdoptionEvidence(
-      clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "blank",
-      trustedGesture: "false", destinationMarker: "Cross-site destination loaded",
-      destinationHost: "localhost", destinationBelongsToWindow: true,
-      rendererFailuresAreEmpty: true, allWindowsHidden: true).passed)
-    #expect(!ShaarTabAdoptionEvidence(
-      clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "blank",
-      trustedGesture: "true", destinationMarker: "Cross-site destination loaded",
-      destinationHost: "localhost", destinationBelongsToWindow: false,
-      rendererFailuresAreEmpty: true, allWindowsHidden: true).passed)
-    #expect(!ShaarTabAdoptionEvidence(
-      clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "blank",
-      trustedGesture: "true", destinationMarker: "Cross-site destination loaded",
-      destinationHost: "localhost", destinationBelongsToWindow: true,
-      rendererFailuresAreEmpty: true, allWindowsHidden: false).passed)
+    #expect(
+      !ShaarTabAdoptionEvidence(
+        clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "popup",
+        trustedGesture: "true", destinationMarker: "Cross-site destination loaded",
+        destinationHost: "localhost", destinationBelongsToWindow: true,
+        rendererFailuresAreEmpty: true, allWindowsHidden: true
+      ).passed)
+    #expect(
+      !ShaarTabAdoptionEvidence(
+        clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "blank",
+        trustedGesture: "false", destinationMarker: "Cross-site destination loaded",
+        destinationHost: "localhost", destinationBelongsToWindow: true,
+        rendererFailuresAreEmpty: true, allWindowsHidden: true
+      ).passed)
+    #expect(
+      !ShaarTabAdoptionEvidence(
+        clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "blank",
+        trustedGesture: "true", destinationMarker: "Cross-site destination loaded",
+        destinationHost: "localhost", destinationBelongsToWindow: false,
+        rendererFailuresAreEmpty: true, allWindowsHidden: true
+      ).passed)
+    #expect(
+      !ShaarTabAdoptionEvidence(
+        clicked: true, adopted: true, expectedElementID: "blank", clickedElementID: "blank",
+        trustedGesture: "true", destinationMarker: "Cross-site destination loaded",
+        destinationHost: "localhost", destinationBelongsToWindow: true,
+        rendererFailuresAreEmpty: true, allWindowsHidden: false
+      ).passed)
   }
 }

@@ -96,7 +96,8 @@ enum DesktopCaptureCatalog {
     }
     return DesktopCaptureListing(
       sources: sources,
-      note: screenAccessFailed ? screenAccessNote : (screenEnumerationFailed ? screenEnumerationNote : nil),
+      note: screenAccessFailed
+        ? screenAccessNote : (screenEnumerationFailed ? screenEnumerationNote : nil),
       error: nil)
   }
 }

@@ -10,7 +10,8 @@ import Testing
   @Test func expectedUpgradeRequiresWarningInsteadOfThePlainHttpFixture() {
     #expect(
       HttpsOnlyProbeEvidence.verdict(
-        href: "chrome-error://chromewebdata/", text: "This connection is not secure", expectsUpgrade: true)
+        href: "chrome-error://chromewebdata/", text: "This connection is not secure",
+        expectsUpgrade: true)
         == .upgradeWarning)
     #expect(
       HttpsOnlyProbeEvidence.verdict(
@@ -36,7 +37,8 @@ import Testing
         == .waiting)
     #expect(
       HttpsOnlyProbeEvidence.verdict(
-        href: "http://trackertest.org:49195/plain", text: "Unrelated HTTPS page", expectsUpgrade: false)
+        href: "http://trackertest.org:49195/plain", text: "Unrelated HTTPS page",
+        expectsUpgrade: false)
         == .waiting)
   }
 }

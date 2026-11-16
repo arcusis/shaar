@@ -35,7 +35,7 @@ class BrandedDMGTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Output already exists", result.stderr)
+            self.assertIn("Output must not be a symlink", result.stderr)
             self.assertFalse(log.exists())
             self.assertTrue(output.is_symlink())
             self.assertFalse(output_target.exists())

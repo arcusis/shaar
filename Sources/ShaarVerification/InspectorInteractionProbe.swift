@@ -70,10 +70,11 @@ struct InspectorInteractionProbe {
       if id == "input-button" { try capturePanel() }
     }
     let trusted = try await model.evaluate("globalThis.inspectorInputTrusted") as? Bool
-    guard InspectorInteractionEvidence.acceptsInput(
-      trusted: trusted,
-      activated: try await model.evaluate("globalThis.inspectorInputActivated || 0") as? Int,
-      usesDOMEvents: usesDOMEvents)
+    guard
+      InspectorInteractionEvidence.acceptsInput(
+        trusted: trusted,
+        activated: try await model.evaluate("globalThis.inspectorInputActivated || 0") as? Int,
+        usesDOMEvents: usesDOMEvents)
     else { throw InspectorFailure("Input was untrusted or activated the inspected page.") }
     model.close()
     try await wait("overlay removal after close") {

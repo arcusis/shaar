@@ -33,7 +33,8 @@ import Testing
   let afterStart = ContinuousClock.now
   var afterResults: [CommandResult] = []
   for _ in 0..<10 {
-    afterResults = CommandLauncher.bookmarkSection(for: query, in: session, sources: sources).results
+    afterResults =
+      CommandLauncher.bookmarkSection(for: query, in: session, sources: sources).results
   }
   let after = afterStart.duration(to: .now)
   print("commandBookmarkChipSparseMatchFocusedBenchmark: before=\(before), after=\(after)")

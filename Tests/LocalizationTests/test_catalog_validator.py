@@ -251,7 +251,7 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertIn('PanelsL10n.string("Could not run the extension. Try again.")', source)
     def test_inspector_bug_report_failure_uses_hebrew_recovery_copy(self):
-        key = "Could not create the bug report. Try again."
+        key = "The bug report could not be saved. Check available storage and try again."
         catalog = json.loads(
             (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
                 encoding="utf-8"
@@ -259,13 +259,13 @@ class CatalogValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             catalog["strings"][key]["localizations"]["he"]["stringUnit"]["value"],
-            "לא ניתן ליצור את דוח התקלה. כדאי לנסות שוב.",
+            "לא ניתן לשמור את דוח הבאגים. בדקו שיש מספיק מקום אחסון ונסו שוב.",
         )
         source = (ROOT / "Sources/ArcusisBrowser/DeveloperBugReportModel.swift").read_text(
             encoding="utf-8"
         )
         self.assertIn(
-            'InspectorToolsL10n.string("Could not create the bug report. Try again.")', source
+            'reportFailure = InspectorToolsL10n.string(\n          "The bug report could not be saved. Check available storage and try again.")', source
         )
         self.assertNotIn("reportFailure = error.localizedDescription", source)
 
@@ -376,29 +376,35 @@ class CatalogValidatorTests(unittest.TestCase):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorPanelComponents.swift").read_text(
             encoding="utf-8"
         )
-        self.assertIn("static func disclosureSymbol(isCollapsed: Bool, rightToLeft: Bool)", source)
+        self.assertIn("static func disclosureSymbol(isCollapsed: Bool)", source)
         self.assertIn('guard isCollapsed else { return "chevron.down" }', source)
-        self.assertIn('return rightToLeft ? "chevron.left" : "chevron.right"', source)
+        self.assertIn('return "chevron.forward"', source)
+        self.assertIn("Self.disclosureSymbol(isCollapsed: isCollapsed)", source)
 
     def test_source_editor_menu_uses_direction_aware_disclosure(self):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorActionsView.swift").read_text(
             encoding="utf-8"
         )
-        self.assertIn('Image(systemName: "chevron.forward")', source)
+        self.assertIn('Image(systemName: InspectorL10n.forwardChevron())', source)
+        helper = (ROOT / "Sources/ArcusisBrowser/InspectorL10n.swift").read_text(encoding="utf-8")
+        self.assertIn('static func forwardChevron() -> String { "chevron.forward" }', helper)
 
     def test_developer_page_action_failures_use_localized_recovery_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/DevelopmentModeButton.swift").read_text(
             encoding="utf-8"
         )
-        self.assertIn("engine.reportNotice(action.failureNotice())", source)
+        self.assertIn(
+            'engine.reportNotice(ShellL10n.string("Could not complete the site action. Try again."))',
+            source,
+        )
         shell = json.loads(
             (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
                 encoding="utf-8"
             )
         )
-        translation = shell["strings"]["Could not complete the %@ action. Try again."][
+        translation = shell["strings"]["Could not complete the site action. Try again."][
             "localizations"]["he"]["stringUnit"]["value"]
-        self.assertEqual(translation, "לא ניתן להשלים את הפעולה %@. כדאי לנסות שוב.")
+        self.assertEqual(translation, "לא ניתן להשלים את הפעולה באתר. כדאי לנסות שוב.")
 
     def test_developer_tools_empty_result_has_hebrew_copy(self):
         key = "The developer tools returned no result."
@@ -462,19 +468,19 @@ class CatalogValidatorTests(unittest.TestCase):
         for key in keys:
             self.assertIn(f'"{key}"', source)
 
-    def test_extension_execution_failure_uses_hebrew_shell_copy(self):
+    def test_extension_execution_failure_uses_hebrew_panels_copy(self):
         source = (ROOT / "Sources/ArcusisBrowser/BrowserEngine.swift").read_text(
             encoding="utf-8"
         )
         self.assertIn(
-            'ShellL10n.string("Could not run this extension. Try again.")', source
+            'PanelsL10n.string("Could not run the extension. Try again.")', source
         )
-        shell = json.loads(
-            (ROOT / "Sources/BrowserCore/Resources/Shell.xcstrings").read_text(
+        panels = json.loads(
+            (ROOT / "Sources/BrowserCore/Resources/Panels.xcstrings").read_text(
                 encoding="utf-8"
             )
         )
-        translation = shell["strings"]["Could not run this extension. Try again."][
+        translation = panels["strings"]["Could not run the extension. Try again."][
             "localizations"]["he"]["stringUnit"]["value"]
         self.assertEqual(translation, "לא ניתן להפעיל את התוסף. כדאי לנסות שוב.")
 
@@ -761,8 +767,11 @@ class CatalogValidatorTests(unittest.TestCase):
     def test_inspector_storage_view_localizes_known_backend_errors(self):
         source = (ROOT / "Sources/ArcusisBrowser/InspectorStorageView.swift").read_text(
             encoding="utf-8")
-        self.assertEqual(
-            source.count("InspectorToolsL10n.backendError(error.localizedDescription)"), 2)
+        self.assertIn(
+            "InspectorToolsL10n.backendError(error.localizedDescription, language: language)",
+            source,
+        )
+        self.assertEqual(source.count("Self.backendFailureMessage(for: error)"), 2)
         strings = json.loads(
             (ROOT / "Sources/BrowserCore/Resources/InspectorTools.xcstrings").read_text(
                 encoding="utf-8"))["strings"]
@@ -771,11 +780,15 @@ class CatalogValidatorTests(unittest.TestCase):
                 self.assertNotEqual(
                     strings[key]["localizations"]["he"]["stringUnit"]["value"], key)
     def test_inspector_disclosure_chevrons_follow_reading_direction(self):
-        for name in ("InspectorActionsView.swift", "InspectorPanel.swift", "InspectorPanelComponents.swift"):
+        for name in ("InspectorActionsView.swift", "InspectorPanel.swift"):
             with self.subTest(name=name):
                 source = (ROOT / "Sources/ArcusisBrowser" / name).read_text(encoding="utf-8")
-                self.assertIn("chevron.forward", source)
+                self.assertIn("InspectorL10n.forwardChevron()", source)
                 self.assertNotIn('"chevron.right"', source)
+        section = (ROOT / "Sources/ArcusisBrowser/InspectorPanelComponents.swift").read_text(encoding="utf-8")
+        self.assertIn('return "chevron.forward"', section)
+        helper = (ROOT / "Sources/ArcusisBrowser/InspectorL10n.swift").read_text(encoding="utf-8")
+        self.assertIn('static func forwardChevron() -> String { "chevron.forward" }', helper)
 
     def test_inspector_markup_size_uses_hebrew_byte_term_in_all_plural_forms(self):
         strings = json.loads(

@@ -54,7 +54,9 @@ struct BrowserStoreLibraryTests {
         .success([
           "bar": [
             "id": "00000000-0000-4000-8000-000000000001", "k": "f", "t": "Bookmarks bar",
-            "c": [["id": bookmarkID.uuidString, "k": "u", "t": "Saved", "u": "https://saved.test"]],
+            "c": [
+              ["id": bookmarkID.uuidString, "k": "u", "t": "Saved", "u": "https://saved.test"]
+            ],
           ],
           "other": [
             "id": "00000000-0000-4000-8000-000000000002", "k": "f", "t": "Other bookmarks",

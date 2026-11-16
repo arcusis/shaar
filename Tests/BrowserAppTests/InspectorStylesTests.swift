@@ -11,7 +11,8 @@ import Testing
 
 @Suite @MainActor struct InspectorStylesTests {
   @Test func backendFailuresUseLocalizedPageStyleRecoveryCopy() {
-    let error = NSError(domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
+    let error = NSError(
+      domain: "DevTools", code: 1, userInfo: [NSLocalizedDescriptionKey: "The engine refused."])
     #expect(
       InspectorStylesModel.failureMessage(for: error)
         == InspectorL10n.string("Could not complete the page style change. Try again."))
@@ -129,7 +130,9 @@ import Testing
     defer { inspector.close() }
     try inspector.receive(InspectorPanelTests.fixtureSelection())
 
-    let edit = Task { @MainActor in await inspector.styles.edit(property: "color", value: "red", important: false) }
+    let edit = Task { @MainActor in
+      await inspector.styles.edit(property: "color", value: "red", important: false)
+    }
     edit.cancel()
     await edit.value
 

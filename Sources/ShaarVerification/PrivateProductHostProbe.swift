@@ -432,7 +432,8 @@ final class PrivateProductHostProbe {
       first.store, tabID: first.store.selectedTabID, contains: "q=abcdefghijklmnopqrstuvwxyz")
     first.store.openTab()
     try await waitForTabs(first.store, count: 2)
-    hostingRemainedAttached = hostingRemainedAttached
+    hostingRemainedAttached =
+      hostingRemainedAttached
       && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     guard let secondTab = first.store.selectedTab else {
       throw PrivateWindowFailure("Private Command-T did not select transient tab.")
@@ -442,10 +443,12 @@ final class PrivateProductHostProbe {
     let firstTabID = first.store.tabs.first(where: { $0.id != secondTab.id })?.id
     if let firstTabID {
       first.store.selectTab(firstTabID)
-      hostingRemainedAttached = hostingRemainedAttached
+      hostingRemainedAttached =
+        hostingRemainedAttached
         && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
       first.store.selectTab(secondTab.id)
-      hostingRemainedAttached = hostingRemainedAttached
+      hostingRemainedAttached =
+        hostingRemainedAttached
         && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     }
     first.store.navigate(firstPath)
@@ -474,7 +477,8 @@ final class PrivateProductHostProbe {
     first.store.dismissCommand()
     first.store.openTab()
     try await waitForTabs(first.store, count: 3)
-    hostingRemainedAttached = hostingRemainedAttached
+    hostingRemainedAttached =
+      hostingRemainedAttached
       && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
     guard let commandTab = first.store.selectedTab else {
       throw PrivateWindowFailure("Private Command-T did not create a selected native tab.")
@@ -498,7 +502,8 @@ final class PrivateProductHostProbe {
     for (index, tabID) in first.store.tabs.map(\.id).enumerated() {
       let path = "private-product-\(runID.lowercased())-smoke-\(index + 1)"
       first.store.selectTab(tabID)
-      hostingRemainedAttached = hostingRemainedAttached
+      hostingRemainedAttached =
+        hostingRemainedAttached
         && Self.hostingViewIsAttached(first.hosting, to: privateContainer, in: first.window)
       first.store.navigate(fixture.appending(path: path).absoluteString)
       first.store.confirmHTTP(useHTTPS: false)
@@ -960,7 +965,8 @@ final class PrivateProductHostProbe {
       } else {
         dialogCancelled = await cancelNativeBeforeUnload(on: normalTabID)
       }
-      let cancelled = alreadyCancelled || dialogCancelled
+      let cancelled =
+        alreadyCancelled || dialogCancelled
         || Self.observedNativeQuitCancellation(
           requestEventObserved: quitRequestedEvent,
           cancellationEventObserved: quitCancelledEvent)

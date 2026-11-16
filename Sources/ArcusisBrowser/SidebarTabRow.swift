@@ -114,7 +114,8 @@ struct SidebarTabRow: View {
     .focused($focusedControl, equals: .select)
     .accessibilityLabel(
       SidebarTabTitle.accessibilityLabel(
-        title: title, address: address, isSleeping: isSleeping, isPinned: isPinned))
+        title: title, address: address, isSleeping: isSleeping, isPinned: isPinned)
+    )
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityAction(named: ShellL10n.text("Close tab"), onClose)
     .accessibilityIdentifier("sidebar-tab-select-\(tabID.uuidString)")
@@ -145,7 +146,8 @@ struct SidebarTabRow: View {
     .allowsHitTesting(showsClose)
     .accessibilityHidden(!showsClose)
     .accessibilityLabel(
-      SidebarTabTitle.closeAccessibilityLabel(title: title, address: address))
+      SidebarTabTitle.closeAccessibilityLabel(title: title, address: address)
+    )
     .help(SidebarTabTitle.closeAccessibilityLabel(title: title, address: address))
     .accessibilityIdentifier("sidebar-tab-close-\(tabID.uuidString)")
   }

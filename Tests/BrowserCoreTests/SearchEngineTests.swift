@@ -51,7 +51,9 @@ import Testing
     #expect(NavigationInput.destination(for: "javascript:alert(1)", searchEngine: engine) == nil)
     #expect(NavigationInput.destination(for: "file:///etc/passwd", searchEngine: engine) == nil)
     #expect(NavigationInput.destination(for: "chrome://settings", searchEngine: engine) == nil)
-    #expect(NavigationInput.destination(for: "devtools://devtools/bundled/js_app.html", searchEngine: engine) == nil)
+    #expect(
+      NavigationInput.destination(
+        for: "devtools://devtools/bundled/js_app.html", searchEngine: engine) == nil)
     #expect(NavigationInput.destination(for: "custom://host", searchEngine: engine) == nil)
   }
 }

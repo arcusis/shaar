@@ -1126,13 +1126,15 @@ final class EngineProbe {
           "\(phase) Profile switch \(iteration + 1) preserves tab session storage")
       }
       let switchReport = switchMetrics.report(phase: phase)
+      let switchBudget = SwitchProbeMetrics.acceptanceBudgetMilliseconds()
+      let switchBudgetLabel = SwitchProbeMetrics.budgetDiagnostic()
       try expect(
-        switchReport.spaceSwitchWithinBudget,
-        "\(phase) Space switch \(switchReport.latencyDiagnostic(for: .space)); budget \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms"
+        switchReport.withinBudget(.space, budgetMilliseconds: switchBudget),
+        "\(phase) Space switch \(switchReport.latencyDiagnostic(for: .space)); \(switchBudgetLabel)"
       )
       try expect(
-        switchReport.profileSwitchWithinBudget,
-        "\(phase) Profile switch \(switchReport.latencyDiagnostic(for: .profile)); budget \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms"
+        switchReport.withinBudget(.profile, budgetMilliseconds: switchBudget),
+        "\(phase) Profile switch \(switchReport.latencyDiagnostic(for: .profile)); \(switchBudgetLabel)"
       )
       let profileIDs = store.session.profiles.map(\.id)
       let restored = BrowserStore(

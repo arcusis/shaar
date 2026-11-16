@@ -18,7 +18,6 @@
 - (BOOL)shaarDeleteProfileID:(NSString *)profileID;
 - (BOOL)shaarDeleteProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion;
 - (nullable NSURL *)shaarProfileDirectoryForID:(NSString *)profileID;
-- (NSWindow *)shaarPictureInPictureWindowForTabID:(NSString *)tabID;
 - (NSDictionary *)shaarSecurityInfoForTabID:(NSString *)tabID profileID:(NSString *)profileID;
 @end
 

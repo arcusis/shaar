@@ -22,6 +22,15 @@ SPEC.loader.exec_module(CONTRACT)
 
 
 class EngineABIContractTests(unittest.TestCase):
+    def test_pinned_pip_window_uses_the_routed_state_and_native_window_fallback(self):
+        bridge = (ROOT / "Sources/ChromiumBridge/ChromiumPictureInPicture.mm").read_text()
+        header = (ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h").read_text()
+        self.assertNotIn("shaar_media_pip_window", CONTRACT.collect_bridge_symbols(ROOT))
+        self.assertNotIn("shaar_media_pip_window(", header)
+        self.assertIn("[self mediaSessionStateForTabID:tabID]", bridge)
+        self.assertIn("if (!state[@\"pictureInPicture\"]) return nil;", bridge)
+        self.assertIn("ARCIsPictureInPictureVideoWindow(window)", bridge)
+
     def test_collects_macro_and_dlsym_symbols_and_routed_values(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

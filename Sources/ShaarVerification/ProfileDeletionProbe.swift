@@ -99,20 +99,24 @@ final class ProfileDeletionProbe {
           + "survivorWorkspaceEntry=\(survivorWorkspaceEntry)).")
     }
 
-    // Recreate the deleted identity to prove its cookie store was removed, then clean it again.
-    try await backend.loadProfile(deleting)
+    // Chromium marks deleted profile paths unusable until the next startup.
+    // The missing old directory proves deletion; a new identity checks that
+    // the survivor's cookie remains isolated from a fresh profile.
+    let freshProfile = UUID()
+    try await backend.loadProfile(freshProfile)
     let checkTab = UUID()
     let checkWindow = UUID().uuidString
     try runtime.createWindowID(checkWindow)
     try runtime.openTabID(
-      checkTab.uuidString, profileID: deleting.uuidString, windowID: checkWindow,
+      checkTab.uuidString, profileID: freshProfile.uuidString, windowID: checkWindow,
       url: url.absoluteString)
     let freshCookie = await cookieValue(checkTab, runtime: runtime)
     runtime.discardTabID(checkTab.uuidString)
     _ = runtime.closeWindowID(checkWindow)
     let retainedCookie = await cookieValue(survivorTab, runtime: runtime)
-    try await backend.deleteProfile(deleting)
+    try await backend.deleteProfile(freshProfile)
     guard freshCookie == "", retainedCookie?.contains(survivorCookie) == true,
+      !FileManager.default.fileExists(atPath: deletedDirectory.path),
       !host.workspace.workspace.catalog.profiles.contains(where: { $0.id == deleting }),
       host.workspace.workspace.catalog.profiles.contains(where: { $0.id == survivor })
     else {
@@ -127,7 +131,7 @@ final class ProfileDeletionProbe {
     return [
       "Profile deletion removes its data directory and workspace entry",
       "The other profile retains its data directory and workspace entry",
-      "Recreating the deleted profile starts with an empty cookie store",
+      "A fresh profile starts with an empty cookie store after deletion",
       "The other profile retains its directory, cookie and workspace entry",
     ]
   }

@@ -142,7 +142,6 @@ final class NativeWindowProbe {
     runtime.activateTabID(tabA.uuidString)
     try attach(tabA, to: second)
     try checkPageResizes(tabA, windowID: second)
-    try await checkWebStoreFit(windowID: second, profileID: b)
     runtime.activateTabID(tabA.uuidString)
     try attach(tabA, to: second)
     let alpha = try await document(tabA)
@@ -306,6 +305,7 @@ final class NativeWindowProbe {
     try expect(
       store.session == beforeSession,
       "secondary native activity does not add or alter primary saved tabs")
+    try await checkWebStoreFit(windowID: second, profileID: b)
     try expect(
       runtime.closeWindowID(second), "ordinary close requests only the selected native window")
     try await wait("secondary native window close") { self.closedWindows[second] != nil }
@@ -398,6 +398,17 @@ final class NativeWindowProbe {
     guard let page = runtime.view(forTabID: tab.uuidString) else {
       throw NativeWindowFailure("Web Store fit page missing.")
     }
+    guard let window = runtime.window(forID: windowID) else {
+      throw NativeWindowFailure("Web Store fit window missing.")
+    }
+    let surface = ShaarSavePromptRenderSurface(window: window) {
+      runtime.focusTabID(tab.uuidString)
+    }
+    defer { _ = surface.orderOutAndRestore() }
+    try expect(
+      surface.isPresentingFramesWithoutInputOrFocus,
+      "Web Store fit uses a transparent, non-key, mouse-ignoring renderer surface")
+    try await Task.sleep(for: .milliseconds(400))
     let height = page.frame.height
     page.setFrameSize(NSSize(width: 1000, height: height))
     let narrow = try await fitLayout(tab, "narrow") { $0.width >= 1280 && $0.overflow == 0 }
@@ -412,6 +423,9 @@ final class NativeWindowProbe {
     page.setFrameSize(NSSize(width: 1400, height: height))
     _ = try await fitLayout(tab, "wide") { $0.width == 1400 && $0.overflow == 0 }
     try expect(true, "a page card wide enough for the store restores full zoom")
+    try expect(
+      surface.orderOutAndRestore(),
+      "Web Store fit renderer surface is ordered out before hidden-window checks")
     runtime.closeTabID(tab.uuidString)
     try await wait("Web Store fit tab close") {
       self.runtime.nativeTabID(forID: tab.uuidString) == -1

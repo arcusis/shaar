@@ -1027,7 +1027,7 @@ class SupplyChainTests(unittest.TestCase):
 
     def test_engine_download_has_connection_and_retry_timeouts(self):
         fetch = (ROOT / "scripts/fetch-engine.sh").read_text()
-        curl = next(line for line in fetch.splitlines() if line.strip().startswith("curl "))
+        curl = next(line for line in fetch.splitlines() if re.match(r"\s*(?:if )?curl ", line))
         self.assertIn("--connect-timeout 30", curl)
         self.assertIn("--max-time 900", curl)
         self.assertIn("--retry 3", curl)

@@ -347,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
               </form>
             """, ""), html, []
         if route == "/saved":
-            return page("saved", "", "finish({outcome:'submitted'});"), html, []
+            return page("saved", "<main>submitted</main>", "finish({outcome:'submitted'});"), html, []
         if route == "/webgpu":
             return page("webgpu", "", """
               if (!navigator.gpu) { finish({outcome:'missing'}); }

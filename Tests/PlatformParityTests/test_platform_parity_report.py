@@ -16,6 +16,13 @@ SPEC.loader.exec_module(PROBE)
 
 
 class PlatformParityReportTests(unittest.TestCase):
+    def test_password_submission_has_visible_success_document(self):
+        body, content_type, _ = PROBE.Handler.route(
+            PROBE.Handler, "/saved", {}, "http://localhost")
+        self.assertEqual(content_type, "text/html; charset=utf-8")
+        self.assertIn("<main>submitted</main>", body)
+        self.assertIn("finish({outcome:'submitted'});", body)
+
     def test_widevine_probe_only_reports_playing_after_time_advances(self):
         body, content_type, _ = PROBE.Handler.route(
             PROBE.Handler, "/widevine-playback", {}, "http://localhost")

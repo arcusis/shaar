@@ -14,7 +14,12 @@ import { initializeTour } from "../src/tour";
 
 test("homepage tour keeps a short list of distinct screenshots and a thumbnail grid", () => {
   const document = parseHTML(HomePage()).document;
-  assert.ok(tourFeatures.length >= 8 && tourFeatures.length <= 10);
+  assert.ok(tourFeatures.length >= 7 && tourFeatures.length <= 10);
+  assert.equal(
+    tourFeatures.some((feature) => feature.id === "stop-loading"),
+    false,
+  );
+  assert.ok(tourCards.some((card) => card.id === "stop-loading"));
   const articles = [...document.querySelectorAll<HTMLElement>("[data-tour-feature]")];
   const cards = [...document.querySelectorAll<HTMLElement>(".tour-card")];
   assert.equal(articles.length, tourFeatures.length);
@@ -49,6 +54,10 @@ test("homepage tour keeps a short list of distinct screenshots and a thumbnail g
   assert.match(text, /Shaar 0\.2\.0 · MPL-2\.0/);
   assert.equal(text.includes("Preview what's coming"), false);
   assert.equal(text.includes("Preview 0.2.0"), false);
+  assert.equal(text.includes("Unknown access"), false);
+  assert.equal(text.includes("did not provide a complete site access list"), false);
+  assert.ok(document.querySelector("#extensions .tour-shot img"));
+  assert.ok(document.querySelector("#stop-loading .tour-shot img"));
 });
 
 test("download and changelog treat 0.2.0 as the current release", () => {
@@ -91,4 +100,6 @@ test("tour stays readable without JavaScript and honors reduced motion", () => {
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.equal(styles.includes(".tour-preview"), false);
+  assert.match(styles, /\.tour-shot\s*\{[^}]*aspect-ratio:\s*4\s*\/\s*3/);
+  assert.match(styles, /\.tour-card \.tour-shot img\s*\{[^}]*object-fit:\s*contain/);
 });

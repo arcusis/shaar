@@ -102,17 +102,6 @@ export const tourFeatures: TourFeature[] = [
     },
   },
   {
-    id: "stop-loading",
-    title: "Stop a page when you need to",
-    description: "The toolbar can stop a loading page without closing its tab. Reload when ready.",
-    shot: {
-      file: "stop-loading.webp",
-      width: 2880,
-      height: 1920,
-      alt: "Shaar toolbar showing Stop while arcusis.com is open in the Work Space",
-    },
-  },
-  {
     id: "sleeping-tabs",
     title: "Quiet tabs can sleep",
     description:
@@ -128,13 +117,24 @@ export const tourFeatures: TourFeature[] = [
 
 export const tourCards: TourCard[] = [
   {
+    id: "stop-loading",
+    title: "Stop a page when you need to",
+    description: "The toolbar can stop a loading page without closing its tab. Reload when ready.",
+    shot: {
+      file: "stop-loading.webp",
+      width: 680,
+      height: 115,
+      alt: "Shaar toolbar with Back, Forward and Stop while arcusis.com is loading in the Work Space",
+    },
+  },
+  {
     id: "extensions",
     title: "Bring your extensions",
     description: "Chrome Web Store installs ask for consent before they join a profile.",
     shot: {
       file: "web-store-bitwarden-consent.webp",
       width: 872,
-      height: 1249,
+      height: 670,
       alt: "Shaar consent sheet for adding Bitwarden Password Manager from the Chrome Web Store to the Work profile",
     },
   },
@@ -237,11 +237,11 @@ function feature(item: TourFeature, index: number): string {
 
 function card(item: TourCard): string {
   return `<article class="tour-card" id="${item.id}" aria-labelledby="${item.id}-title">
-    <figure>${shotImage(item.shot)}<figcaption class="mono">Shaar 0.2.0</figcaption></figure>
+    <figure><div class="tour-shot">${shotImage(item.shot)}</div><figcaption class="mono">Shaar 0.2.0</figcaption></figure>
     <h3 id="${item.id}-title">${escapeHtml(item.title)}</h3><p>${escapeHtml(item.description)}</p>
   </article>`;
 }
 
 export function FeatureTour(): string {
-  return `<section class="tour" aria-labelledby="tour-title"><div class="tour-intro"><p class="mono">SHAAR 0.2.0</p><h2 id="tour-title">Everything you need.\nNothing in your way.</h2><p>Eight parts of the Mac app, then the sheets and controls that sit beside them. Every picture is a real Shaar window.</p></div><div class="tour-list">${tourFeatures.map(feature).join("")}</div><div class="tour-more"><h3 id="tour-more-title">Also in this release</h3><div class="tour-grid">${tourCards.map(card).join("")}</div></div></section>`;
+  return `<section class="tour" aria-labelledby="tour-title"><div class="tour-intro"><p class="mono">SHAAR 0.2.0</p><h2 id="tour-title">Everything you need.\nNothing in your way.</h2><p>Seven parts of the Mac app, then the sheets and controls that sit beside them. Every picture is a real Shaar window.</p></div><div class="tour-list">${tourFeatures.map(feature).join("")}</div><div class="tour-more"><h3 id="tour-more-title">Also in this release</h3><div class="tour-grid">${tourCards.map(card).join("")}</div></div></section>`;
 }

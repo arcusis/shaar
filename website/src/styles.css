@@ -1797,13 +1797,18 @@ kbd {
   background: #f7f6f1;
 }
 .tour-card figure {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
   margin: 0;
-  padding: 12px;
+}
+.tour-shot {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
   border-radius: 12px;
-  background: #fff;
+  background: #e7ebe3;
 }
 .tour-card h3 {
   margin: 0;
@@ -1841,8 +1846,7 @@ kbd {
 .tour-feature:nth-child(4n) .tour-image {
   background: #eae8e2;
 }
-.tour-image img,
-.tour-card img {
+.tour-image img {
   width: auto;
   max-width: 100%;
   height: auto;
@@ -1850,6 +1854,17 @@ kbd {
   object-fit: contain;
   border-radius: 12px;
   box-shadow: var(--window-shadow);
+}
+.tour-card .tour-shot img {
+  position: absolute;
+  inset: 12px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 8px;
 }
 .tour-image figcaption {
   margin-top: 16px;

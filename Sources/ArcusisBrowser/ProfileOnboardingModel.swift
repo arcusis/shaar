@@ -189,6 +189,7 @@ final class ProfileOnboardingModel {
   }
 
   static func creationFailure(language: BrowserLanguage = .currentLaunchLanguage) -> String {
-    BrowserLocalization.string("Could not create the profile. Try again.", table: "Settings", language: language)
+    BrowserLocalization.string(
+      "Could not create the profile. Try again.", table: "Settings", language: language)
   }
 }

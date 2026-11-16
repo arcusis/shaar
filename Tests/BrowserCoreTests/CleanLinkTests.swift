@@ -37,7 +37,8 @@ import Testing
 
   #expect(
     CleanLink.clean(input).absoluteString
-      == "https://storage.example.com/object%2Fprivate?download=https%3A%2F%2Fexample.com%2Ffile&sig=abc")
+      == "https://storage.example.com/object%2Fprivate?download=https%3A%2F%2Fexample.com%2Ffile&sig=abc"
+  )
 }
 
 @Test func cleanLinkRemovesSocialTrackingAndPreservesPageParameters() {

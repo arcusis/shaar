@@ -109,7 +109,9 @@ test("link checker verifies image map associations", () => {
       join(root, "index.html"),
       '<h1>Home</h1><img src="/map.png" alt="Map" usemap="#regions"><map name="regions"><area href="/north/" alt="North"></map><img src="/map.png" alt="Map" usemap="#missing">',
     );
-    assert.deepEqual(checkLinks(root).errors, ["index.html: image references missing map #missing"]);
+    assert.deepEqual(checkLinks(root).errors, [
+      "index.html: image references missing map #missing",
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -179,7 +181,6 @@ test("link checker validates inline SVG image files and use fragments", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 
 test("link checker validates quoted CSS imports outside comments", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
@@ -276,7 +277,10 @@ test("link checker rejects empty alternative text on image map links", () => {
 test("link checker validates embedded page URLs", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
-    writeFileSync(join(root, "index.html"), '<h1>Home</h1><iframe src="/missing-embed/" title="Embedded page"></iframe>');
+    writeFileSync(
+      join(root, "index.html"),
+      '<h1>Home</h1><iframe src="/missing-embed/" title="Embedded page"></iframe>',
+    );
     assert.deepEqual(checkLinks(root).errors, ["index.html: missing target /missing-embed/"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -409,7 +413,10 @@ test("link checker reports multiple malformed CSS asset URLs", () => {
   const root = mkdtempSync(join(tmpdir(), "shaar-links-"));
   try {
     writeFileSync(join(root, "index.html"), "<h1>Home</h1>");
-    writeFileSync(join(root, "styles.css"), 'a{background:url("http://[")}b{background:url("http://%") }');
+    writeFileSync(
+      join(root, "styles.css"),
+      'a{background:url("http://[")}b{background:url("http://%") }',
+    );
     assert.deepEqual(checkLinks(root).errors, [
       "styles.css: missing/nonlocal CSS asset http://[",
       "styles.css: missing/nonlocal CSS asset http://%",

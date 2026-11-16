@@ -6,8 +6,8 @@ import AppKit
 import SwiftUI
 import Testing
 
-@testable import BrowserCore
 @testable import ArcusisBrowser
+@testable import BrowserCore
 
 @Test func libraryFilterSnapshotCachesCollapsedBookmarkAncestry() {
   let profileID = UUID()

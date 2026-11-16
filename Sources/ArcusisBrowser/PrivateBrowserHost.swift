@@ -238,10 +238,13 @@ final class PrivateBrowserHost {
         self.windowsByContext.removeValue(forKey: contextID)
         if !self.runtime.isQuitting {
           self.reportError(
-            error ?? NSError(
-              domain: "org.arcusis.shaar.private-window", code: 1,
-              userInfo: [NSLocalizedDescriptionKey: "The private window context could not be created."]
-            ))
+            error
+              ?? NSError(
+                domain: "org.arcusis.shaar.private-window", code: 1,
+                userInfo: [
+                  NSLocalizedDescriptionKey: "The private window context could not be created."
+                ]
+              ))
         }
         return
       }
@@ -296,7 +299,8 @@ final class PrivateBrowserHost {
     case .back:
       store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoBack == true
     case .forward:
-      store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoForward == true
+      store.session.selectedPage.flatMap { store.privatePage?.pages[$0.tab.id] }?.canGoForward
+        == true
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .developerTools, .chromiumDeveloperTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil

@@ -98,7 +98,8 @@ private actor CancelledManageSettingsTransport: ShaarExtensionsTransport {
   ) async throws -> Data {
     if operation == .list {
       return Data(
-        #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#.utf8)
+        #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.2","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#
+          .utf8)
     }
     throw CancellationError()
   }
@@ -145,7 +146,8 @@ struct SharedExtensionSettingsTests {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     try Data(
-      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#
+        .utf8
     ).write(to: file)
     let transport = DelayedReconcileExtensionsTransport()
     let adapter = ShaarExtensionsAdapter(shaar: transport)
@@ -215,7 +217,8 @@ struct SharedExtensionSettingsTests {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     try Data(
-      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#
+        .utf8
     ).write(to: file)
     let transport = CancelledManageSettingsTransport()
     let adapter = ShaarExtensionsAdapter(shaar: transport)
@@ -239,7 +242,8 @@ struct SharedExtensionSettingsTests {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     try Data(
-      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#.utf8
+      #"{"schemaVersion":2,"intents":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approvedVersion":"1.2"}]}"#
+        .utf8
     ).write(to: file)
     let transport = SettingsExtensionsTransport(profiles: [profileID: true])
     let adapter = ShaarExtensionsAdapter(shaar: transport)

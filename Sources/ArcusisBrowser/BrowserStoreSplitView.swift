@@ -132,11 +132,12 @@ extension BrowserStore {
   func beginSidebarDrag(_ item: SidebarTransfer) -> SidebarTransfer {
     sidebarDrag = item
     sidebarDragCleanupTask?.cancel()
+    let cleanupDelay = dragCleanupDelay
     sidebarDragCleanupTask = Task { @MainActor [weak self] in
       while NSEvent.pressedMouseButtons & 1 != 0 {
         do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
       }
-      do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+      do { try await Task.sleep(for: cleanupDelay) } catch { return }
       guard !Task.isCancelled, let self, self.sidebarDrag == item else { return }
       self.sidebarDragCleanupTask = nil
       self.sidebarDrag = nil
@@ -149,12 +150,13 @@ extension BrowserStore {
     let drag = TabDrag(tabID: tabID, fromSplitPane: fromSplitPane)
     tabDrag = drag
     tabDragCleanupTask?.cancel()
+    let cleanupDelay = dragCleanupDelay
     tabDragCleanupTask = Task { @MainActor [weak self] in
       while NSEvent.pressedMouseButtons & 1 != 0 {
         do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
       }
       // AppKit delivers the drop just after the button comes up; let it land first.
-      do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+      do { try await Task.sleep(for: cleanupDelay) } catch { return }
       guard !Task.isCancelled, let self, self.tabDrag == drag else { return }
       self.tabDragCleanupTask = nil
       self.tabDrag = nil

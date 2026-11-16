@@ -3,10 +3,17 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import CSQLite
+import Darwin
 import Foundation
 import Testing
 
 @testable import BrowserCore
+
+private func threadCPUSeconds() -> Double {
+  var stamp = timespec()
+  precondition(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &stamp) == 0)
+  return Double(stamp.tv_sec) + Double(stamp.tv_nsec) / 1_000_000_000
+}
 
 @Test func firefoxProfileImportSnapshotBenchmark() throws {
   let database = try databaseURLProfile(name: "FirefoxSnapshot", databaseName: "places.sqlite")
@@ -70,15 +77,15 @@ import Testing
     #expect(actualRow["l"] as? Double == expectedRow["l"] as? Double)
   }
 
-  var beforeSamples: [Duration] = []
-  var afterSamples: [Duration] = []
+  var beforeSamples: [Double] = []
+  var afterSamples: [Double] = []
   for _ in 0..<5 {
-    let beforeStart = ContinuousClock.now
+    let beforeStart = threadCPUSeconds()
     for _ in 0..<3 { _ = legacyHistoryRows(items) }
-    beforeSamples.append(beforeStart.duration(to: .now))
-    let afterStart = ContinuousClock.now
+    beforeSamples.append(threadCPUSeconds() - beforeStart)
+    let afterStart = threadCPUSeconds()
     for _ in 0..<3 { _ = BrowserImport.historyRows(for: items) }
-    afterSamples.append(afterStart.duration(to: .now))
+    afterSamples.append(threadCPUSeconds() - afterStart)
   }
   let before = beforeSamples.sorted()[beforeSamples.count / 2]
   let after = afterSamples.sorted()[afterSamples.count / 2]
@@ -133,17 +140,17 @@ private func legacyHistoryRows(_ items: [BrowserImportItem]) -> [[String: Any]] 
   #expect(actual.count == expected.count && actual.count == 10_010)
   #expect(importOperationSignatures(actual) == importOperationSignatures(expected))
 
-  var beforeSamples: [Duration] = []
-  var afterSamples: [Duration] = []
+  var beforeSamples: [Double] = []
+  var afterSamples: [Double] = []
   for _ in 0..<5 {
-    let beforeStart = ContinuousClock.now
+    let beforeStart = threadCPUSeconds()
     for _ in 0..<3 { _ = legacyImportOperations(items, otherFolderID: rootFolderID) }
-    beforeSamples.append(beforeStart.duration(to: .now))
-    let afterStart = ContinuousClock.now
+    beforeSamples.append(threadCPUSeconds() - beforeStart)
+    let afterStart = threadCPUSeconds()
     for _ in 0..<3 {
       _ = BrowserImport.operations(for: items, otherFolderID: rootFolderID)
     }
-    afterSamples.append(afterStart.duration(to: .now))
+    afterSamples.append(threadCPUSeconds() - afterStart)
   }
   let before = beforeSamples.sorted()[beforeSamples.count / 2]
   let after = afterSamples.sorted()[afterSamples.count / 2]
@@ -466,7 +473,8 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   for _ in 0..<4 {
     rowCount += try BrowserImportSQLite.rows(
       at: database,
-      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id").count
+      query: "SELECT id, url, visit_time, transition FROM visits ORDER BY id"
+    ).count
   }
   print("sqliteRowMaterializationFocusedBenchmark: \(start.duration(to: .now))")
   #expect(rowCount == 120_012)
@@ -479,22 +487,22 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   let acceptsValidAddress = validationCache.accepts(address)
   let acceptsRepeatedAddress = validationCache.accepts(address)
   #expect(!rejectsInvalidAddress && acceptsValidAddress && acceptsRepeatedAddress)
-  var beforeSamples: [Duration] = []
-  var afterSamples: [Duration] = []
+  var beforeSamples: [Double] = []
+  var afterSamples: [Double] = []
   var beforeAccepted = 0
   var afterAccepted = 0
   for _ in 0..<5 {
-    let beforeStart = ContinuousClock.now
+    let beforeStart = threadCPUSeconds()
     for _ in 0..<30_000 {
       if LibraryAddress.destination(address) != nil { beforeAccepted += 1 }
     }
-    beforeSamples.append(beforeStart.duration(to: .now))
+    beforeSamples.append(threadCPUSeconds() - beforeStart)
     var cache = BrowserImportAddressCache()
-    let afterStart = ContinuousClock.now
+    let afterStart = threadCPUSeconds()
     for _ in 0..<30_000 {
       if cache.accepts(address) { afterAccepted += 1 }
     }
-    afterSamples.append(afterStart.duration(to: .now))
+    afterSamples.append(threadCPUSeconds() - afterStart)
   }
   #expect(beforeAccepted == afterAccepted && afterAccepted == 150_000)
   let before = beforeSamples.sorted()[beforeSamples.count / 2]

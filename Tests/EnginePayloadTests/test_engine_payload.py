@@ -75,6 +75,15 @@ def write_archive(path, members):
 
 
 class EnginePayloadTests(unittest.TestCase):
+    def test_identity_rewrite_keeps_duplicate_key_rejection(self):
+        source = plistlib.dumps({"CFBundleIdentifier": "source.id", "Label": "Shaar"})
+        current = plistlib.dumps({"CFBundleIdentifier": "target.id", "Label": "Shaar"})
+        self.assertTrue(payload._identity_rewrite_matches(source, current, "target.id"))
+        key = b"<key>CFBundleIdentifier</key>"
+        duplicate = source.replace(key, key + b"<string>source.id</string>" + key)
+        self.assertNotEqual(duplicate, source)
+        self.assertFalse(payload._identity_rewrite_matches(duplicate, current, "target.id"))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="engine-payload-fixture-")
         self.addCleanup(self.temp.cleanup)

@@ -4,6 +4,7 @@
 
 import JavaScriptCore
 import Testing
+
 @testable import ArcusisBrowser
 
 struct InspectorDetailsScriptTests {

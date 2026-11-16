@@ -67,7 +67,8 @@ struct SavePromptTests {
     #expect(store.requestSavePrompt(offer))
     #expect(store.savePrompt?.pageURL == URL(string: "http://127.0.0.1:9/password"))
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    store.nativeTabChanged(tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
     #expect(store.savePrompt == nil)
     #expect(decisions == [.dismiss])
   }
@@ -100,7 +101,8 @@ struct SavePromptTests {
     store.onSavePromptDecision = { _, decision in decisions.append(decision) }
     #expect(store.requestSavePrompt(request))
     let tab = try #require(store.session.selectedSpace.selectedTab)
-    store.nativeTabChanged(tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "http://127.0.0.1:9/account")!, title: "Account")
     #expect(store.savePrompt == nil)
     #expect(decisions == [.dismiss])
   }

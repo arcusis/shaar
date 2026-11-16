@@ -35,7 +35,10 @@ struct SidebarSplitRow: View {
   }
 
   static func keyboardActivationAction(_ action: @escaping () -> Void) -> () -> KeyPress.Result {
-    { action(); return .handled }
+    {
+      action()
+      return .handled
+    }
   }
 
   static func showsTitles(
@@ -90,7 +93,8 @@ struct SidebarSplitRow: View {
     .animation(
       Self.hoverAnimation(
         systemSetting: reduceMotion, override: accessibilityOverrides.reduceMotion),
-      value: hoveredID)
+      value: hoveredID
+    )
     .accessibilityElement(children: .contain)
     .accessibilityLabel(ShellL10n.plural("Split View, %d tabs", count: segments.count))
   }

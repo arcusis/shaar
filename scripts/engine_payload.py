@@ -791,6 +791,9 @@ def _identity_rewrite_matches(original: bytes, current: bytes, identifier: str) 
         return False
     if bundle_info.get("CFBundleIdentifier") != identifier:
         return False
+    # Duplicate keys were rejected during parsing. Use a plain copy for the
+    # one intentional rewrite; _UniqueKeyDict also rejects replacing a key.
+    source_info = dict(source_info)
     source_info["CFBundleIdentifier"] = identifier
     return source_info == bundle_info
 

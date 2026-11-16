@@ -196,11 +196,13 @@ final class ExtensionManagerModel {
     let request = beginStatusRequest()
     developerModeRequestID = request
     guard developerMode else {
-      updateStatus(SettingsL10n.string("Turn on Developer mode to load an unpacked extension."), for: request)
+      updateStatus(
+        SettingsL10n.string("Turn on Developer mode to load an unpacked extension."), for: request)
       return
     }
     guard let path = ExtensionUnpackedFolder.directory(url) else {
-      updateStatus(SettingsL10n.string("Choose a folder that contains a Manifest V3 extension."), for: request)
+      updateStatus(
+        SettingsL10n.string("Choose a folder that contains a Manifest V3 extension."), for: request)
       return
     }
     var payload: [String: Any] = [
@@ -262,7 +264,8 @@ final class ExtensionManagerModel {
       ], tabID: nil
     ) { [weak self] reply in
       guard let self, self.extensionAccessRequestID == request,
-        self.statusRequestID == request else { return }
+        self.statusRequestID == request
+      else { return }
       switch reply {
       case .updated:
         self.status = nil
@@ -289,7 +292,8 @@ final class ExtensionManagerModel {
       ], tabID: tabID
     ) { [weak self] reply in
       guard let self, self.extensionAccessRequestID == request,
-        self.statusRequestID == request else { return }
+        self.statusRequestID == request
+      else { return }
       switch reply {
       case .updated:
         self.status = nil

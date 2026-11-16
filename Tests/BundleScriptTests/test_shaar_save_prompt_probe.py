@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 """The save-prompt probe only passes after each fixture form reaches its POST handler."""
 
 import http.client
@@ -210,6 +214,14 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
             "activeElementIsInput": True,
             "activeInputType": "password",
         }])
+
+    def test_public_progress_never_prints_verification_values(self):
+        receipt = {
+            "passed": False,
+            "rows": [{"detail": "fixture-password-secret"}],
+            "storageDiagnostics": ["fixture-password-secret"],
+        }
+        self.assertEqual(PROBE.public_progress(receipt), "Save-prompt proof: FAIL; rows=1")
 
     def test_profile_receipt_keeps_only_save_offer_preference_booleans(self):
         with tempfile.TemporaryDirectory() as temporary:

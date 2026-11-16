@@ -80,8 +80,6 @@ static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand comma
 }
 
 - (NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID {
-  NSWindow *native = [self shaarPictureInPictureWindowForTabID:tabID];
-  if (native) return ARCObservePictureInPictureWindow(native);
   NSDictionary *state = [self mediaSessionStateForTabID:tabID];
   if (!state[@"pictureInPicture"]) return nil;
   for (NSWindow *window in NSApp.windows)

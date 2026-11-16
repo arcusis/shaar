@@ -127,11 +127,13 @@ struct DevToolsTests {
         do {
           _ = try adapter.openPanel(
             scope: ShaarNavigationScope(profileID: "profile-a"),
-            windowID: "window-a", tabID: "tab-a") {
-              continuation.resume(returning: $0)
-            }
+            windowID: "window-a", tabID: "tab-a"
+          ) {
+            continuation.resume(returning: $0)
+          }
         } catch {
-          continuation.resume(returning: .failure(error as? ShaarEngineError ?? .invalidEvent("unexpected")))
+          continuation.resume(
+            returning: .failure(error as? ShaarEngineError ?? .invalidEvent("unexpected")))
         }
       }
       #expect(result == .failure(.invalidEvent("invalid panel lease reply")))
@@ -299,7 +301,6 @@ struct DevToolsTests {
         booleanVersion, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
-
   @Test func abiCallbackRejectsBooleanSchemaVersion() async throws {
     let transport = try ShaarDevToolsABITransport(
       resolver: FakeBooleanSchemaDevToolsSymbols(),
@@ -311,7 +312,8 @@ struct DevToolsTests {
         _ = try adapter.call(
           capability: .inspector, command: .domGetDocument,
           scope: ShaarNavigationScope(profileID: "profile-a"),
-          windowID: "window-a", tabID: "tab-a") { continuation.resume(returning: $0) }
+          windowID: "window-a", tabID: "tab-a"
+        ) { continuation.resume(returning: $0) }
       } catch let error as ShaarEngineError {
         continuation.resume(returning: .failure(error))
       } catch {

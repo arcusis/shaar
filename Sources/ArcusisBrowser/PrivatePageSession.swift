@@ -371,7 +371,8 @@ struct PrivateBrowserPage: NSViewRepresentable {
     let native = session.runtime.view(
       forPrivateTabID: tabID.uuidString, windowID: session.windowID,
       contextID: session.contextID)
-    _ = Self.selectPage(native, tabID: tabID, liveTabs: session.liveTabs, in: view, inSplit: inSplit)
+    _ = Self.selectPage(
+      native, tabID: tabID, liveTabs: session.liveTabs, in: view, inSplit: inSplit)
   }
 
   @discardableResult

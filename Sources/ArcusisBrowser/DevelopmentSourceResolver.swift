@@ -11,7 +11,7 @@ enum DevelopmentSourceResolver {
     guard var components = URLComponents(url: page, resolvingAgainstBaseURL: false),
       ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
       components.host?.isEmpty == false, components.user == nil, components.password == nil,
-      (components.port.map { (0...65535).contains($0) } ?? true)
+      components.port.map { (0...65535).contains($0) } ?? true
     else { return nil }
     components.path = "/.well-known/appspecific/com.chrome.devtools.json"
     components.query = nil

@@ -597,8 +597,11 @@ struct DesktopCaptureConsentTests {
     #expect(action.destination == MacPermission.screenRecording.settingsURL)
 
     let partialListing = DesktopCaptureCatalog.listing(
-      tabs: [DesktopCaptureSource(id: "tab:00000000-0000-0000-0000-000000000001:0",
-        name: "Meet", kind: .tab)], screens: [], screenAccessFailed: true)
+      tabs: [
+        DesktopCaptureSource(
+          id: "tab:00000000-0000-0000-0000-000000000001:0",
+          name: "Meet", kind: .tab)
+      ], screens: [], screenAccessFailed: true)
     #expect(DesktopCaptureCatalog.settingsAction(for: partialListing) == action)
     let noPermissionIssue = DesktopCaptureCatalog.listing(
       tabs: [], screens: [], screenAccessFailed: false)

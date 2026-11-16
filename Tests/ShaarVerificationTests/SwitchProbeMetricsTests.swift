@@ -198,10 +198,31 @@ import Testing
     let report = recorder.report(phase: "initial")
     #expect(report.spaceSwitchWithinBudget)
     #expect(!report.profileSwitchWithinBudget)
+    #expect(report.withinBudget(.profile, budgetMilliseconds: 150))
+    #expect(!report.withinBudget(.profile, budgetMilliseconds: 100))
+    #expect(!report.withinBudget(.space, budgetMilliseconds: 50))
 
     let incomplete = SwitchProbeMetricsRecorder().report(phase: "restart")
     #expect(!incomplete.spaceSwitchWithinBudget)
     #expect(!incomplete.profileSwitchWithinBudget)
+    #expect(!incomplete.withinBudget(.space, budgetMilliseconds: 150))
+    #expect(!incomplete.withinBudget(.profile, budgetMilliseconds: 150))
+  }
+
+  @Test func hostedRunnerCeilingDoesNotReplaceTheStrictBudget() {
+    #expect(SwitchProbeMetrics.latencyBudgetMilliseconds == 100)
+    #expect(SwitchProbeMetrics.hostedRunnerLatencyBudgetMilliseconds == 150)
+    #expect(SwitchProbeMetrics.acceptanceBudgetMilliseconds(environment: [:]) == 100)
+    #expect(SwitchProbeMetrics.acceptanceBudgetMilliseconds(environment: ["CI": "false"]) == 100)
+    #expect(SwitchProbeMetrics.acceptanceBudgetMilliseconds(environment: ["CI": ""]) == 100)
+    #expect(SwitchProbeMetrics.acceptanceBudgetMilliseconds(environment: ["CI": "true"]) == 150)
+    #expect(SwitchProbeMetrics.acceptanceBudgetMilliseconds(environment: ["CI": "1"]) == 150)
+    #expect(SwitchProbeMetrics.budgetDiagnostic(environment: [:]) == "budget 100.0 ms")
+    #expect(
+      SwitchProbeMetrics.budgetDiagnostic(environment: ["CI": "true"])
+        == "hosted budget 150.0 ms; strict local budget 100.0 ms")
+    #expect(SwitchProbeMetrics.measurementScope.contains("at most 100 ms"))
+    #expect(SwitchProbeMetrics.measurementScope.contains("up to 150 ms"))
   }
 
   @Test func decoderRejectsTamperedMetadataSummariesAndSamples() throws {

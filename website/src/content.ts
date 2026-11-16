@@ -9,13 +9,18 @@ export const commandInterfaceName = "Nativ";
 
 // Published release snapshot. Update alongside a published release, not an unreleased version bump.
 export const release = {
+  version: "0.1.0",
+  date: "2026-10-31",
+  label: "31 October 2026",
+  size: "180 MB",
+  url: `${repository}/releases/tag/v0.1.0`,
+  dmg: `${repository}/releases/download/v0.1.0/Shaar_0.1.0_aarch64.dmg`,
+  zip: `${repository}/releases/download/v0.1.0/Shaar-0.1.0-macos.zip`,
+};
+
+// Upcoming release copy is a preview until its signed assets are published.
+export const upcomingRelease = {
   version: "0.2.0",
-  date: "2026-11-12",
-  label: "12 November 2026",
-  size: "See GitHub Release",
-  url: `${repository}/releases/tag/v0.2.0`,
-  dmg: `${repository}/releases/download/v0.2.0/Shaar_0.2.0_aarch64.dmg`,
-  zip: `${repository}/releases/download/v0.2.0/Shaar-0.2.0-macos.zip`,
   highlights: [
     "Shaar now runs on Chromium 157, bringing a newer web engine to everyday browsing.",
     "Press F12 or Option-Command-I for Chromium Developer Tools, with Shaar panels for viewports, network rules, 3D stacking, focus and more. The old developer tools window has been replaced; Shaar Inspector remains available.",
@@ -29,6 +34,43 @@ export const release = {
     "Picture in Picture starts more reliably when you switch away from a playing video.",
     "Extension Settings explains when loading an unpacked extension needs a newer Shaar engine.",
     "Saved-space tabs now stay in their Space when a window closes.",
+  ],
+  tour: [
+    {
+      heading: "Everyday browsing",
+      items: [
+        "Spaces and separate profiles keep tabs and accounts in place.",
+        "Command-T finds tabs, history, bookmarks and browser actions.",
+        "Downloads show progress, opening and Finder actions; private windows isolate their session.",
+        "Stop Loading, session restore and reopen closed tabs or windows keep work recoverable.",
+      ],
+    },
+    {
+      heading: "Web platform",
+      items: [
+        "JavaScript dialogs and HTTP Basic authentication use Shaar sheets.",
+        "Camera, microphone, location, notifications and MIDI requests ask for permission.",
+        "Password, card and address save prompts and autofill support common forms.",
+        "Protocol handlers ask before opening apps; Bluetooth and Serial use device pickers.",
+      ],
+    },
+    {
+      heading: "Media and performance",
+      items: [
+        "Video and audio playback include picture-in-picture.",
+        "The engine supports Widevine when a licensed CDM is present; DRM support is coming to the public build.",
+        "Inactive tabs can sleep, with controls for when they sleep and sites that stay awake.",
+      ],
+    },
+    {
+      heading: "Tools and trust",
+      items: [
+        "Chrome Web Store extensions install through Shaar consent.",
+        "HTTPS-first warns before insecure public pages.",
+        "F12 opens Chromium Developer Tools with Shaar panels.",
+        "Hebrew and right-to-left layouts cover browser flows and sheets.",
+      ],
+    },
   ],
 };
 

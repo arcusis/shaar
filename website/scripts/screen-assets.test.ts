@@ -17,7 +17,7 @@ test("site build includes only screenshots referenced by page content", () => {
   assert.ok(assets.includes("spaces.webp"));
   assert.ok(assets.includes("page-arcusis.webp"));
   assert.ok(assets.includes("fav-arcusis.png"));
-  assert.ok(!assets.includes("hero.png"));
+  assert.ok(assets.includes("hero.png"));
   assert.ok(!assets.includes("page-arcusis.png"));
   assert.ok(!assets.includes("page-github.png"));
 });

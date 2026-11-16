@@ -56,6 +56,9 @@ final class BrowserStore {
   var tabDrag: TabDrag?
   @ObservationIgnored var sidebarDragCleanupTask: Task<Void, Never>?
   @ObservationIgnored var tabDragCleanupTask: Task<Void, Never>?
+  /// Grace after the mouse button comes up before a drag is cleared.
+  /// Tests replace this; the production default stays 300 milliseconds.
+  @ObservationIgnored var dragCleanupDelay: Duration = .milliseconds(300)
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?

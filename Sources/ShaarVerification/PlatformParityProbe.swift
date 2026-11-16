@@ -57,6 +57,11 @@ enum PlatformParityPreferenceEvidence {
         file: WorkspaceFile(
           url: directory.appending(path: "profile/workspace.json"),
           legacySessionURL: directory.appending(path: "profile/session.json")))
+      if !widevineOnly {
+        _ = try ShaarSavePromptProbe.seedNormalProfileSavePreferences(
+          profileIDs: workspace.workspace.catalog.profiles.map(\.id),
+          dataRoot: directory.appending(path: "Chromium"))
+      }
       let runtime = try ARCShaarRuntime(frameworkURL: frameworkURL)
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
@@ -132,17 +137,41 @@ private struct ParitySnapshot {
   var opened = false
   var attemptedClick = false
   var clicked = false
+  var autofillValuesEntered: Bool?
   var surfaceBaseline = 0
   var scriptStalled = false
 }
 
 enum PlatformParityRenderSurfacePolicy {
   static func presentsFrames(forPath path: String) -> Bool {
-    path == "/widevine-playback"
+    ["/address", "/card", "/password", "/widevine-playback"].contains(path)
   }
 
   static func isInvisible(alphaValue: CGFloat, ignoresMouseEvents: Bool) -> Bool {
     alphaValue == 0 && ignoresMouseEvents
+  }
+}
+
+@MainActor enum PlatformParityAutofillFixture {
+  static func fields(for item: String) -> [(String, String)] {
+    switch item {
+    case "Autofill addresses":
+      return [
+        ("address-name", "Parity Probe"), ("address-street", "1 Loopback Road"),
+        ("address-city", "Mountain View"), ("address-region", "CA"),
+        ("address-postal", "94043"), ("address-country", "United States"),
+        ("address-email", "parity@example.com"),
+      ]
+    case "Autofill cards":
+      return [
+        ("card-name", "Parity Probe"), ("card-number", "4111111111111111"),
+        ("card-exp-month", "12"),
+        ("card-exp-year", ShaarSavePromptProbe.cardExpiryYear(relativeTo: .now)),
+      ]
+    case "Autofill passwords":
+      return [("username", "parity-user"), ("password", "parity-secret")]
+    default: return []
+    }
   }
 }
 
@@ -365,7 +394,11 @@ enum PlatformParityRenderSurfacePolicy {
     if check.path == "/storage-access" {
       _ = await waitForReady(in: context)
     }
-    if check.click {
+    let autofillFields = PlatformParityAutofillFixture.fields(for: check.item)
+    if !autofillFields.isEmpty {
+      snapshot.autofillValuesEntered = await enterAutofillFields(autofillFields, in: context)
+    }
+    if check.click && snapshot.autofillValuesEntered != false {
       snapshot.attemptedClick = true
       let clicked = await click(in: context)
       snapshot.clicked = clicked.landed
@@ -479,6 +512,10 @@ enum PlatformParityRenderSurfacePolicy {
   private func settleConsent(
     allowMedia: Bool, in context: NativeBrowserContext, snapshot: inout ParitySnapshot
   ) {
+    if let request = context.store.savePrompt {
+      snapshot.sheet = "savePrompt:\(request.kind.rawValue)"
+      context.store.resolveSavePrompt(request.id, decision: .dismiss)
+    }
     let browserWindows = browserWindowClassNames
     for window in NSApp.windows where window.isVisible {
       if SurfaceGuard.isInvisibleRenderingSurface(window) { continue }
@@ -553,7 +590,9 @@ enum PlatformParityRenderSurfacePolicy {
         downloads: snapshot.downloads)
     case "Media Session":
       return snapshot.mediaTitle.localizedCaseInsensitiveContains("parity")
-    case "Picture in Picture", "Autofill addresses", "Autofill cards", "Autofill passwords":
+    case "Autofill addresses", "Autofill cards", "Autofill passwords":
+      return snapshot.sheet.hasPrefix("savePrompt:")
+    case "Picture in Picture":
       return false
     default:
       return snapshot.result["outcome"] != nil
@@ -737,13 +776,16 @@ enum PlatformParityRenderSurfacePolicy {
   private func autofillRow(
     _ snapshot: ParitySnapshot, item: String, delegate: String
   ) -> [String: Any] {
-    let surfaced =
-      !snapshot.sheet.isEmpty
-      || snapshot.surfaces.contains {
-        PlatformParityVerdicts.isChooserSurface($0, browserWindows: browserWindowClassNames)
-      }
+    let kind: String
+    switch item {
+    case "Autofill addresses": kind = "address"
+    case "Autofill cards": kind = "card"
+    default: kind = "password"
+    }
     return row(
-      item: item, passed: surfaced, delegate: delegate, evidence: describe(snapshot),
+      item: item,
+      passed: snapshot.autofillValuesEntered == true && snapshot.sheet == "savePrompt:\(kind)",
+      delegate: delegate, evidence: describe(snapshot),
       signals: signals(snapshot))
   }
 
@@ -1006,6 +1048,9 @@ enum PlatformParityRenderSurfacePolicy {
       "cookies": snapshot.cookiesBlocked,
       "extensions": snapshot.extensions.joined(separator: ","),
     ]
+    if let entered = snapshot.autofillValuesEntered {
+      values["autofillValuesEntered"] = entered ? "true" : "false"
+    }
     for (key, value) in snapshot.result {
       let rendered = text(value)
       if !rendered.isEmpty { values[key] = rendered }
@@ -1027,6 +1072,9 @@ enum PlatformParityRenderSurfacePolicy {
       parts.append("permissions \(snapshot.kinds.joined(separator: ", "))")
     }
     if !snapshot.sheet.isEmpty { parts.append("sheet \(snapshot.sheet)") }
+    if let entered = snapshot.autofillValuesEntered {
+      parts.append("autofill values entered \(entered)")
+    }
     if !snapshot.surfaces.isEmpty {
       parts.append("surfaces \(snapshot.surfaces.joined(separator: ", "))")
     }
@@ -1077,6 +1125,38 @@ enum PlatformParityRenderSurfacePolicy {
       }
       if evaluation.timedOut { return false }
       try? await Task.sleep(for: .milliseconds(100))
+    }
+    return false
+  }
+
+  private func enterAutofillFields(
+    _ fields: [(String, String)], in context: NativeBrowserContext
+  ) async -> Bool {
+    guard let tab = selectedTabID(in: context) else { return false }
+    for (elementID, text) in fields {
+      let accepted = await withCheckedContinuation { continuation in
+        runtime.submitTrustedProbeText(
+          inTabID: tab.uuidString, elementID: elementID, text: text
+        ) { continuation.resume(returning: $0) }
+      }
+      if !accepted { return false }
+    }
+    let expected = Dictionary(uniqueKeysWithValues: fields)
+    guard let data = try? JSONSerialization.data(withJSONObject: expected),
+      let json = String(data: data, encoding: .utf8)
+    else { return false }
+    let script = """
+      (() => {
+        const expected = \(json);
+        return {entered:Object.entries(expected).every(([id, value]) =>
+          document.getElementById(id)?.value === value)};
+      })()
+      """
+    for _ in 0..<20 {
+      if await evaluate(in: context, script).value?["entered"] as? Bool == true {
+        return true
+      }
+      try? await Task.sleep(for: .milliseconds(50))
     }
     return false
   }

@@ -10,6 +10,9 @@ import Testing
 @Suite @MainActor struct PlatformParityProbeConfigurationTests {
   @Test func invisibleRenderingSurfaceMustBeTransparentAndClickThrough() {
     #expect(PlatformParityRenderSurfacePolicy.presentsFrames(forPath: "/widevine-playback"))
+    for route in ["/address", "/card", "/password"] {
+      #expect(PlatformParityRenderSurfacePolicy.presentsFrames(forPath: route))
+    }
     #expect(!PlatformParityRenderSurfacePolicy.presentsFrames(forPath: "/eme"))
     #expect(PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: true))
     #expect(!PlatformParityRenderSurfacePolicy.isInvisible(alphaValue: 0, ignoresMouseEvents: false))

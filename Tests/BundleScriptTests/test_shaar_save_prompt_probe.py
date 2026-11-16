@@ -215,6 +215,14 @@ class SavePromptFixtureSubmissionTests(unittest.TestCase):
             "activeInputType": "password",
         }])
 
+    def test_public_progress_never_prints_verification_values(self):
+        receipt = {
+            "passed": False,
+            "rows": [{"detail": "fixture-password-secret"}],
+            "storageDiagnostics": ["fixture-password-secret"],
+        }
+        self.assertEqual(PROBE.public_progress(receipt), "Save-prompt proof: FAIL; rows=1")
+
     def test_profile_receipt_keeps_only_save_offer_preference_booleans(self):
         with tempfile.TemporaryDirectory() as temporary:
             profile = Path(temporary) / "Chromium" / "Default"

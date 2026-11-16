@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 import io
 import importlib.util
+import re
 import shutil
 import sys
 import subprocess
@@ -133,7 +134,7 @@ class BrowsingQAReportTests(unittest.TestCase):
         self.assertIn("window.__scrollEvents=0", fixture)
         self.assertIn("window.__scrollEvents++", fixture)
         self.assertIn('script: "window.__scrollEvents||0"', source)
-        self.assertIn('row(\n        "heavy-scroll", "blocked",', source)
+        self.assertRegex(source, r'row\(\s*"heavy-scroll",\s*"blocked",')
 
     def test_heavy_scroll_requires_lazy_load_threshold_before_attributing_no_growth(self):
         fixture = (ROOT / "scripts/test-browsing-qa.py").read_text()

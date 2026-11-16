@@ -164,8 +164,23 @@ def build_base_coverage(checks: Commands) -> None:
     with tarfile.open(archive) as source:
         source.extractall(base, filter="data")
     archive.unlink()
+    repair_legacy_coverage_base(base)
     if test_commands(checks, cwd=base, scratch=str(ROOT / "build/swiftpm/coverage-base")):
         raise RuntimeError("Baseline coverage build/tests failed")
+
+
+def repair_legacy_coverage_base(base: Path) -> None:
+    # The production base predating the CI outage has a missing closure return
+    # and two tests that Swift cannot import from C enums. Apply only those
+    # compile repairs to that immutable archive, then run its full test suite.
+    # Newer bases already contain the repairs and are tested as archived.
+    importer = (base / "Sources/BrowserCore/BrowserProfileImporters.swift").read_text()
+    if "    markers.contains { marker in" in importer:
+        patch = ROOT / "scripts/ci-coverage-base-compile.patch"
+        command = ["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-d", str(base),
+                   "-i", str(patch)]
+        subprocess.run(["patch", "--dry-run", *command[1:]], check=True)
+        subprocess.run(command, check=True)
 
 
 def load_coverage_metadata(path: Path, label: str) -> dict:

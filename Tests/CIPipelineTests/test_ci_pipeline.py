@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 import sys
 import tarfile
@@ -49,6 +50,30 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_legacy_coverage_base_compile_repair_keeps_abi_assertions(self):
+        revision = "e5af6148d144b5d153a38d6b5853537241d9ac35"
+        paths = (
+            "Sources/BrowserCore/BrowserProfileImporters.swift",
+            "Sources/ShaarEngineC/include/shaar_engine.h",
+            "Sources/ShaarEngineC/shaar_engine.c",
+            "Tests/ShaarEngineABITests/OperationCodeContractTests.swift",
+            "Tests/ShaarEngineABITests/StorageKeychainCABIShimTests.swift",
+        )
+        temporary_root = ROOT / "build/ci"
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as temporary:
+            base = Path(temporary)
+            for name in paths:
+                target = base / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(subprocess.check_output(
+                    ["git", "show", f"{revision}:{name}"], cwd=ROOT))
+            STAGES.repair_legacy_coverage_base(base)
+            STAGES.repair_legacy_coverage_base(base)
+            self.assertIn("return markers.contains", (base / paths[0]).read_text())
+            self.assertIn("shaar_operation_contract_values", (base / paths[3]).read_text())
+            self.assertIn("#expect(swiftValue == cValues?[index])", (base / paths[3]).read_text())
+
     def test_ci_gate_reports_missing_required_environment_inputs(self):
         required = {
             "CI_NEEDS": "{}",
@@ -1336,6 +1361,22 @@ class SwiftReportTests(unittest.TestCase):
                  " Executed 0 tests, with 0 failures in 0.000 seconds\n")
         with self.assertRaisesRegex(ValueError, "selected no test cases"):
             SWIFT_REPORTS.xctest_cases(empty)
+
+    def test_swift_only_filter_requires_its_native_case(self):
+        empty = ("Test Suite 'Selected tests' started at now.\n"
+                 "Test Suite 'Selected tests' passed at now.\n"
+                 " Executed 0 tests, with 0 failures in 0.000 seconds\n")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "isolated-focus.log"
+            log.write_text(empty + "Test run with 1 test passed\n")
+            native = directory / "swift-swift-testing.xml"
+            native.write_text('<testsuite tests="1"><testcase name="focus"/></testsuite>')
+            SWIFT_REPORTS.write_reports(log, directory)
+            self.assertEqual(ET.parse(directory / "xctest.xml").getroot().attrib["tests"], "0")
+            native.write_text('<testsuite tests="0"/>')
+            with self.assertRaisesRegex(ValueError, "no XCTest or Swift Testing cases"):
+                SWIFT_REPORTS.write_reports(log, directory)
 
     def test_non_finite_xctest_duration_fails(self):
         text = self.transcript().replace("0.125 seconds", "9" * 400 + " seconds")

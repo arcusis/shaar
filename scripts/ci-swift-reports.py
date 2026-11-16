@@ -25,7 +25,7 @@ def case_identity(label: str) -> tuple[str, str]:
     return tuple(parts) if len(parts) == 2 else ("XCTest", label)
 
 
-def xctest_cases(text: str) -> list[ET.Element]:
+def xctest_cases(text: str, *, allow_empty: bool = False) -> list[ET.Element]:
     active = {}
     cases = []
     totals = []
@@ -64,14 +64,14 @@ def xctest_cases(text: str) -> list[ET.Element]:
                 details.append(line)
     if active or awaiting_total or not totals or sum(totals) != len(cases):
         raise ValueError("XCTest log is incomplete or its outer-suite totals do not match cases")
-    if not cases:
+    if not cases and not allow_empty:
         raise ValueError("XCTest filter selected no test cases")
     return cases
 
 
 def write_reports(log: Path, directory: Path) -> None:
     text = log.read_text()
-    cases = xctest_cases(text)
+    cases = xctest_cases(text, allow_empty=True)
     native = sorted(directory.glob("swift*-swift-testing.xml"))
     if "Test run with " in text and not native:
         raise ValueError("Swift Testing ran without producing its native JUnit XML")
@@ -79,6 +79,8 @@ def write_reports(log: Path, directory: Path) -> None:
     for report in native:
         native_case_count += sum(1 for _ in ET.parse(report).iter("testcase"))
     expected_native_count = sum(int(match.group(1)) for match in SWIFT_TEST_TOTAL.finditer(text))
+    if not cases and native_case_count == 0:
+        raise ValueError("Test filter selected no XCTest or Swift Testing cases")
     if "Test run with " in text and native_case_count == 0:
         raise ValueError(
             "Swift Testing ran but its native JUnit XML contains no test cases "

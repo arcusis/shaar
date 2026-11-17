@@ -371,8 +371,7 @@ final class BrowserEngine {
         self.events.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
       case .importHistory(let source, let rows):
         self.runtime.importHistoryRows(
-          BrowserImport.rowsInsideHistoryRetention(rows), source: source.rawValue,
-          profileID: profile.uuidString, completion: done)
+          rows, source: source.rawValue, profileID: profile.uuidString, completion: done)
       }
     }
     callbacks.onLibraryChanged = { [weak store] owner, value in

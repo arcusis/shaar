@@ -121,48 +121,6 @@ public enum BrowserImport {
     return rows
   }
 
-  /// Chromium's history backend deletes visits older than 90 days. When every
-  /// visit on a page is past that horizon, shift the group so the newest visit
-  /// lands one day ago and the original spacing is kept.
-  public static let historyRetentionHorizon: TimeInterval = 89 * 24 * 60 * 60
-
-  public static func rowsInsideHistoryRetention(
-    _ rows: [[String: Any]], now: Date = Date()
-  ) -> [[String: Any]] {
-    let nowMs = (now.timeIntervalSince1970 * 1_000).rounded(.towardZero)
-    let cutoff = nowMs - historyRetentionHorizon * 1_000
-    let anchor = nowMs - 24 * 60 * 60 * 1_000
-    return rows.map { row in
-      guard let visits = visitMilliseconds(row["v"]) else { return row }
-      let finite = visits.filter(\.isFinite)
-      let recent = finite.filter { $0 >= cutoff && $0 <= nowMs }
-      let kept: [Double]
-      if !recent.isEmpty {
-        kept = recent
-      } else if let newest = finite.max() {
-        let delta = anchor - newest
-        kept = finite.map { ($0 + delta).rounded(.towardZero) }.filter {
-          $0 >= cutoff && $0 <= nowMs
-        }
-      } else {
-        kept = []
-      }
-      guard !kept.isEmpty else { return row }
-      var copy = row
-      copy["v"] = kept
-      copy["n"] = kept.count
-      if let latest = kept.max() { copy["l"] = latest }
-      return copy
-    }
-  }
-
-  private static func visitMilliseconds(_ value: Any?) -> [Double]? {
-    if let visits = value as? [Double] { return visits }
-    if let visits = value as? [Int] { return visits.map(Double.init) }
-    if let visits = value as? [NSNumber] { return visits.map(\.doubleValue) }
-    return nil
-  }
-
   public static func operations(for items: [BrowserImportItem], otherFolderID: UUID) -> [[String:
     Any]]
   {

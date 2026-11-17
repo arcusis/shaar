@@ -54,7 +54,8 @@ import SwiftUI
     address.query = nil
     store.perform(.open(address.url!))
     try await wait("page tools fixture loads") {
-      guard let target = self.engine.siteControlTarget, target.host == "inspector.localhost",
+      guard let target = self.engine.siteControlTarget,
+        target.url.host == "inspector.localhost",
         self.engine.pages[target.tabID]?.loading == false
       else { return false }
       return self.engine.runtime.view(forTabID: target.tabID.uuidString)?.superview != nil
@@ -178,14 +179,7 @@ import SwiftUI
     try expect(
       page?["language"] as? String == "fr-FR" && page?["zone"] as? String == "America/New_York",
       "language and timezone affect page APIs")
-    try await engine.runtime.setSiteSetting(
-      "location", value: "allow", origin: model.target.origin!,
-      profileID: model.target.profileID.uuidString)
-    try await engine.runtime.grantProbeGeolocation(inTabID: model.target.tabID.uuidString)
-    let locationResult =
-      try await model.evaluate(
-        "new Promise(async resolve=>{const permission=await navigator.permissions.query({name:'geolocation'});navigator.geolocation.getCurrentPosition(p=>resolve({latitude:p.coords.latitude,permission:permission.state}),e=>resolve({error:e.message,code:e.code,permission:permission.state}),{timeout:5000})})"
-      ) as? [String: Any]
+    let locationResult = try await sampleGeolocation(model)
     try JSONSerialization.data(withJSONObject: locationResult ?? [:], options: [.prettyPrinted])
       .write(to: root.appending(path: "\(phase)-geolocation.json"))
     let latitude = locationResult?["latitude"] as? Double
@@ -225,16 +219,11 @@ import SwiftUI
       engine.openChromiumDeveloperTools(for: model.target),
       "built-in DevTools opens while simulations are active")
     for _ in 0..<100 {
-      if let tools = runtime.devToolsView(forTabID: identity),
-        tools.superview === runtime.view(forTabID: identity), tools.frame.height > 0
-      {
-        break
-      }
+      if devToolsDocked(beside: identity) { break }
       try await Task.sleep(for: .milliseconds(100))
     }
     try expect(
-      runtime.devToolsView(forTabID: identity)?.superview === runtime.view(forTabID: identity)
-        && runtime.devToolsView(forTabID: identity) != nil,
+      devToolsDocked(beside: identity),
       "built-in DevTools stays docked beside the simulated page")
     try await settled(model)
     let retained =
@@ -441,6 +430,101 @@ import SwiftUI
     throw DeveloperModeFailure("Simulation did not settle.")
   }
 
+  /// Chromium does not start `getCurrentPosition`, or its timeout, while the page
+  /// is hidden. The sample stays off-screen. A location prompt that still appears
+  /// is allowed here; the latitude check is unchanged.
+  private func sampleGeolocation(_ model: DeveloperPageModel) async throws -> [String: Any]? {
+    let profileID = model.target.profileID.uuidString
+    let documentOrigin = try await model.evaluate("location.origin") as? String
+    var origins: [String] = []
+    for origin in [model.target.origin, documentOrigin] {
+      guard let origin, !origins.contains(origin) else { continue }
+      origins.append(origin)
+      try await engine.runtime.setSiteSetting(
+        "location", value: "allow", origin: origin, profileID: profileID)
+    }
+    let tabID = model.target.tabID.uuidString
+    engine.runtime.probeSetRendererMetricsVisible(true, forTabID: tabID)
+    let flag = GeolocationDoneFlag()
+    let evaluation = Task { @MainActor () -> GeolocationReading in
+      defer { flag.done = true }
+      let value =
+        try await model.evaluate(
+          "new Promise(async resolve=>{const permission=await navigator.permissions.query({name:'geolocation'});navigator.geolocation.getCurrentPosition(p=>resolve({latitude:p.coords.latitude,permission:permission.state,origin:location.origin}),e=>resolve({error:e.message,code:e.code,permission:permission.state,origin:location.origin}),{timeout:5000})})"
+        ) as? [String: Any]
+      return GeolocationReading(value)
+    }
+    do {
+      for _ in 0..<60 {
+        if let request = store.websitePermissionRequests.first(where: {
+          $0.tabID == model.target.tabID && $0.kinds.contains(.location)
+        }) {
+          store.resolveWebsitePermission(request.id, accepted: true)
+        }
+        if flag.done { break }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      let reading = try await evaluation.value
+      engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
+      return reading.payload
+    } catch {
+      evaluation.cancel()
+      engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
+      throw error
+    }
+  }
+
+  private func sampleVisibleMetrics(_ model: DeveloperPageModel, tabID: String) async throws -> Bool
+  {
+    engine.runtime.probeSetRendererMetricsVisible(true, forTabID: tabID)
+    do {
+      // Ordering the sample can count as recent input. Layout shift ignores the
+      // next 500ms, so wait that out before moving the fixture.
+      try await Task.sleep(for: .milliseconds(700))
+      _ = try await model.evaluate(
+        "document.getElementById('shift').style.marginTop='180px'; true")
+      try await Task.sleep(for: .milliseconds(150))
+      _ = try await model.evaluate(
+        "fetch('/inspector-slow?metrics='+Math.random(),{cache:'no-store'}).then(r=>r.text()).then(()=>true)"
+      )
+      try await Task.sleep(for: .milliseconds(200))
+    } catch {
+      engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
+      throw error
+    }
+    engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
+    let clicked: Bool = await withCheckedContinuation { continuation in
+      engine.runtime.inspectorProbePointer(
+        inTabID: tabID, selector: "#performance-input", frames: [], click: true, modifiers: 0
+      ) { continuation.resume(returning: $0) }
+    }
+    return clicked
+  }
+
+  private func waitForLiveVitals(_ tools: InspectorPageToolsModel, model: DeveloperPageModel)
+    async throws
+  {
+    var last = "no snapshot"
+    for _ in 0..<Int(150 * ProbeTimeout.scale) {
+      await tools.refresh()
+      if let snapshot = model.performanceSnapshot {
+        let ready =
+          snapshot.lcp != nil && snapshot.inp != nil && (snapshot.cls ?? 0) > 0
+          && (snapshot.heapBytes ?? 0) > 0 && snapshot.requests >= 2
+          && snapshot.transferredBytes > 0 && tools.cpu != nil
+        last =
+          "lcp=\(String(describing: snapshot.lcp)) inp=\(String(describing: snapshot.inp)) cls=\(String(describing: snapshot.cls)) heap=\(String(describing: snapshot.heapBytes)) requests=\(snapshot.requests) bytes=\(snapshot.transferredBytes) cpu=\(String(describing: tools.cpu))"
+        if ready {
+          checks.append("live LCP, CLS, INP, heap and transfer values arrive")
+          return
+        }
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw InspectorFailure(
+      "Timed out: live LCP, CLS, INP, heap and transfer values arrive (\(last))")
+  }
+
   private func performance(_ inspector: InspectorModel, tools: InspectorPageToolsModel) async throws
   {
     tools.tool = .vitals
@@ -448,29 +532,16 @@ import SwiftUI
     await tools.refresh()
     try await settled(model)
     try await model.refreshPerformance()
-    // A shift after the recent-input exclusion interval, followed by real renderer input.
+    // Chromium records LCP and layout shift only while the renderer is visible.
+    // The sample window stays off-screen, at alpha 0, and does not become key.
     try await Task.sleep(for: .milliseconds(650))
-    _ = try await model.evaluate("document.getElementById('shift').style.marginTop='180px'; true")
-    _ = try await model.evaluate(
-      "fetch('/inspector-slow?metrics='+Math.random(),{cache:'no-store'}).then(r=>r.text()).then(()=>true)"
-    )
-    let clicked: Bool = await withCheckedContinuation { continuation in
-      engine.runtime.inspectorProbePointer(
-        inTabID: model.target.tabID.uuidString, selector: "#performance-input", frames: [],
-        click: true, modifiers: 0
-      ) { continuation.resume(returning: $0) }
-    }
+    let tabID = model.target.tabID.uuidString
+    let clicked = try await sampleVisibleMetrics(model, tabID: tabID)
     try expect(clicked, "trusted page input works while element picking is suspended")
     try expect(
       try await model.evaluate("window.clicked") as? Int == 1,
       "Page mode does not intercept the page button")
-    try await wait("live LCP, CLS, INP, heap and transfer values arrive") {
-      await tools.refresh()
-      guard let snapshot = model.performanceSnapshot else { return false }
-      return snapshot.lcp != nil && snapshot.inp != nil && (snapshot.cls ?? 0) > 0
-        && (snapshot.heapBytes ?? 0) > 0 && snapshot.requests >= 2 && snapshot.transferredBytes > 0
-        && tools.cpu != nil
-    }
+    try await waitForLiveVitals(tools, model: model)
     try await capture(inspector, feature: "vitals")
     let origin = model.performanceSnapshot?.timeOrigin
     let generation = model.documentGeneration
@@ -563,6 +634,24 @@ import SwiftUI
       window.close()
     }
   }
+  /// The pinned engine parents the frontend and the page as siblings. The
+  /// frontend covers the container and the page is cropped beside it.
+  private func devToolsDocked(beside identity: String) -> Bool {
+    let runtime = engine.runtime
+    guard let page = runtime.view(forTabID: identity), let container = page.superview,
+      let tools = runtime.devToolsView(forTabID: identity),
+      tools.superview === container, page.superview === container,
+      tools.frame.width > 0, tools.frame.height > 0, page.frame.width > 0, page.frame.height > 0
+    else { return false }
+    let bounds = container.bounds
+    let tolerance = bounds.insetBy(dx: -1, dy: -1)
+    let toolsCoverContainer =
+      abs(tools.frame.width - bounds.width) <= 1
+      && abs(tools.frame.height - bounds.height) <= 1
+    return tolerance.contains(tools.frame) && tolerance.contains(page.frame) && toolsCoverContainer
+      && page.frame.width + 1 < bounds.width && container.subviews.last === page
+  }
+
   private func expect(_ condition: Bool, _ message: String) throws {
     guard condition else { throw InspectorFailure(message) }
     checks.append(message)
@@ -580,5 +669,43 @@ import SwiftUI
   private func report(_ error: Error?) throws {
     try InspectorProbe.reportData(checks: checks, error: error).write(
       to: root.appending(path: "\(phase)-page-tools-report.json"))
+  }
+}
+
+private final class GeolocationDoneFlag: @unchecked Sendable {
+  var done = false
+}
+
+private struct GeolocationReading: Sendable {
+  var latitude: Double?
+  var permission: String?
+  var message: String?
+  var code: Int?
+  var origin: String?
+
+  init(_ value: [String: Any]?) {
+    if let number = value?["latitude"] as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    {
+      latitude = number.doubleValue
+    }
+    permission = value?["permission"] as? String
+    message = value?["error"] as? String
+    if let number = value?["code"] as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    {
+      code = number.intValue
+    }
+    origin = value?["origin"] as? String
+  }
+
+  var payload: [String: Any] {
+    var result: [String: Any] = [:]
+    if let latitude { result["latitude"] = latitude }
+    if let permission { result["permission"] = permission }
+    if let message { result["error"] = message }
+    if let code { result["code"] = code }
+    if let origin { result["origin"] = origin }
+    return result
   }
 }

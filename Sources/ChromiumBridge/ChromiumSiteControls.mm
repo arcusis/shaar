@@ -6,7 +6,31 @@
 #import "ChromiumShaarFeatureTransport.h"
 #import <objc/runtime.h>
 
-static const NSTimeInterval ARCSiteControlTimeout = 10;
+// The browsing-data remover never replies for a hidden probe page, and the
+// next clear stays queued behind that task. Wait briefly, then finish through
+// DevTools. A late remover reply is ignored so the completion runs once.
+static const NSTimeInterval ARCSiteControlTimeout = 3;
+
+typedef void (^ARCSiteCompletion)(NSError *error);
+
+@interface ARCShaarRuntime (SiteControls)
+- (void)shaarClearBrowsingDataTypes:(NSArray<NSString *> *)types
+                         profileID:(NSString *)profileID
+                       failureText:(NSString *)failureText
+                          fallback:(void (^)(ARCSiteCompletion done))fallback
+                        completion:(ARCSiteCompletion)completion;
+- (void)shaarSetCacheDisabled:(BOOL)disabled forTabIDs:(NSArray<NSString *> *)tabIDs
+                       index:(NSUInteger)index applied:(NSUInteger)applied
+                  completion:(ARCSiteCompletion)completion;
+- (void)shaarFallbackClearProfileSiteDataForProfileID:(NSString *)profileID
+                                          completion:(ARCSiteCompletion)completion;
+- (void)shaarExpirePageStorageForTabIDs:(NSArray<NSString *> *)tabIDs
+                                 index:(NSUInteger)index
+                            completion:(ARCSiteCompletion)completion;
+- (void)shaarDeleteJarCookies:(NSArray *)cookies atIndex:(NSUInteger)index
+                       tabID:(NSString *)tabID profileID:(NSString *)profileID
+                    windowID:(NSString *)windowID completion:(ARCSiteCompletion)completion;
+@end
 static constexpr shaar_operation ARCSiteCookieItems = static_cast<shaar_operation>(709);
 static constexpr shaar_operation ARCSiteCookieSet = static_cast<shaar_operation>(710);
 static constexpr shaar_operation ARCSiteCookieDelete = static_cast<shaar_operation>(711);
@@ -77,11 +101,11 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarManagedCookiePolicyCach
 }
 
 - (void)clearProfileSiteDataForProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
-  [self shaarSubmit:SHAAR_OP_BROWSING_DATA_CLEAR profileID:profileID tabID:nil
-           payload:@{@"schemaVersion": @1, @"types": @[@"siteData"]}
-        completion:^(NSDictionary *result, NSError *error) {
-    completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(@"Site data was not fully cleared.")));
-  }];
+  [self shaarClearBrowsingDataTypes:@[@"siteData"] profileID:profileID
+                       failureText:@"Site data was not fully cleared."
+                          fallback:^(ARCSiteCompletion done) {
+    [self shaarFallbackClearProfileSiteDataForProfileID:profileID completion:done];
+  } completion:completion];
 }
 
 - (void)sitePermissionOriginsForProfileID:(NSString *)profileID
@@ -185,25 +209,70 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarManagedCookiePolicyCach
 }
 
 - (void)clearCacheForProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
-  [self shaarSubmit:SHAAR_OP_BROWSING_DATA_CLEAR profileID:profileID tabID:nil
-           payload:@{@"schemaVersion": @1, @"types": @[@"cache"]}
-        completion:^(NSDictionary *result, NSError *error) {
-    completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(@"The cache was not cleared.")));
-  }];
+  [self shaarClearBrowsingDataTypes:@[@"cache"] profileID:profileID
+                       failureText:@"The cache was not cleared."
+                          fallback:^(ARCSiteCompletion done) {
+    NSArray<NSString *> *tabIDs = [self shaarTabIDsForProfileID:profileID];
+    // Leave caching disabled. The caller's next fetch has to miss, including
+    // an immutable response the remover did not answer for. Turning it back
+    // on before this completion returns would serve the old entry.
+    [self shaarSetCacheDisabled:YES forTabIDs:tabIDs index:0 applied:0 completion:done];
+  } completion:completion];
 }
 
 - (void)clearCookiesForTabID:(NSString *)tabID profileID:(NSString *)profileID
                   completion:(void (^)(NSError *))completion {
   NSDictionary *security = [self shaarSecurityInfoForTabID:tabID profileID:profileID];
   NSString *origin = security[@"origin"];
-  if (!ARCIsSiteOrigin(origin)) {
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (!ARCIsSiteOrigin(origin) || !windowID.length) {
     completion(ARCBridgeError(@"Cookies can only be cleared for a web page."));
     return;
   }
-  [self shaarSubmit:SHAAR_OP_SITE_COOKIES_CLEAR profileID:profileID tabID:tabID
-           payload:@{@"schemaVersion": @1, @"origin": origin}
-        completion:^(NSDictionary *result, NSError *error) {
-    completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(@"Some cookies were not cleared.")));
+  // The browsing-data remover never replies for this hidden probe page.
+  // Network.getCookies / deleteCookies uses the DevTools path that does reply.
+  [self shaarDevToolsCall:@"Network.getCookies" params:@{@"urls": @[origin]}
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+               profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    NSArray *cookies = [result[@"cookies"] isKindOfClass:NSArray.class] ? result[@"cookies"] : @[];
+    if (error) {
+      completion(error);
+      return;
+    }
+    [self shaarDeleteDevToolsCookies:cookies atIndex:0 origin:origin tabID:tabID
+                          profileID:profileID windowID:windowID completion:completion];
+  }];
+}
+
+- (void)shaarDeleteDevToolsCookies:(NSArray *)cookies atIndex:(NSUInteger)index
+                           origin:(NSString *)origin tabID:(NSString *)tabID
+                        profileID:(NSString *)profileID windowID:(NSString *)windowID
+                       completion:(void (^)(NSError *))completion {
+  if (index >= cookies.count) {
+    completion(nil);
+    return;
+  }
+  NSDictionary *cookie = [cookies[index] isKindOfClass:NSDictionary.class] ? cookies[index] : nil;
+  NSString *name = [cookie[@"name"] isKindOfClass:NSString.class] ? cookie[@"name"] : nil;
+  if (!name.length) {
+    completion(ARCBridgeError(@"Some cookies were not cleared."));
+    return;
+  }
+  NSMutableDictionary *params = [@{@"name": name, @"url": origin} mutableCopy];
+  if ([cookie[@"domain"] isKindOfClass:NSString.class]) params[@"domain"] = cookie[@"domain"];
+  if ([cookie[@"path"] isKindOfClass:NSString.class]) params[@"path"] = cookie[@"path"];
+  [self shaarDevToolsCall:@"Network.deleteCookies" params:params
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+               profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    (void)result;
+    if (error) {
+      completion(error);
+      return;
+    }
+    [self shaarDeleteDevToolsCookies:cookies atIndex:index + 1 origin:origin tabID:tabID
+                          profileID:profileID windowID:windowID completion:completion];
   }];
 }
 
@@ -250,6 +319,147 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarManagedCookiePolicyCach
   [self shaarSubmit:operation profileID:profileID tabID:tabID payload:payload
         completion:^(NSDictionary *result, NSError *error) {
     completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(@"The cookie was not changed.")));
+  }];
+}
+
+- (void)shaarClearBrowsingDataTypes:(NSArray<NSString *> *)types
+                         profileID:(NSString *)profileID
+                       failureText:(NSString *)failureText
+                          fallback:(void (^)(ARCSiteCompletion))fallback
+                        completion:(ARCSiteCompletion)completion {
+  __block BOOL settled = NO;
+  BOOL accepted = [self shaarSubmit:SHAAR_OP_BROWSING_DATA_CLEAR profileID:profileID tabID:nil
+           payload:@{@"schemaVersion": @1, @"types": types}
+        completion:^(NSDictionary *result, NSError *error) {
+    void (^apply)(void) = ^{
+      if (settled) return;
+      settled = YES;
+      completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(failureText)));
+    };
+    if (NSThread.isMainThread) apply();
+    else dispatch_async(dispatch_get_main_queue(), apply);
+  }];
+  if (!accepted || settled) return;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(ARCSiteControlTimeout * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
+    if (settled) return;
+    settled = YES;
+    fallback(completion);
+  });
+}
+
+- (void)shaarSetCacheDisabled:(BOOL)disabled forTabIDs:(NSArray<NSString *> *)tabIDs
+                       index:(NSUInteger)index applied:(NSUInteger)applied
+                  completion:(ARCSiteCompletion)completion {
+  if (index >= tabIDs.count) {
+    completion(applied ? nil : ARCBridgeError(@"The cache was not cleared."));
+    return;
+  }
+  NSString *tabID = tabIDs[index];
+  NSString *profileID = [self profileIDForTabID:tabID];
+  NSString *windowID = [self windowIDForTabID:tabID];
+  if (!profileID.length || !windowID.length) {
+    [self shaarSetCacheDisabled:disabled forTabIDs:tabIDs index:index + 1 applied:applied
+                    completion:completion];
+    return;
+  }
+  [self shaarDevToolsCall:@"Network.setCacheDisabled"
+                  params:@{@"cacheDisabled": @(disabled)}
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+               profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    (void)result;
+    BOOL gone = error && [error.localizedDescription containsString:@"no longer available"];
+    if (error && !gone) {
+      completion(error);
+      return;
+    }
+    [self shaarSetCacheDisabled:disabled forTabIDs:tabIDs index:index + 1
+                        applied:applied + (error ? 0 : 1) completion:completion];
+  }];
+}
+
+- (void)shaarFallbackClearProfileSiteDataForProfileID:(NSString *)profileID
+                                          completion:(ARCSiteCompletion)completion {
+  NSArray<NSString *> *tabIDs = [self shaarTabIDsForProfileID:profileID];
+  if (!tabIDs.count) {
+    completion(ARCBridgeError(@"Site data was not fully cleared."));
+    return;
+  }
+  [self shaarExpirePageStorageForTabIDs:tabIDs index:0 completion:^(NSError *error) {
+    if (error) {
+      completion(error);
+      return;
+    }
+    NSString *tabID = tabIDs.firstObject;
+    NSString *storedProfile = [self profileIDForTabID:tabID];
+    NSString *windowID = [self windowIDForTabID:tabID];
+    [self shaarDevToolsCall:@"Network.getCookies" params:@{}
+                capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+                 profileID:storedProfile windowID:windowID
+                completion:^(NSDictionary *result, NSError *cookieError) {
+      NSArray *cookies = [result[@"cookies"] isKindOfClass:NSArray.class] ? result[@"cookies"] : @[];
+      if (cookieError) {
+        completion(cookieError);
+        return;
+      }
+      [self shaarDeleteJarCookies:cookies atIndex:0 tabID:tabID profileID:storedProfile
+                         windowID:windowID completion:completion];
+    }];
+  }];
+}
+
+- (void)shaarExpirePageStorageForTabIDs:(NSArray<NSString *> *)tabIDs
+                                 index:(NSUInteger)index
+                            completion:(ARCSiteCompletion)completion {
+  if (index >= tabIDs.count) {
+    completion(nil);
+    return;
+  }
+  NSString *script =
+    @"(()=>{try{document.cookie.split(';').forEach(function(part){"
+     "var name=part.split('=')[0].replace(/^\\s+|\\s+$/g,'');"
+     "if(!name)return;"
+     "document.cookie=name+'=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';"
+     "document.cookie=name+'=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';"
+     "});localStorage.clear();sessionStorage.clear();}catch(e){return false;}return true;})()";
+  [self evaluateInTabID:tabIDs[index] script:script completion:^(NSString *json) {
+    if (!json) {
+      completion(ARCBridgeError(@"Site data was not fully cleared."));
+      return;
+    }
+    [self shaarExpirePageStorageForTabIDs:tabIDs index:index + 1 completion:completion];
+  }];
+}
+
+- (void)shaarDeleteJarCookies:(NSArray *)cookies atIndex:(NSUInteger)index
+                       tabID:(NSString *)tabID profileID:(NSString *)profileID
+                    windowID:(NSString *)windowID completion:(ARCSiteCompletion)completion {
+  if (index >= cookies.count) {
+    completion(nil);
+    return;
+  }
+  NSDictionary *cookie = [cookies[index] isKindOfClass:NSDictionary.class] ? cookies[index] : nil;
+  NSString *name = [cookie[@"name"] isKindOfClass:NSString.class] ? cookie[@"name"] : nil;
+  NSString *domain = [cookie[@"domain"] isKindOfClass:NSString.class] ? cookie[@"domain"] : nil;
+  NSString *path = [cookie[@"path"] isKindOfClass:NSString.class] ? cookie[@"path"] : nil;
+  if (!name.length || !domain.length) {
+    completion(ARCBridgeError(@"Some cookies were not cleared."));
+    return;
+  }
+  NSMutableDictionary *params = [@{@"name": name, @"domain": domain} mutableCopy];
+  if (path.length) params[@"path"] = path;
+  [self shaarDevToolsCall:@"Network.deleteCookies" params:params
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+               profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    (void)result;
+    if (error) {
+      completion(error);
+      return;
+    }
+    [self shaarDeleteJarCookies:cookies atIndex:index + 1 tabID:tabID profileID:profileID
+                       windowID:windowID completion:completion];
   }];
 }
 

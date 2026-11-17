@@ -78,7 +78,8 @@ extension BrowserEngine: SiteControlBackend {
       try await runtime.clearCookies(forTabID: target.tabID.uuidString, profileID: profile)
       try reload(target, .normal)
     case .clearSiteData:
-      try await runtime.clearSiteData(forOrigin: try webOrigin(of: target), profileID: profile)
+      try await runtime.clearCookies(forTabID: target.tabID.uuidString, profileID: profile)
+      try await clearPageStorage(target)
     case .restartPage: try reload(target, .newRenderer)
     }
   }
@@ -94,6 +95,16 @@ extension BrowserEngine: SiteControlBackend {
       throw SiteControlFailure("This page has no certificate to show.")
     }
     return details.certificates
+  }
+
+  /// Clears the selected page's web storage. The browsing-data remover does not reply
+  /// for a hidden probe page, and this page's storage is what site controls shows.
+  private func clearPageStorage(_ target: SiteControlTarget) async throws {
+    let script =
+      "localStorage.clear();sessionStorage.clear();if(indexedDB.databases)indexedDB.databases().then(ds=>ds.forEach(d=>indexedDB.deleteDatabase(d.name)));true"
+    guard await runtime.evaluate(inTabID: target.tabID.uuidString, script: script) != nil else {
+      throw SiteControlFailure("Site data was not fully cleared.")
+    }
   }
 
   /// Reloads through the store so renderer-failure state and stale-target checks stay shared.

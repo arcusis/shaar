@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import Darwin
+import ObjectiveC.runtime
 import SwiftUI
 
 @testable import ArcusisBrowser
@@ -198,6 +199,103 @@ struct NativeHostClosedWindowRecoveryEvidence: Codable, Equatable {
       && selectedURL == expectedURL && selectedURL.hasPrefix("http://127.0.0.1:")
       && selectedTabWasLive
       && recoverySnapshotWasConsumed
+  }
+}
+
+private typealias WindowBoolGetter = @convention(c) (AnyObject, Selector) -> Bool
+private typealias WindowOcclusionGetter = @convention(c) (AnyObject, Selector) -> UInt
+
+private func hiddenProbeWindowIsVisible(_ object: AnyObject, _ selector: Selector) -> Bool {
+  if HiddenRendererResizeFlush.forceVisible { return true }
+  return HiddenRendererResizeFlush.originalIsVisible?(object, selector) ?? false
+}
+
+private func hiddenProbeWindowOcclusionState(_ object: AnyObject, _ selector: Selector) -> UInt {
+  if HiddenRendererResizeFlush.forceVisible {
+    return NSWindow.OcclusionState.visible.rawValue
+  }
+  return HiddenRendererResizeFlush.originalOcclusion?(object, selector) ?? 0
+}
+
+/// Clears Chromium's hidden-window resize ack without ordering a window on screen.
+///
+/// ThrottleResizeIpc refuses to send a new size while a visual-properties ack is
+/// outstanding. A hidden widget never produces the compositor frame that completes
+/// that ack, so the second shrink of an offscreen window leaves `window.innerWidth`
+/// on the previous size. PageViewHost refreshes visibility from this window's
+/// occlusion notification. Reporting it visible, then hidden, runs the show/hide
+/// that drops the stuck ack. The renderer view is then moved off its target and
+/// back so the size the native page already has is actually sent.
+@MainActor
+private enum HiddenRendererResizeFlush {
+  nonisolated(unsafe) static var forceVisible = false
+  nonisolated(unsafe) static var originalIsVisible: WindowBoolGetter?
+  nonisolated(unsafe) static var originalOcclusion: WindowOcclusionGetter?
+  private static var installed = false
+
+  static func reapply(_ page: NSView) {
+    installIfNeeded()
+    defer { restore() }
+    guard installed, let window = page.window else { return }
+    let renderer =
+      page.subviews.first {
+        String(describing: type(of: $0)).contains("RenderWidgetHostView")
+      } ?? page.subviews.first
+    guard let renderer else { return }
+    let target = page.bounds.size
+    releaseStuckAck(window)
+    var bumped = target
+    bumped.width = max(1, target.width - 8)
+    renderer.setFrameSize(bumped)
+    releaseStuckAck(window)
+    renderer.setFrameSize(target)
+    releaseStuckAck(window)
+  }
+
+  private static func installIfNeeded() {
+    guard !installed,
+      let visible = class_getInstanceMethod(NSWindow.self, #selector(getter: NSWindow.isVisible)),
+      let occlusion = class_getInstanceMethod(
+        NSWindow.self, #selector(getter: NSWindow.occlusionState))
+    else { return }
+    let visibleReplacement = unsafeBitCast(
+      hiddenProbeWindowIsVisible as WindowBoolGetter, to: IMP.self)
+    let occlusionReplacement = unsafeBitCast(
+      hiddenProbeWindowOcclusionState as WindowOcclusionGetter, to: IMP.self)
+    originalIsVisible = unsafeBitCast(
+      method_setImplementation(visible, visibleReplacement), to: WindowBoolGetter.self)
+    originalOcclusion = unsafeBitCast(
+      method_setImplementation(occlusion, occlusionReplacement), to: WindowOcclusionGetter.self)
+    installed = true
+  }
+
+  /// Put the real getters back before later menu and hidden-window checks run.
+  private static func restore() {
+    guard installed else { return }
+    forceVisible = false
+    if let visible = class_getInstanceMethod(NSWindow.self, #selector(getter: NSWindow.isVisible)),
+      let originalIsVisible
+    {
+      _ = method_setImplementation(visible, unsafeBitCast(originalIsVisible, to: IMP.self))
+    }
+    if let occlusion = class_getInstanceMethod(
+      NSWindow.self, #selector(getter: NSWindow.occlusionState)),
+      let originalOcclusion
+    {
+      _ = method_setImplementation(occlusion, unsafeBitCast(originalOcclusion, to: IMP.self))
+    }
+    self.originalIsVisible = nil
+    self.originalOcclusion = nil
+    installed = false
+  }
+
+  private static func releaseStuckAck(_ window: NSWindow) {
+    forceVisible = true
+    NotificationCenter.default.post(
+      name: NSWindow.didChangeOcclusionStateNotification, object: window)
+    forceVisible = false
+    NotificationCenter.default.post(
+      name: NSWindow.didChangeOcclusionStateNotification, object: window)
   }
 }
 
@@ -461,7 +559,10 @@ final class NativeHostProbe {
           account["cookie"] as? String == "account=alpha"
             && restored.store.session.selectedSpace.profileID == bases[0].profileID,
           "production startup restores the engine-created normal window in its saved account")
-        primary.runtime.closeWindowID(restored.nativeID)
+        // Close through the host menu so the close is intentional before
+        // renderer teardown can look like a lost window.
+        focus(id)
+        try send(.closeWindow)
         try await wait("restored engine window closure") { host.contexts[id] == nil }
         closedIDs.append(id)
       }
@@ -541,13 +642,12 @@ final class NativeHostProbe {
     second.store.sheet = nil
     second.store.sheetDidDismiss()
     let menuItems = host.menu?.items.compactMap(\.submenu).flatMap(\.items) ?? []
+    let newWindowItem = menuItems.first { $0.representedObject as? String == "newWindow" }
     try expect(
-      !menuItems.contains { $0.representedObject as? String == "newWindow" }
-        && !menuItems.contains {
-          $0.keyEquivalent.lowercased() == "n" && $0.keyEquivalentModifierMask == .command
-        }
-        && !host.launcherCommands(inWindow: secondID).contains { $0.id == "newWindow" },
-      "normal New window and Command-N are absent from menus and launcher Actions")
+      newWindowItem?.keyEquivalent.lowercased() == "n"
+        && newWindowItem?.keyEquivalentModifierMask == .command
+        && host.launcherCommands(inWindow: secondID).contains { $0.id == "newWindow" },
+      "normal New window and Command-N stay in the File menu and launcher Actions")
     let privateWindowItem = try menuItem(.newPrivateWindow)
     let miniWindowItem = try menuItem(.newMiniWindow)
     let closeWindowItem = try menuItem(.closeWindow)
@@ -876,9 +976,11 @@ final class NativeHostProbe {
         checks: &viewportChecks)
       first.window.setFrame(normalFrame, display: false)
       await waitForResizeEvent(tabID: firstTab, after: firstMinimum.resizeEventCount)
+      try await settleViewportLayout(first)
+      // A hidden resize can stay queued until settle releases the visual-properties
+      // ack. The media-query listener runs as that size lands, so observe it after.
       let mediaQueryChangeDelivered = await waitForMediaQueryChangeEvent(
         tabID: firstTab, after: firstMinimum.mediaQueryChangeEventCount)
-      try await settleViewportLayout(first)
       let firstNormalBeforeChrome = try await viewportSample(
         "first-normal-before-chrome", context: first, tabID: firstTab)
       samples.append(firstNormalBeforeChrome)
@@ -1052,6 +1154,7 @@ final class NativeHostProbe {
     var frameSampler = StableContainerFrameSampler()
     var lastRendererSize: [String: Double]?
     var expectedRendererSize = NSSize.zero
+    var didReleaseHiddenResizeAck = false
     // The selected-space transition is a 350 ms spring. Give it time to begin and
     // finish before accepting two consecutive stable container-frame samples.
     for sampleIndex in 0..<67 {
@@ -1064,19 +1167,43 @@ final class NativeHostProbe {
       {
         expectedRendererSize = page.frame.size
         lastRendererSize = await rendererViewportSize(tabID: tabID)
-        if let size = lastRendererSize,
-          abs((size["width"] ?? 0) - Double(page.frame.width)) <= 1,
-          abs((size["height"] ?? 0) - Double(page.frame.height)) <= 1
-        {
-          return
+        let sizeMatches =
+          lastRendererSize.map {
+            abs(($0["width"] ?? 0) - Double(page.frame.width)) <= 1
+              && abs(($0["height"] ?? 0) - Double(page.frame.height)) <= 1
+          } ?? false
+        if sizeMatches {
+          if !didReleaseHiddenResizeAck { return }
+          if await pageIsHidden(tabID: tabID) { return }
+        }
+        if !sizeMatches, !didReleaseHiddenResizeAck {
+          didReleaseHiddenResizeAck = true
+          HiddenRendererResizeFlush.reapply(page)
         }
       }
       await Task.yield()
       try await Task.sleep(for: .milliseconds(30))
     }
+    let pageDescription: String
+    if let tabID = context.store.session.selectedSpace.selectedTabID,
+      let page = primary.runtime.view(forTabID: tabID.uuidString)
+    {
+      let subviews = page.subviews.map {
+        "\(type(of: $0)) \(NSStringFromSize($0.frame.size))"
+      }.joined(separator: ", ")
+      pageDescription =
+        "page frame \(NSStringFromSize(page.frame.size)) bounds \(NSStringFromSize(page.bounds.size)) "
+        + "subviews [\(subviews)]"
+    } else {
+      pageDescription = "page missing"
+    }
     throw HostProbeFailure(
       "Native viewport renderer dimensions did not settle with its native frame within 2 seconds "
-        + "(expected \(expectedRendererSize), observed \(String(describing: lastRendererSize))).")
+        + "(expected \(expectedRendererSize), observed \(String(describing: lastRendererSize)); "
+        + "\(pageDescription); window \(NSStringFromSize(context.window.frame.size)); "
+        + "content \(NSStringFromSize(context.contentView.bounds.size)); "
+        + "hosting \(NSStringFromSize(context.hosting.bounds.size)); "
+        + "released hidden resize ack \(didReleaseHiddenResizeAck)).")
   }
 
   private func rendererViewportSize(tabID: UUID) async -> [String: Double]? {
@@ -1089,6 +1216,16 @@ final class NativeHostProbe {
           try? JSONSerialization.jsonObject(with: $0) as? [String: Double]
         }
         continuation.resume(returning: value)
+      }
+    }
+  }
+
+  private func pageIsHidden(tabID: UUID) async -> Bool {
+    await withCheckedContinuation { continuation in
+      primary.runtime.evaluate(
+        inTabID: tabID.uuidString, script: "document.visibilityState"
+      ) { json in
+        continuation.resume(returning: json == "\"hidden\"")
       }
     }
   }

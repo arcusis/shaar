@@ -155,6 +155,9 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeDevToolsDockAudit(
 - (void)probeDevToolsUIOpenForTabID:(NSString *)tabID
                          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSNumber * _Nullable open))completion
     NS_SWIFT_UI_ACTOR;
+/// Lets Chromium record paint and layout metrics for one off-screen sample.
+/// The window stays at alpha 0, off the desktop, and is not made key.
+- (void)probeSetRendererMetricsVisible:(BOOL)visible forTabID:(NSString *)tabID;
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector

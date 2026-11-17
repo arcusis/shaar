@@ -579,6 +579,28 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   }
 }
 
+@Test func historyImportMovesExpiredVisitsInsideChromiumRetention() {
+  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  let nowMs = now.timeIntervalSince1970 * 1_000
+  let cutoff = nowMs - BrowserImport.historyRetentionHorizon * 1_000
+  let ancient: [Double] = [1_700_000_000_000, 1_700_000_010_000]
+  let shifted = BrowserImport.rowsInsideHistoryRetention(
+    [["u": "https://history.example.test/", "v": ancient, "n": 2, "l": ancient[1]]], now: now)
+  let visits = shifted[0]["v"] as? [Double]
+  #expect(visits?.count == 2)
+  #expect(visits?.allSatisfy { $0 >= cutoff && $0 <= nowMs } == true)
+  #expect(visits?.max() == nowMs - 24 * 60 * 60 * 1_000)
+  if let visits, visits.count == 2 {
+    #expect(visits[1] - visits[0] == 10_000.0)
+  }
+  let recent = nowMs - 3_600_000
+  let mixed = BrowserImport.rowsInsideHistoryRetention(
+    [["v": [recent, 1_600_000_000_000]]], now: now)
+  #expect(mixed[0]["v"] as? [Double] == [recent])
+  #expect(mixed[0]["n"] as? Int == 1)
+  #expect(mixed[0]["l"] as? Double == recent)
+}
+
 private func profileDirectory(name: String) throws -> URL {
   let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
   let profile = root.appending(path: name)

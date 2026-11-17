@@ -46,7 +46,6 @@ final class SiteControlsProbe {
   let fixture: URL
   let phase: String
   private var checks: [String] = []
-  private var previewWindow: NSWindow?
 
   init(engine: BrowserEngine, store: BrowserStore, root: URL, fixture: URL, phase: String) {
     self.engine = engine
@@ -80,9 +79,9 @@ final class SiteControlsProbe {
       "an http page reads as not secure without a certificate to show")
     try await checkPermissions(model)
     try await checkAutoPictureInPicture(model)
-    try await capture(model)
     try await checkActions(tab)
     try await checkProfilePrivacy()
+    try await capture(model)
     try await removeFixtureSpace(returningTo: returnSpace)
   }
 
@@ -223,15 +222,24 @@ final class SiteControlsProbe {
   }
 
   private func document(_ tab: UUID) async throws -> [String: Any] {
+    var timeouts = 0
     for _ in 0..<100 {
-      if engine.pages[tab]?.loading == false,
-        let value = await evaluate(
+      if timeouts >= 2 {
+        throw SiteControlsProbeFailure("Runtime.evaluate did not reply.")
+      }
+      if engine.pages[tab]?.loading == false {
+        switch await evaluateOnce(
           tab,
           "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('siteControl')})"
-        ),
-        SiteControlsPageReadiness.isReady(value)
-      {
-        return value
+        ) {
+        case .timedOut:
+          timeouts += 1
+        case .value(let json):
+          timeouts = 0
+          if let value = jsonObject(json), SiteControlsPageReadiness.isReady(value) {
+            return value
+          }
+        }
       }
       try await Task.sleep(for: .milliseconds(100))
     }
@@ -239,13 +247,30 @@ final class SiteControlsProbe {
   }
 
   private func evaluate(_ tab: UUID, _ expression: String) async -> [String: Any]? {
-    let json: String? = await withCheckedContinuation { continuation in
-      engine.runtime.evaluate(inTabID: tab.uuidString, script: expression) {
-        continuation.resume(returning: $0)
-      }
-    }
+    guard case .value(let json) = await evaluateOnce(tab, expression) else { return nil }
+    return jsonObject(json)
+  }
+
+  private func jsonObject(_ json: String?) -> [String: Any]? {
     guard let data = json?.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  /// One DevTools call at a time. The engine answers or times out in 15s; overlapping
+  /// calls pile up behind that and the reply lands on a waiter that already gave up.
+  private func evaluateOnce(_ tab: UUID, _ expression: String) async -> EvaluateWait {
+    let box = EvaluateBox()
+    engine.runtime.evaluate(inTabID: tab.uuidString, script: expression) { value in
+      box.finish(value)
+    }
+    for _ in 0..<200 {
+      let state = box.poll()
+      if state.arrived {
+        return .value(state.value)
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    return .timedOut
   }
 
   private func capture(_ model: SiteControlsModel) async throws {
@@ -260,20 +285,24 @@ final class SiteControlsProbe {
       )
       .background(Color(nsColor: .windowBackgroundColor))
       .environment(\.colorScheme, scheme)
+      .environment(\.siteControlsRefreshesOnAppear, false)
       let host = NSHostingView(rootView: panel)
       let size = host.fittingSize
       let window = NSWindow(
-        contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless,
-        backing: .buffered, defer: false)
+        contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
+        defer: true)
+      window.isReleasedWhenClosed = false
       window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
       window.contentView = host
-      previewWindow = window
-      try await Task.sleep(for: .milliseconds(150))
       host.layoutSubtreeIfNeeded()
       guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+        window.contentView = nil
+        window.close()
         throw SiteControlsProbeFailure("The site control center could not render.")
       }
       host.cacheDisplay(in: host.bounds, to: bitmap)
+      window.contentView = nil
+      window.close()
       guard let png = bitmap.representation(using: .png, properties: [:]) else {
         throw SiteControlsProbeFailure("The site control center could not encode.")
       }
@@ -302,6 +331,30 @@ final class SiteControlsProbe {
           "Site permissions, data clearing, reload modes and renderer restart on an authored loopback page in a disposable profile. HTTPS certificates and the native certificate sheet are not exercised.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-site-controls.json"), options: .atomic)
+  }
+}
+
+private enum EvaluateWait {
+  case value(String?)
+  case timedOut
+}
+
+private final class EvaluateBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var arrived = false
+  private var value: String?
+
+  func finish(_ value: String?) {
+    lock.lock()
+    arrived = true
+    self.value = value
+    lock.unlock()
+  }
+
+  func poll() -> (arrived: Bool, value: String?) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (arrived, value)
   }
 }
 

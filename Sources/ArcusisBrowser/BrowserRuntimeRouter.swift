@@ -134,6 +134,10 @@ final class BrowserRuntimeRouter {
     }
   }
 
+  func isWindowClosing(_ id: String) -> Bool {
+    closingWindows.contains(id)
+  }
+
   /// A context can only be introduced by a bound tab in the declared window.
   func claim(_ context: Context, id: String, payload: [String: Any]) -> BrowserRuntimeClient? {
     if context == .externalApp, contexts[context]?[id] != nil { return nil }

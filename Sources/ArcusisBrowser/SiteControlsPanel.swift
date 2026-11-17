@@ -93,11 +93,25 @@ struct SiteControlsPanelActions {
   var inspectElement: () -> Void = {}
 }
 
+private struct SiteControlsRefreshesOnAppearKey: EnvironmentKey {
+  static let defaultValue = true
+}
+
+extension EnvironmentValues {
+  /// Snapshots set this to false so rendering the panel does not start another
+  /// permissions load or extension list while a hidden page is being evaluated.
+  var siteControlsRefreshesOnAppear: Bool {
+    get { self[SiteControlsRefreshesOnAppearKey.self] }
+    set { self[SiteControlsRefreshesOnAppearKey.self] = newValue }
+  }
+}
+
 struct SiteControlsPanel: View {
   let model: SiteControlsModel
   let extensions: ExtensionManagerModel
   let profileName: String
   let actions: SiteControlsPanelActions
+  @Environment(\.siteControlsRefreshesOnAppear) private var refreshesOnAppear
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -128,7 +142,10 @@ struct SiteControlsPanel: View {
       }
     }
     .frame(width: 320)
-    .task { await model.load() }
+    .task {
+      guard refreshesOnAppear else { return }
+      await model.load()
+    }
   }
 
   private var header: some View {
@@ -160,6 +177,7 @@ struct SiteExtensionsSection: View {
   let model: ExtensionManagerModel
   let actions: SiteControlsPanelActions
   let tabID: UUID
+  @Environment(\.siteControlsRefreshesOnAppear) private var refreshesOnAppear
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -193,7 +211,10 @@ struct SiteExtensionsSection: View {
       .padding(.horizontal, 4)
     }
     .padding(8)
-    .task { model.refresh() }
+    .task {
+      guard refreshesOnAppear else { return }
+      model.refresh()
+    }
   }
 }
 

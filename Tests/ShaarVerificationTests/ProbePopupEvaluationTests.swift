@@ -10,19 +10,24 @@ import Testing
 @MainActor
 private final class RecordingPopupRuntime: ARCChromiumRuntime {
   var evaluations: [(String, String)] = []
+  var onEvaluate: (@MainActor () -> Void)?
 
   override func evaluateProbePopupID(_ popupID: String, script: String) async -> String? {
     evaluations.append((popupID, script))
+    let notify = onEvaluate
+    onEvaluate = nil
+    notify?()
     return nil
   }
 }
 
 @Test @MainActor func dispatchProbePopupEvaluationUsesTheAsyncBridge() async {
   let runtime = RecordingPopupRuntime()
-  dispatchProbePopupEvaluation(runtime, popupID: "popup", script: "return true")
-
-  for _ in 0..<10 where runtime.evaluations.isEmpty {
-    await Task.yield()
+  // The bridge hops through an unstructured task. Suspending lets that task
+  // run; a fixed yield count returns before it is scheduled under coverage.
+  await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+    runtime.onEvaluate = { continuation.resume() }
+    dispatchProbePopupEvaluation(runtime, popupID: "popup", script: "return true")
   }
 
   #expect(runtime.evaluations.count == 1)

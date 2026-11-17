@@ -37,5 +37,7 @@ import Testing
   #expect(
     commands.first { $0.0 == "Emulation.setTimezoneOverride" }?.1["timezoneId"] as? String == "")
   #expect(
-    commands.first { $0.0 == "Emulation.setUserAgentOverride" }?.1["userAgent"] as? String == "")
+    commands.first { $0.0 == "Emulation.setUserAgentOverride" }?.1["userAgent"] as? String
+      == "fixture")
+  #expect(commands.first { $0.0 == "Emulation.setUserAgentOverride" }?.1["acceptLanguage"] == nil)
 }

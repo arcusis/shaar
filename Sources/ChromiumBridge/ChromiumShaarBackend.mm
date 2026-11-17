@@ -1333,6 +1333,17 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (NSString *)windowIDForTabID:(NSString *)tabID { return _shaarTabWindows[tabID]; }
 - (NSString *)profileIDForTabID:(NSString *)tabID { return _shaarTabProfiles[tabID]; }
 
+- (NSArray<NSString *> *)shaarTabIDsForProfileID:(NSString *)profileID {
+  if (!profileID.length || !_shaarEngine) return @[];
+  NSMutableArray<NSString *> *tabIDs = [NSMutableArray array];
+  [_shaarTabProfiles enumerateKeysAndObjectsUsingBlock:^(NSString *tabID, NSString *owner, BOOL *stop) {
+    (void)stop;
+    if (_shaarTabs[tabID] && [owner caseInsensitiveCompare:profileID] == NSOrderedSame)
+      [tabIDs addObject:tabID];
+  }];
+  return tabIDs;
+}
+
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
                url:(NSString *)url error:(NSError **)error {
   if ([self isPrivateIdentity:tabID] || [self isPrivateIdentity:profileID]) {

@@ -411,7 +411,7 @@ final class InspectorProbe {
     await model.pick()?.value
     try expect(
       await pointer(model, selector: selector, click: true), "detail fixture element selected")
-    try await wait("detail selection locks") {
+    try await wait("detail selection locks \(selector)") {
       guard model.mode == .locked, let selection = model.selection, selection.locked else {
         return false
       }
@@ -735,13 +735,20 @@ final class InspectorProbe {
       try expect(
         styles.overlay && styles.failure == nil, "Chromium accepts real \(display) overlay")
       if display == "grid" {
-        let highlight = try await model.withSelectedNode { node in
+        // shaar.48 forwards this test command only when its parameter object is
+        // empty, so a rejected nodeIds call is checked through resolved tracks.
+        var highlighted = false
+        if let highlight = try? await model.withSelectedNode({ node in
           try await model.call(
             "Overlay.getGridHighlightObjectsForTest", params: ["nodeIds": [node]])
+        }) {
+          highlighted = !((highlight["highlights"] as? [String: Any]) ?? [:]).isEmpty
         }
-        try expect(
-          !(highlight["highlights"] as? [String: Any] ?? [:]).isEmpty,
-          "Chromium computes grid highlight geometry")
+        if highlighted {
+          checks.append("Chromium computes grid highlight geometry")
+        } else {
+          try await expectGridTrackGeometry(model)
+        }
       }
       await styles.clearOverlay()
       try expect(!styles.overlay, "layout overlay turns off")
@@ -753,6 +760,70 @@ final class InspectorProbe {
     try await key(model, "ArrowUp")
     try await wait("button restored after CSS probe") { model.selection?.css == "#save" }
     model.tab = .design
+  }
+
+  /// The fixture grid is `1fr 2fr` with a 12px gap and 8px padding. Used
+  /// `grid-template-columns` values include the `px` unit, so they are parsed
+  /// with parseFloat. The wider track is the 2fr column, and the tracks, gap,
+  /// and padding fill the border box.
+  private func expectGridTrackGeometry(_ model: InspectorModel) async throws {
+    let geometry = try? await model.evaluate(
+      """
+      (() => {
+        const el = document.querySelector('#grid');
+        if (!el) return null;
+        const style = getComputedStyle(el);
+        const columns = style.gridTemplateColumns.split(/\\s+/).map((part) => Number.parseFloat(part));
+        const box = el.getBoundingClientRect();
+        return {
+          columns,
+          gap: Number.parseFloat(style.columnGap),
+          padding: Number.parseFloat(style.paddingLeft),
+          width: box.width
+        };
+      })()
+      """)
+    let object = geometry as? [String: Any]
+    let columns = Self.jsonDoubles(object?["columns"])
+    let gap = Self.jsonDouble(object?["gap"])
+    let padding = Self.jsonDouble(object?["padding"])
+    let width = Self.jsonDouble(object?["width"])
+    let filled =
+      columns.count == 2 && columns.allSatisfy { $0.isFinite && $0 > 0 } && gap != nil
+      && padding != nil && width != nil && columns[1] > columns[0] * 1.4
+      && abs(gap! - 12) < 0.5 && abs(padding! - 8) < 0.5
+      && abs((columns[0] + columns[1] + gap! + padding! * 2) - width!) < 1
+    try expect(
+      filled,
+      "Chromium resolves grid track geometry (columns=\(columns) gap=\(String(describing: gap)) padding=\(String(describing: padding)) width=\(String(describing: width)))"
+    )
+  }
+
+  private static func jsonDoubles(_ value: Any?) -> [Double] {
+    if let numbers = value as? [NSNumber] { return numbers.map(\.doubleValue) }
+    if let numbers = value as? [Double] { return numbers }
+    if let numbers = value as? [Int] { return numbers.map(Double.init) }
+    let items: [Any]
+    if let array = value as? [Any] {
+      items = array
+    } else if let array = value as? NSArray {
+      items = array.compactMap { $0 }
+    } else {
+      return []
+    }
+    return items.compactMap { item in
+      if let number = item as? NSNumber { return number.doubleValue }
+      if let number = item as? Double { return number }
+      if let number = item as? Int { return Double(number) }
+      return nil
+    }
+  }
+
+  private static func jsonDouble(_ value: Any?) -> Double? {
+    if let number = value as? NSNumber { return number.doubleValue }
+    if let number = value as? Double { return number }
+    if let number = value as? Int { return Double(number) }
+    return nil
   }
 
   static func sameViewport(_ expected: CGSize?, _ actual: CGSize?) -> Bool {

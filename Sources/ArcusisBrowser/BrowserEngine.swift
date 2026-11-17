@@ -76,8 +76,14 @@ final class BrowserEngine {
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   /// Crashed documents whose native reload failed before the close event arrived.
   @ObservationIgnored private var tabsAwaitingReload: Set<UUID> = []
+  /// Restart Page closes the native document and opens the same tab again.
+  /// Session selection stays, and the exiting renderer is not a page failure.
+  @ObservationIgnored private var tabsRestartingRenderer: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var receivingNativeSelection = false
+  /// Latest engine activation that arrived while reconcile held the callback.
+  /// A rapid tabs.update burst overlaps that window; the final target must still land.
+  @ObservationIgnored private var queuedNativeActivation: (id: UUID, profile: UUID)?
   /// True while an engine-opened tab is adopted inside the event callback.
   /// InsertDetachedTabAt still holds TabStripModel's reentrancy guard until
   /// that callback returns. place-tabs must not run until the next turn.
@@ -278,7 +284,13 @@ final class BrowserEngine {
       else { return }
       // Closing the document can report the renderer exiting with it.
       // The close request stays in force and a saved pin archives.
-      if self.closesInFlight.contains(tab) { return }
+      // A window close is the same teardown: recording it would make the host
+      // rebuild a window the caller just closed.
+      if self.closesInFlight.contains(tab) || self.tabsRestartingRenderer.contains(tab)
+        || self.events.router.isWindowClosing(self.windowID)
+      {
+        return
+      }
       self.pages[tab]?.loading = false
       self.mediaAccess[tab] = nil
       self.forgetMedia(tab)
@@ -293,6 +305,7 @@ final class BrowserEngine {
       else {
         return
       }
+      self.tabsRestartingRenderer.remove(tab)
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
       if let model = self.developerModels[tab] {
         model.update(target: model.target, committed: true)
@@ -691,42 +704,35 @@ final class BrowserEngine {
         self.store?.dismissSavePrompt(prompt.id)
         self.savePromptPresenter.close()
       }
-      self.store?.nativeTabClosed(id)
-      if let store = self.store, store.session.page(forTabID: id)?.tab.isPinned == true,
-        let profile = store.session.profileID(forTabID: id)
-      {
-        // Wait for Reload instead of immediately recreating a failing renderer
-        // inside its close callback (or repeatedly during reconciliation).
-        self.failedTabs.insert(id)
-        self.lastTabOrders[profile] = nil
-        store.nativeRendererGone(id, profileID: profile, status: "native_tab_closed", exitCode: 0)
+      // Restart Page keeps the session entry. A normal close still deletes an
+      // unpinned tab and archives a pin.
+      if !self.tabsRestartingRenderer.contains(id) {
+        self.store?.nativeTabClosed(id)
+        if let store = self.store, store.session.page(forTabID: id)?.tab.isPinned == true,
+          let profile = store.session.profileID(forTabID: id)
+        {
+          // Wait for Reload instead of immediately recreating a failing renderer
+          // inside its close callback (or repeatedly during reconciliation).
+          self.failedTabs.insert(id)
+          self.lastTabOrders[profile] = nil
+          store.nativeRendererGone(id, profileID: profile, status: "native_tab_closed", exitCode: 0)
+        }
       }
       self.scheduleReloadRecreation(id)
     }
     callbacks.onTabActivated = { [weak self] identity, owner in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
-        let id = UUID(uuidString: identity)
+        let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner)
       else { return }
-      guard !self.isClosed, !self.receivingNativeSelection, !self.reconciling,
-        self.liveTabs.contains(id), let profile = UUID(uuidString: owner),
-        self.store?.session.profileID(forTabID: id) == profile
-      else { return }
-      // Reconciliation requests activation, whose acknowledgment comes back here.
-      // An already-selected tab must not start another reconcile/activate cycle.
-      if self.store?.session.selectedPage?.tab.id == id {
-        self.restoreSelectedPageAfterActivation(id)
+      if !self.tabsRestartingRenderer.isEmpty { return }
+      if self.reconciling || self.receivingNativeSelection {
+        guard !self.isClosed, self.liveTabs.contains(id),
+          self.store?.session.profileID(forTabID: id) == profile
+        else { return }
+        self.queuedNativeActivation = (id: id, profile: profile)
         return
       }
-      self.receivingNativeSelection = true
-      if self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true {
-        _ = self.store?.nativeFavoriteActivated(id, profileID: profile)
-      } else {
-        _ = self.store?.nativeTabActivated(id, profileID: profile)
-      }
-      self.receivingNativeSelection = false
-      // Chromium is still notifying its tab strip. The model is current before
-      // other saves can run, but opening/reordering tabs must wait until it unwinds.
-      DispatchQueue.main.async { [weak self] in self?.reconcile() }
+      self.applyNativeActivation(id: id, profile: profile)
     }
     callbacks.onNewTab = { [weak self] identity, owner, address, opener, foreground in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID else { return }
@@ -870,6 +876,15 @@ final class BrowserEngine {
               url: destination.absoluteString)
           })
       }
+      if mode == .newRenderer {
+        // Engine reload only accepts normal and bypass-cache. Closing the
+        // native document and opening this same tab releases the renderer
+        // without dropping the session entry or its site data.
+        tabsRestartingRenderer.insert(tab)
+        tabsAwaitingReload.insert(tab)
+        runtime.closeTabID(tab.uuidString)
+        return true
+      }
       if runtime.reloadTabID(
         tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
       {
@@ -903,7 +918,10 @@ final class BrowserEngine {
   }
 
   private func openReplacementDocument(_ tab: UUID) {
-    guard !isClosed, let profile = store?.session.profileID(forTabID: tab) else { return }
+    guard !isClosed, let profile = store?.session.profileID(forTabID: tab) else {
+      tabsRestartingRenderer.remove(tab)
+      return
+    }
     _ = openRetainedDocument(tab, profile: profile)
   }
 
@@ -943,7 +961,10 @@ final class BrowserEngine {
     else { return }
     guard ensureLiveWindow() else { return }
     reconciling = true
-    defer { reconciling = false }
+    defer {
+      reconciling = false
+      drainQueuedNativeActivation()
+    }
     let session = store.session
     if lastSpaceID != session.selectedSpaceID || lastTabID != session.selectedPage?.tab.id {
       extensionPanel = nil
@@ -1094,13 +1115,48 @@ final class BrowserEngine {
     return partition.pinned + partition.unpinned + favorites
   }
 
+  /// Applies an engine activation, or remembers it when reconcile is already on the stack.
+  private func applyNativeActivation(id: UUID, profile: UUID) {
+    guard !isClosed, runtime.windowID(forTabID: id.uuidString) == windowID,
+      liveTabs.contains(id), store?.session.profileID(forTabID: id) == profile
+    else { return }
+    // Reconciliation requests activation, whose acknowledgment comes back here.
+    // An already-selected tab must not start another reconcile/activate cycle.
+    if store?.session.selectedPage?.tab.id == id {
+      restoreSelectedPageAfterActivation(id)
+      return
+    }
+    receivingNativeSelection = true
+    if store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true {
+      _ = store?.nativeFavoriteActivated(id, profileID: profile)
+    } else {
+      _ = store?.nativeTabActivated(id, profileID: profile)
+    }
+    receivingNativeSelection = false
+    drainQueuedNativeActivation()
+    // Chromium is still notifying its tab strip. The model is current before
+    // other saves can run, but opening/reordering tabs must wait until it unwinds.
+    DispatchQueue.main.async { [weak self] in self?.reconcile() }
+  }
+
+  private func drainQueuedNativeActivation() {
+    guard !reconciling, !receivingNativeSelection, let queued = queuedNativeActivation else {
+      return
+    }
+    queuedNativeActivation = nil
+    applyNativeActivation(id: queued.id, profile: queued.profile)
+  }
+
   /// Selects the current page. Picture-in-picture may defer this until the page
   /// has been asked to enter, so a second switch cannot run inside the first one.
   private func activateReconciledSelection() {
     guard !isClosed, !runtime.isQuitting, let session = store?.session else { return }
     let alreadyReconciling = reconciling
     reconciling = true
-    defer { reconciling = alreadyReconciling }
+    defer {
+      reconciling = alreadyReconciling
+      if !alreadyReconciling { drainQueuedNativeActivation() }
+    }
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       wakeIfSleeping(selected)

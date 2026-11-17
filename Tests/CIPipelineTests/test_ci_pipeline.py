@@ -114,6 +114,27 @@ class PipelineGateTests(unittest.TestCase):
             self.assertIn("shaar_operation_contract_values", contract)
             self.assertIn("#expect(swiftValue == cValues?[index])", contract)
 
+    def test_coverage_base_waits_for_popup_bridge_task(self):
+        temporary_root = ROOT / "build/ci"
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        source = ROOT / "Tests/ShaarVerificationTests/ProbePopupEvaluationTests.swift"
+        archived = source.read_text().replace(
+            STAGES._POPUP_RUNTIME_FIELDS_WITH_NOTIFY, STAGES._POPUP_RUNTIME_FIELDS, 1).replace(
+            STAGES._POPUP_CONTINUATION_WAIT, STAGES._POPUP_YIELD_WAIT, 1)
+        self.assertIn("for _ in 0..<10 where runtime.evaluations.isEmpty", archived)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as temporary:
+            base = Path(temporary)
+            path = base / "Tests/ShaarVerificationTests/ProbePopupEvaluationTests.swift"
+            path.parent.mkdir(parents=True)
+            path.write_text(archived)
+            STAGES.repair_async_popup_probe_yield(base)
+            STAGES.repair_async_popup_probe_yield(base)
+            text = path.read_text()
+            self.assertIn("withCheckedContinuation", text)
+            self.assertIn("runtime.onEvaluate", text)
+            self.assertNotIn("for _ in 0..<10 where runtime.evaluations.isEmpty", text)
+            self.assertEqual(text, source.read_text())
+
     def test_ci_gate_reports_missing_required_environment_inputs(self):
         required = {
             "CI_NEEDS": "{}",

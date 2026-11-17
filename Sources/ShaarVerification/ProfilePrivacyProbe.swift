@@ -56,9 +56,22 @@ final class ProfilePrivacyProbe {
     try expect(
       model.failure == nil && model.sites.contains { $0.id == origin },
       "Settings enumerates the selected profile's saved permission exceptions")
+    // The pinned engine returns a real CookieControlsMode for a fresh profile:
+    // third-party cookies blocked, and the pref is not enterprise-managed.
+    // Nil is only for an engine that cannot read the pref at all.
     try expect(
-      model.cookiesBlocked == nil,
-      "the pinned engine reports third-party cookie policy as unavailable rather than inventing a preference"
+      model.cookiesBlocked == true && model.cookiesManaged == false,
+      "a fresh profile reports third-party cookies as blocked and not managed (blocked=\(String(describing: model.cookiesBlocked)) managed=\(model.cookiesManaged))"
+    )
+    await model.setCookiesBlocked(false)
+    try expect(
+      model.failure == nil && model.cookiesBlocked == false && model.cookiesManaged == false,
+      "Settings allows third-party cookies on the selected profile (blocked=\(String(describing: model.cookiesBlocked)) managed=\(model.cookiesManaged) failure=\(model.failure ?? "nil"))"
+    )
+    await model.setCookiesBlocked(true)
+    try expect(
+      model.failure == nil && model.cookiesBlocked == true && model.cookiesManaged == false,
+      "Settings restores the fresh profile's third-party cookie block (blocked=\(String(describing: model.cookiesBlocked)) managed=\(model.cookiesManaged) failure=\(model.failure ?? "nil"))"
     )
     await model.resetPermissions(origin: origin)
     let firstPermissions = try await backend.permissions(first, origin: origin)
@@ -92,19 +105,27 @@ final class ProfilePrivacyProbe {
       "Settings clears only the selected profile's cookies and site storage")
     var directories: [UUID: URL] = [:]
     for profile in [first, second] {
+      // Downloads default to the user Downloads folder. The engine profile
+      // directory is the Chromium user-data folder named for this identity.
+      let resolved = runtime.profileDataDirectory(forProfileID: profile.uuidString)
       guard
-        let directory = runtime.downloadsDirectory(forProfileID: profile.uuidString)?
-          .deletingLastPathComponent(), directory.isFileURL,
+        let directory = resolved, directory.isFileURL,
         directory.lastPathComponent.lowercased() == "profile \(profile.uuidString.lowercased())",
         FileManager.default.fileExists(atPath: directory.path)
       else {
         throw ProfilePrivacyProbeFailure(
-          message: "The disposable engine profile directory could not be verified.")
+          message:
+            "The disposable engine profile directory could not be verified (path=\(resolved?.path ?? "nil"))."
+        )
       }
       directories[profile] = directory
     }
     for profile in [first, second] {
-      try await backend.deleteProfile(profile)
+      // Delete refuses while this profile still owns a tab or its hidden
+      // browser. Closing the tab lets Chromium drop that browser.
+      let tab = profile == first ? firstTab : secondTab
+      runtime.discardTabID(tab.uuidString)
+      try await deleteWhenReleased(profile, backend: backend)
       let directory = directories[profile]!
       for _ in 0..<Int(300 * ProbeTimeout.scale) {
         if !FileManager.default.fileExists(atPath: directory.path) { break }
@@ -131,6 +152,22 @@ final class ProfilePrivacyProbe {
       "the bridge rejects services for the deleted engine profile's retired identity"
     )
     return checks
+  }
+
+  private func deleteWhenReleased(_ profile: UUID, backend: EngineProfileSettings) async throws {
+    let retryable = "Close private windows before deleting this profile."
+    var last = retryable
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
+      do {
+        try await backend.deleteProfile(profile)
+        return
+      } catch {
+        last = error.localizedDescription
+        if last != retryable { throw error }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+    }
+    throw ProfilePrivacyProbeFailure(message: last)
   }
 
   private func cacheToken(_ tab: UUID, path: String) async throws -> String {

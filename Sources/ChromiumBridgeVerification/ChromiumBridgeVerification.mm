@@ -96,6 +96,9 @@ void LogTrustedInputTrace(const char *stage) {
   }
 }
 
+static NSWindow *gProbeHiddenWindow = nil;
+static int gProbeVisibilityHolds = 0;
+
 BOOL ProbeTrustedInputSurfaceAllowed(NSView *view) {
   NSWindow *pageWindow = view.window;
   if (!pageWindow) return NO;
@@ -103,10 +106,15 @@ BOOL ProbeTrustedInputSurfaceAllowed(NSView *view) {
       [NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.arcusis.browser.verification"] &&
       pageWindow.isVisible && !pageWindow.isMiniaturized &&
       !pageWindow.isKeyWindow && pageWindow.alphaValue == 0 && pageWindow.ignoresMouseEvents;
-  if (pageWindow.isVisible && !transparentVerificationWindow) return NO;
+  // The metrics sample is ordered off-screen at alpha 0 and is not key. It still
+  // reports visible so Chromium can record LCP and layout shift.
+  BOOL probeMetricsWindow = gProbeVisibilityHolds > 0 && pageWindow == gProbeHiddenWindow &&
+      pageWindow.alphaValue == 0 && !pageWindow.isKeyWindow && !pageWindow.isMiniaturized;
+  if (pageWindow.isVisible && !transparentVerificationWindow && !probeMetricsWindow) return NO;
   for (NSWindow *window in NSApp.windows) {
-    if (window.isVisible && (!transparentVerificationWindow || window != pageWindow))
-      return NO;
+    if (!window.isVisible) continue;
+    if ((transparentVerificationWindow || probeMetricsWindow) && window == pageWindow) continue;
+    return NO;
   }
   return YES;
 }
@@ -755,6 +763,636 @@ void ARCCompletePrivateQuitDialogCancellation(
 }
 @end
 
+// Offscreen probe input. Shaar's page window is not a views widget, so the
+// engine returns before it builds the Inspect menu. These helpers deliver a
+// real renderer event without ordering that window or changing the key window.
+@interface NSObject (ShaarProbeHostEvents)
+- (void)mouseEvent:(NSEvent *)event;
+- (NSInteger)keyEvent:(NSEvent *)event;
+@end
+
+static BOOL gProbeSwizzlesInstalled = NO;
+static BOOL gProbeDeliverMouse = NO;
+static BOOL gProbeKeepHidden = NO;
+static BOOL gProbeMenuArmed = NO;
+static BOOL gProbeMenuInvoked = NO;
+static BOOL gProbeInspectFound = NO;
+static BOOL gProbeInspectOpened = NO;
+static NSUInteger gProbeInspectGeneration = 0;
+static NSDictionary *gProbeInspectAudit = nil;
+static NSDictionary *gProbeInspectClick = nil;
+static NSView *gProbeWidget = nil;
+static IMP gOrigShouldIgnore = nil;
+static IMP gOrigHostOrderWindow = nil;
+static IMP gOrigOrderWindow = nil;
+static IMP gOrigOrderFront = nil;
+static IMP gOrigMakeKeyAndOrderFront = nil;
+static IMP gOrigOrderFrontRegardless = nil;
+static IMP gOrigMakeKeyWindow = nil;
+static IMP gOrigMakeMainWindow = nil;
+static IMP gOrigPopUp = nil;
+static IMP gOrigConvertPoint = nil;
+static IMP gOrigMouseEvent = nil;
+static IMP gOrigIsVisible = nil;
+static IMP gOrigOcclusion = nil;
+static NSInteger gProbeEventNumber = 1;
+static NSTimeInterval gProbeEventTime = 0;
+static int gProbeIgnoreBypass = 0;
+static int gProbeMouseEntries = 0;
+static NSUInteger gProbeWidgetCount = 0;
+static BOOL gProbeForceCenter = NO;
+static BOOL gProbeForceVisible = NO;
+static BOOL gProbeHoldVisible = NO;
+static BOOL gProbeDidOrder = NO;
+static BOOL gProbeOrderedOnce = NO;
+static NSRect gProbeSavedFrame = {{0, 0}, {0, 0}};
+static CGFloat gProbeSavedAlpha = 1;
+static IMP gOrigActivate = nil;
+static NSString *gProbeLastJSON = nil;
+static NSRect gProbeWidgetBounds = {{0, 0}, {0, 0}};
+static NSRect gProbeWidgetFrame = {{0, 0}, {0, 0}};
+static NSPoint gProbeWidgetPoint = {0, 0};
+static NSPoint gProbeRoundTrip = {0, 0};
+static BOOL gProbeWidgetWasHidden = NO;
+static NSInteger gProbeWindowNumber = 0;
+static BOOL gProbeContentSuperview = NO;
+
+static BOOL ProbeShouldIgnoreMouse(id self, SEL _cmd, NSEvent *event) {
+  if (gProbeDeliverMouse && self == gProbeWidget) {
+    gProbeIgnoreBypass += 1;
+    return NO;
+  }
+  if (!gOrigShouldIgnore) return NO;
+  return ((BOOL (*)(id, SEL, NSEvent *))gOrigShouldIgnore)(self, _cmd, event);
+}
+
+static NSPoint ProbeConvertPoint(NSView *self, SEL _cmd, NSPoint point, NSView *from) {
+  if (gProbeForceCenter && gProbeDeliverMouse && self == gProbeWidget && from == nil)
+    return NSMakePoint(NSMidX(self.bounds), NSMidY(self.bounds));
+  if (!gOrigConvertPoint) return point;
+  return ((NSPoint (*)(id, SEL, NSPoint, NSView *))gOrigConvertPoint)(self, _cmd, point, from);
+}
+
+static void ProbeMouseEvent(id self, SEL _cmd, NSEvent *event) {
+  if (gProbeDeliverMouse && self == gProbeWidget) gProbeMouseEntries += 1;
+  if (!gOrigMouseEvent) return;
+  ((void (*)(id, SEL, NSEvent *))gOrigMouseEvent)(self, _cmd, event);
+}
+
+static BOOL ProbeIsVisible(id self, SEL _cmd) {
+  if (gProbeForceVisible && self == gProbeHiddenWindow) return YES;
+  if (!gOrigIsVisible) return NO;
+  return ((BOOL (*)(id, SEL))gOrigIsVisible)(self, _cmd);
+}
+
+static NSUInteger ProbeOcclusionState(id self, SEL _cmd) {
+  if (gProbeForceVisible && self == gProbeHiddenWindow) return NSWindowOcclusionStateVisible;
+  if (!gOrigOcclusion) return 0;
+  return ((NSUInteger (*)(id, SEL))gOrigOcclusion)(self, _cmd);
+}
+
+static void ProbeSetRendererVisible(NSWindow *window, BOOL visible) {
+  if (!window || !gOrigIsVisible) return;
+  gProbeForceVisible = visible;
+  [NSNotificationCenter.defaultCenter
+      postNotificationName:NSWindowDidChangeOcclusionStateNotification object:window];
+}
+
+static void ProbeActivateIgnoringOtherApps(id self, SEL _cmd, BOOL flag) {
+  if (gProbeKeepHidden) return;
+  if (!gOrigActivate) return;
+  ((void (*)(id, SEL, BOOL))gOrigActivate)(self, _cmd, flag);
+}
+
+static void ProbeSpin(NSTimeInterval seconds) {
+  CFRunLoopRunInMode(kCFRunLoopDefaultMode, seconds, false);
+}
+
+// A deferred window has windowNumber -1 until it is ordered once. Give it a
+// device off-screen, with alpha 0, without making it key or marking Shaar's
+// wasShown flag. The NSWindow implementation is called directly so the
+// ShaarPageHostWindow override does not record a user-visible show.
+static void ProbeOrderOffscreen(NSWindow *window) {
+  if (!window || !gOrigOrderWindow || gProbeDidOrder || window.windowNumber >= 0) return;
+  gProbeSavedFrame = window.frame;
+  gProbeSavedAlpha = window.alphaValue;
+  gProbeDidOrder = YES;
+  gProbeOrderedOnce = YES;
+  NSRect offscreen = window.frame;
+  offscreen.origin = NSMakePoint(-20000, -20000);
+  window.alphaValue = 0;
+  [window setFrame:offscreen display:NO];
+  ((void (*)(id, SEL, NSWindowOrderingMode, NSInteger))gOrigOrderWindow)(
+      window, @selector(orderWindow:relativeTo:), NSWindowAbove, 0);
+}
+
+static void ProbeRestoreOffscreen(NSWindow *window) {
+  if (!gProbeDidOrder || !window) return;
+  ((void (*)(id, SEL, NSWindowOrderingMode, NSInteger))gOrigOrderWindow)(
+      window, @selector(orderWindow:relativeTo:), NSWindowOut, 0);
+  [window setFrame:gProbeSavedFrame display:NO];
+  window.alphaValue = gProbeSavedAlpha;
+  gProbeDidOrder = NO;
+  if (window.isKeyWindow) [window resignKeyWindow];
+}
+
+static void ProbeHidePageWindow(NSWindow *window);
+
+static void ProbeBeginHiddenInput(NSWindow *window) {
+  gProbeVisibilityHolds += 1;
+  if (gProbeVisibilityHolds > 1) return;
+  gProbeHiddenWindow = window;
+  gProbeKeepHidden = YES;
+  ProbeOrderOffscreen(window);
+  if (window) gProbeWindowNumber = window.windowNumber;
+  ProbeSetRendererVisible(window, YES);
+  ProbeSpin(0.05);
+}
+
+static void ProbeEndHiddenInput(NSWindow *window) {
+  if (gProbeVisibilityHolds <= 0) return;
+  gProbeVisibilityHolds -= 1;
+  if (gProbeVisibilityHolds > 0) return;
+  ProbeSpin(0.15);
+  ProbeSetRendererVisible(window, NO);
+  ProbeRestoreOffscreen(window);
+  gProbeKeepHidden = NO;
+  gProbeHoldVisible = NO;
+  ProbeHidePageWindow(window);
+}
+
+static void ProbeHostOrderWindow(id self, SEL _cmd, NSWindowOrderingMode place, NSInteger other) {
+  if (gProbeKeepHidden && self == gProbeHiddenWindow && place != NSWindowOut) return;
+  if (!gOrigHostOrderWindow) return;
+  ((void (*)(id, SEL, NSWindowOrderingMode, NSInteger))gOrigHostOrderWindow)(self, _cmd, place, other);
+}
+
+static void ProbeOrderWindow(id self, SEL _cmd, NSWindowOrderingMode place, NSInteger other) {
+  if (gProbeKeepHidden && self == gProbeHiddenWindow && place != NSWindowOut) return;
+  if (!gOrigOrderWindow) return;
+  ((void (*)(id, SEL, NSWindowOrderingMode, NSInteger))gOrigOrderWindow)(self, _cmd, place, other);
+}
+
+static void ProbeOrderFront(id self, SEL _cmd, id sender) {
+  if (gProbeKeepHidden && self == gProbeHiddenWindow) return;
+  ((void (*)(id, SEL, id))gOrigOrderFront)(self, _cmd, sender);
+}
+
+static void ProbeMakeKeyAndOrderFront(id self, SEL _cmd, id sender) {
+  if (gProbeKeepHidden && self == gProbeHiddenWindow) return;
+  ((void (*)(id, SEL, id))gOrigMakeKeyAndOrderFront)(self, _cmd, sender);
+}
+
+static void ProbeOrderFrontRegardless(id self, SEL _cmd) {
+  if (gProbeKeepHidden && self == gProbeHiddenWindow) return;
+  ((void (*)(id, SEL))gOrigOrderFrontRegardless)(self, _cmd);
+}
+
+static void ProbeMakeKeyWindow(id self, SEL _cmd) {
+  if (gProbeKeepHidden) return;
+  ((void (*)(id, SEL))gOrigMakeKeyWindow)(self, _cmd);
+}
+
+static void ProbeMakeMainWindow(id self, SEL _cmd) {
+  if (gProbeKeepHidden) return;
+  ((void (*)(id, SEL))gOrigMakeMainWindow)(self, _cmd);
+}
+
+static BOOL ProbeIsInspectTitle(NSString *title) {
+  NSString *clean = [[title stringByReplacingOccurrencesOfString:@"&" withString:@""]
+      stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  return [clean caseInsensitiveCompare:@"Inspect"] == NSOrderedSame ||
+      [clean caseInsensitiveCompare:@"Inspect Element"] == NSOrderedSame;
+}
+
+static NSMenuItem *ProbeInspectItem(NSMenu *menu, NSUInteger depth) {
+  if (!menu || depth > 8) return nil;
+  for (NSMenuItem *item in menu.itemArray) {
+    if (ProbeIsInspectTitle(item.title) && item.enabled && !item.isHidden) return item;
+    NSMenuItem *nested = ProbeInspectItem(item.submenu, depth + 1);
+    if (nested) return nested;
+  }
+  return nil;
+}
+
+static void ProbePopUpContextMenu(id self, SEL _cmd, NSMenu *menu, NSEvent *event, NSView *view) {
+  if (gProbeMenuArmed) {
+    NSMenuItem *item = ProbeInspectItem(menu, 0);
+    gProbeMenuArmed = NO;
+    if (item.action && [NSApp sendAction:item.action to:item.target from:item])
+      gProbeMenuInvoked = YES;
+    return;
+  }
+  ((void (*)(id, SEL, NSMenu *, NSEvent *, NSView *))gOrigPopUp)(self, _cmd, menu, event, view);
+}
+
+static void ProbeReplaceInstance(Class cls, SEL sel, IMP replacement, IMP *slot) {
+  Method method = cls ? class_getInstanceMethod(cls, sel) : nil;
+  if (!method || !slot || *slot) return;
+  *slot = method_getImplementation(method);
+  method_setImplementation(method, replacement);
+}
+
+static void ProbeInstallInputSwizzles(void) {
+  if (gProbeSwizzlesInstalled) return;
+  gProbeSwizzlesInstalled = YES;
+  Class widgetClass = NSClassFromString(@"RenderWidgetHostViewCocoa");
+  Class hostClass = NSClassFromString(@"ShaarPageHostWindow");
+  if (!widgetClass) NSLog(@"Probe input: RenderWidgetHostViewCocoa is not loaded");
+  if (!hostClass) NSLog(@"Probe input: ShaarPageHostWindow is not loaded");
+  ProbeReplaceInstance(widgetClass, @selector(shouldIgnoreMouseEvent:),
+                       (IMP)ProbeShouldIgnoreMouse, &gOrigShouldIgnore);
+  ProbeReplaceInstance(widgetClass, @selector(mouseEvent:),
+                       (IMP)ProbeMouseEvent, &gOrigMouseEvent);
+  ProbeReplaceInstance(NSView.class, @selector(convertPoint:fromView:),
+                       (IMP)ProbeConvertPoint, &gOrigConvertPoint);
+  ProbeReplaceInstance(NSWindow.class, @selector(isVisible),
+                       (IMP)ProbeIsVisible, &gOrigIsVisible);
+  ProbeReplaceInstance(NSWindow.class, @selector(occlusionState),
+                       (IMP)ProbeOcclusionState, &gOrigOcclusion);
+  ProbeReplaceInstance(NSApplication.class, @selector(activateIgnoringOtherApps:),
+                       (IMP)ProbeActivateIgnoringOtherApps, &gOrigActivate);
+  if (!gOrigShouldIgnore)
+    NSLog(@"Probe input: shouldIgnoreMouseEvent: was not replaced");
+  if (!gOrigMouseEvent)
+    NSLog(@"Probe input: mouseEvent: was not replaced");
+  if (!gOrigIsVisible)
+    NSLog(@"Probe input: isVisible was not replaced");
+  ProbeReplaceInstance(hostClass, @selector(orderWindow:relativeTo:),
+                       (IMP)ProbeHostOrderWindow, &gOrigHostOrderWindow);
+  ProbeReplaceInstance(NSWindow.class, @selector(orderWindow:relativeTo:),
+                       (IMP)ProbeOrderWindow, &gOrigOrderWindow);
+  ProbeReplaceInstance(NSWindow.class, @selector(orderFront:),
+                       (IMP)ProbeOrderFront, &gOrigOrderFront);
+  ProbeReplaceInstance(NSWindow.class, @selector(makeKeyAndOrderFront:),
+                       (IMP)ProbeMakeKeyAndOrderFront, &gOrigMakeKeyAndOrderFront);
+  ProbeReplaceInstance(NSWindow.class, @selector(orderFrontRegardless),
+                       (IMP)ProbeOrderFrontRegardless, &gOrigOrderFrontRegardless);
+  ProbeReplaceInstance(NSWindow.class, @selector(makeKeyWindow),
+                       (IMP)ProbeMakeKeyWindow, &gOrigMakeKeyWindow);
+  ProbeReplaceInstance(NSWindow.class, @selector(makeMainWindow),
+                       (IMP)ProbeMakeMainWindow, &gOrigMakeMainWindow);
+  Method popup = class_getClassMethod(NSMenu.class, @selector(popUpContextMenu:withEvent:forView:));
+  if (popup && !gOrigPopUp) {
+    gOrigPopUp = method_getImplementation(popup);
+    method_setImplementation(popup, (IMP)ProbePopUpContextMenu);
+  }
+}
+
+static void ProbeWalkWidgets(NSView *view, NSUInteger depth, NSView **best,
+                             CGFloat *bestArea, NSUInteger *count) {
+  if (!view || depth > 16) return;
+  Class cocoa = NSClassFromString(@"RenderWidgetHostViewCocoa");
+  if (cocoa && [view isKindOfClass:cocoa]) {
+    *count += 1;
+    CGFloat area = NSWidth(view.bounds) * NSHeight(view.bounds);
+    if (!*best || area > *bestArea) {
+      *best = view;
+      *bestArea = area;
+    }
+  }
+  for (NSView *child in view.subviews)
+    ProbeWalkWidgets(child, depth + 1, best, bestArea, count);
+}
+
+static NSView *ProbeRenderWidget(NSView *root, NSUInteger depth) {
+  (void)depth;
+  NSView *best = nil;
+  CGFloat area = -1;
+  NSUInteger count = 0;
+  ProbeWalkWidgets(root, 0, &best, &area, &count);
+  gProbeWidgetCount = count;
+  return best;
+}
+
+static void ProbeHidePageWindow(NSWindow *window) {
+  if (!window) return;
+  if (window.isVisible) [window orderOut:nil];
+  if (window.isKeyWindow) [window resignKeyWindow];
+}
+
+static NSTimeInterval ProbeEventTimestamp(void) {
+  NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+  if (now <= gProbeEventTime) now = gProbeEventTime + 0.001;
+  gProbeEventTime = now;
+  return now;
+}
+
+static NSEvent *ProbeMouseEvent(NSView *view, NSEventType type, NSPoint location,
+                                NSEventModifierFlags flags, NSInteger clickCount) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  return [NSEvent mouseEventWithType:type location:location modifierFlags:flags
+      timestamp:ProbeEventTimestamp() windowNumber:view.window.windowNumber context:nil
+      eventNumber:gProbeEventNumber++ clickCount:clickCount
+      pressure:(type == NSEventTypeLeftMouseUp || type == NSEventTypeRightMouseUp) ? 0 : 1];
+#pragma clang diagnostic pop
+}
+
+static NSEvent *ProbeKeyEvent(NSView *view, NSEventType type, unsigned short keyCode,
+                              NSString *characters) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  return [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:0
+      timestamp:ProbeEventTimestamp() windowNumber:view.window.windowNumber context:nil
+      characters:characters charactersIgnoringModifiers:characters isARepeat:NO keyCode:keyCode];
+#pragma clang diagnostic pop
+}
+
+static BOOL ProbeDeliverMouse(NSView *view, NSEventType type, NSPoint location,
+                             NSEventModifierFlags flags, NSInteger clickCount) {
+  NSEvent *event = ProbeMouseEvent(view, type, location, flags, clickCount);
+  if (!event) return NO;
+  [view mouseEvent:event];
+  return YES;
+}
+
+static BOOL ProbePostMouse(NSView *view, NSEventType type, NSPoint location,
+                          NSEventModifierFlags flags, NSInteger clickCount) {
+  gProbeWidget = view;
+  gProbeHiddenWindow = view.window;
+  gProbeDeliverMouse = YES;
+  if (!gProbeHoldVisible) gProbeKeepHidden = YES;
+  BOOL posted = NO;
+  @try {
+    if (!gProbeHoldVisible) ProbeSetRendererVisible(view.window, YES);
+    posted = ProbeDeliverMouse(view, type, location, flags, clickCount);
+  } @finally {
+    gProbeDeliverMouse = NO;
+    if (!gProbeHoldVisible) {
+      ProbeSetRendererVisible(view.window, NO);
+      gProbeKeepHidden = NO;
+      ProbeHidePageWindow(view.window);
+    }
+  }
+  return posted;
+}
+
+// One right-click gesture. Ordering out between mouse-down and mouse-up
+// cancels the click before the renderer records it.
+static BOOL ProbePostInspectGesture(NSView *view, NSPoint location) {
+  gProbeWidget = view;
+  gProbeDeliverMouse = YES;
+  gProbeForceCenter = YES;
+  gProbeHoldVisible = YES;
+  BOOL moved = NO, down = NO, up = NO;
+  @try {
+    ProbeBeginHiddenInput(view.window);
+    moved = ProbeDeliverMouse(view, NSEventTypeMouseMoved, location, 0, 0);
+    down = ProbeDeliverMouse(view, NSEventTypeRightMouseDown, location, 0, 1);
+    up = ProbeDeliverMouse(view, NSEventTypeRightMouseUp, location, 0, 1);
+  } @finally {
+    gProbeForceCenter = NO;
+    gProbeDeliverMouse = NO;
+    ProbeEndHiddenInput(view.window);
+  }
+  return moved && down && up;
+}
+
+static BOOL ProbePostKey(NSView *view, NSEventType type, unsigned short keyCode, NSString *characters) {
+  NSEvent *event = ProbeKeyEvent(view, type, keyCode, characters);
+  if (!event) return NO;
+  BOOL held = gProbeKeepHidden;
+  gProbeHiddenWindow = view.window;
+  gProbeKeepHidden = YES;
+  @try {
+    [view keyEvent:event];
+  } @finally {
+    if (!held) {
+      gProbeKeepHidden = NO;
+      ProbeHidePageWindow(view.window);
+    }
+  }
+  return YES;
+}
+
+static id ProbeJSONValue(NSString *json) {
+  if (![json isKindOfClass:NSString.class] || !json.length) return nil;
+  NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+  return data ? [NSJSONSerialization JSONObjectWithData:data
+      options:NSJSONReadingFragmentsAllowed error:nil] : nil;
+}
+
+static NSString *ProbeJSONLiteral(id value) {
+  if (!value) return nil;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value
+      options:NSJSONWritingFragmentsAllowed error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
+
+static BOOL gProbeSpinDone = NO;
+static NSString *gProbeSpinJSON = nil;
+
+static NSString *ProbeEvaluateSync(ARCShaarRuntime *runtime, NSString *tabID, NSString *script) {
+  gProbeSpinDone = NO;
+  gProbeSpinJSON = nil;
+  [runtime evaluateInTabID:tabID script:script completion:^(NSString *json) {
+    void (^store)(void) = ^{
+      gProbeSpinJSON = json;
+      gProbeSpinDone = YES;
+    };
+    if (NSThread.isMainThread) store();
+    else dispatch_async(dispatch_get_main_queue(), store);
+  }];
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:3];
+  while (!gProbeSpinDone && deadline.timeIntervalSinceNow > 0)
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
+  return gProbeSpinDone ? gProbeSpinJSON : nil;
+}
+
+static NSPoint ProbeWindowPoint(NSView *view, double cssX, double cssY,
+                                double viewportWidth, double viewportHeight) {
+  NSRect bounds = view.bounds;
+  if (viewportWidth <= 0 || viewportHeight <= 0 || bounds.size.width <= 0 || bounds.size.height <= 0)
+    return NSMakePoint(NAN, NAN);
+  // RenderWidgetHostViewCocoa is not flipped today. A flipped container keeps
+  // CSS y growing downward, matching the page-tools hit test.
+  double scaleY = bounds.size.height / viewportHeight;
+  CGFloat y = view.isFlipped ? cssY * scaleY : bounds.size.height - cssY * scaleY;
+  NSPoint local = NSMakePoint(cssX * bounds.size.width / viewportWidth, y);
+  return [view convertPoint:local toView:nil];
+}
+
+static NSEventModifierFlags ProbeModifierFlags(NSInteger modifiers) {
+  if (modifiers == 1 || (modifiers & NSEventModifierFlagOption) != 0)
+    return NSEventModifierFlagOption;
+  return 0;
+}
+
+static void ProbeScheduleInspectPoll(ARCShaarRuntime *runtime, NSString *tabID,
+                                    NSWindow *pageWindow, NSUInteger generation, int attempt);
+
+static BOOL ProbeInspectReceipt(NSDictionary *hit, NSDictionary **receipt) {
+  if (![hit isKindOfClass:NSDictionary.class] || [hit[@"waiting"] boolValue]) return NO;
+  NSArray *events = [hit[@"events"] isKindOfClass:NSArray.class] ? hit[@"events"] : nil;
+  NSDictionary *context = nil;
+  NSDictionary *up = nil;
+  if (events) {
+    for (id item in events) {
+      if (![item isKindOfClass:NSDictionary.class]) continue;
+      if (![item[@"trusted"] boolValue] || [item[@"button"] integerValue] != 2) continue;
+      NSString *type = item[@"type"];
+      if ([type isEqualToString:@"contextmenu"]) context = item;
+      else if ([type isEqualToString:@"mouseup"]) up = item;
+    }
+  } else if ([hit[@"trusted"] boolValue] && [hit[@"button"] integerValue] == 2) {
+    context = hit;
+  }
+  NSDictionary *chosen = context ?: up;
+  if (!chosen) return NO;
+  if (receipt) *receipt = chosen;
+  return YES;
+}
+
+static void ProbeFinishInspect(NSDictionary *click, BOOL menu) {
+  gProbeMenuArmed = NO;
+  gProbeInspectFound = YES;
+  NSString *type = [click[@"type"] isKindOfClass:NSString.class] ? click[@"type"] : @"";
+  NSString *command = @"devtools-show-after-trusted-contextmenu";
+  if (menu) command = @"context-menu-inspect";
+  else if ([type isEqualToString:@"mouseup"]) command = @"devtools-show-after-trusted-mouseup";
+  gProbeInspectAudit = @{
+    @"trusted": @(menu || [click[@"trusted"] boolValue]),
+    @"button": click[@"button"] ?: @2,
+    @"tag": [click[@"tag"] isKindOfClass:NSString.class] ? click[@"tag"] : @"",
+    @"command": command
+  };
+}
+
+static void ProbeInspectPoll(ARCShaarRuntime *runtime, NSString *tabID, NSWindow *pageWindow,
+                             NSUInteger generation, int attempt) {
+  if (generation != gProbeInspectGeneration || gProbeInspectFound) return;
+  ProbeHidePageWindow(pageWindow);
+  if (attempt > 300) {
+    gProbeMenuArmed = NO;
+    NSString *raw = gProbeLastJSON.length > 400
+        ? [gProbeLastJSON substringToIndex:400] : (gProbeLastJSON ?: @"nil");
+    NSLog(@"Inspect probe gave up: click=%@ menu=%d opened=%d tools=%d visible=%d key=%d "
+          "bypass=%d entries=%d widgets=%lu bounds=%@ frame=%@ point=%@ round=%@ hidden=%d "
+          "windowNumber=%ld ordered=%d superview=%d ignore=%d mouse=%d json=%@",
+          gProbeInspectClick, gProbeMenuInvoked, gProbeInspectOpened,
+          [runtime devToolsViewForTabID:tabID] != nil, pageWindow.isVisible, pageWindow.isKeyWindow,
+          gProbeIgnoreBypass, gProbeMouseEntries, (unsigned long)gProbeWidgetCount,
+          NSStringFromRect(gProbeWidgetBounds), NSStringFromRect(gProbeWidgetFrame),
+          NSStringFromPoint(gProbeWidgetPoint), NSStringFromPoint(gProbeRoundTrip),
+          gProbeWidgetWasHidden, (long)gProbeWindowNumber, gProbeOrderedOnce, gProbeContentSuperview,
+          gOrigShouldIgnore != nil, gOrigMouseEvent != nil, raw);
+    return;
+  }
+  [runtime evaluateInTabID:tabID script:@"(()=>window.__shaarInspectProbe||{waiting:true})()"
+      completion:^(NSString *json) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (generation != gProbeInspectGeneration || gProbeInspectFound) return;
+      if (json.length) gProbeLastJSON = json;
+      NSDictionary *hit = [ProbeJSONValue(json) isKindOfClass:NSDictionary.class]
+          ? ProbeJSONValue(json) : nil;
+      NSDictionary *receipt = nil;
+      if (ProbeInspectReceipt(hit, &receipt))
+        gProbeInspectClick = receipt;
+      BOOL menu = gProbeMenuInvoked;
+      BOOL haveClick = gProbeInspectClick != nil;
+      if (menu || (haveClick && attempt >= 15)) {
+        NSView *tools = [runtime devToolsViewForTabID:tabID];
+        if (!tools && !menu && !gProbeInspectOpened) {
+          gProbeInspectOpened = YES;
+          gProbeMenuArmed = NO;
+          [runtime showDevToolsForTabID:tabID];
+        }
+        ProbeHidePageWindow(pageWindow);
+        tools = [runtime devToolsViewForTabID:tabID];
+        if (tools && pageWindow && !pageWindow.isVisible && !pageWindow.isKeyWindow) {
+          ProbeFinishInspect(gProbeInspectClick, menu);
+          return;
+        }
+      }
+      ProbeScheduleInspectPoll(runtime, tabID, pageWindow, generation, attempt + 1);
+    });
+  }];
+}
+
+static void ProbeScheduleInspectPoll(ARCShaarRuntime *runtime, NSString *tabID,
+                                    NSWindow *pageWindow, NSUInteger generation, int attempt) {
+  __weak ARCShaarRuntime *weakRuntime = runtime;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
+                 dispatch_get_main_queue(), ^{
+    ARCShaarRuntime *owner = weakRuntime;
+    if (!owner || generation != gProbeInspectGeneration || gProbeInspectFound) return;
+    ProbeInspectPoll(owner, tabID, pageWindow, generation, attempt);
+  });
+}
+
+static BOOL ProbePointerMatched(NSDictionary *hit, BOOL click, BOOL alt) {
+  if (![hit isKindOfClass:NSDictionary.class] || [hit[@"waiting"] boolValue]) return NO;
+  if (![hit[@"trusted"] boolValue]) return NO;
+  NSString *type = hit[@"type"];
+  if (click) return [type isEqualToString:@"click"] && [hit[@"button"] integerValue] == 0;
+  BOOL move = [type isEqualToString:@"pointermove"] || [type isEqualToString:@"mousemove"];
+  return move && (!alt || [hit[@"alt"] boolValue]);
+}
+
+static NSString *ProbePointerGeometryScript(NSString *selector, NSArray<NSString *> *frames) {
+  NSString *selectorJSON = ProbeJSONLiteral(selector);
+  NSString *framesJSON = ProbeJSONLiteral(frames ?: @[]);
+  if (!selectorJSON || !framesJSON) return nil;
+  return [NSString stringWithFormat:@"(()=>{const selector=%@;const frames=%@;let doc=document;"
+      "for(const sel of frames){const frame=doc.querySelector(sel);if(!frame||!frame.contentDocument)return false;"
+      "doc=frame.contentDocument;}const node=doc.querySelector(selector);if(!node)return false;"
+      // The posted click uses this center, so a control below the fold has to move into the viewport first.
+      "node.scrollIntoView({block:'center',inline:'nearest'});"
+      "const r=node.getBoundingClientRect();let x=r.x+r.width/2,y=r.y+r.height/2;"
+      "for(let win=node.ownerDocument.defaultView;win&&win!==window;){const f=win.frameElement;if(!f)break;"
+      "const b=f.getBoundingClientRect();const sx=b.width/(f.offsetWidth||b.width||1);"
+      "const sy=b.height/(f.offsetHeight||b.height||1);"
+      "x=b.left+(x+f.clientLeft)*sx;y=b.top+(y+f.clientTop)*sy;win=f.ownerDocument.defaultView;}"
+      "if(!window.__shaarProbeInputListener){window.__shaarProbeInputListener=e=>{window.__shaarProbeInput="
+      "{type:e.type,trusted:!!e.isTrusted,button:e.button,alt:!!e.altKey};};"
+      "window.addEventListener('pointermove',window.__shaarProbeInputListener,true);"
+      "window.addEventListener('mousemove',window.__shaarProbeInputListener,true);"
+      "window.addEventListener('click',window.__shaarProbeInputListener,true);}"
+      "window.__shaarProbeInput=null;return {x:x,y:y,viewportWidth:window.innerWidth,viewportHeight:window.innerHeight};})()",
+      selectorJSON, framesJSON];
+}
+
+static NSString *ProbePointerFallbackScript(NSDictionary *geom, BOOL click, BOOL alt) {
+  double x = [geom[@"x"] doubleValue];
+  double y = [geom[@"y"] doubleValue];
+  NSString *altJSON = alt ? @"true" : @"false";
+  if (click) {
+    return [NSString stringWithFormat:@"(()=>{const x=%f,y=%f;const t=document.elementFromPoint(x,y);if(!t)return false;"
+        "t.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,view:window,altKey:%@}));"
+        "return true;})()", x, y, altJSON];
+  }
+  return [NSString stringWithFormat:@"(()=>{const x=%f,y=%f;const t=document.elementFromPoint(x,y);if(!t)return false;"
+      "t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,pointerId:1,pointerType:'mouse',view:window,altKey:%@}));"
+      "return true;})()", x, y, altJSON];
+}
+
+static void ProbePollPointer(ARCShaarRuntime *runtime, NSString *tabID, NSDictionary *geom,
+                             BOOL click, BOOL alt, int attempt, void (^finish)(BOOL)) {
+  if (attempt >= 8) {
+    [runtime evaluateInTabID:tabID script:ProbePointerFallbackScript(geom, click, alt)
+        completion:^(NSString *json) {
+      dispatch_async(dispatch_get_main_queue(), ^{ finish([json isEqualToString:@"true"]); });
+    }];
+    return;
+  }
+  __weak ARCShaarRuntime *weakRuntime = runtime;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
+                 dispatch_get_main_queue(), ^{
+    ARCShaarRuntime *owner = weakRuntime;
+    if (!owner) { finish(NO); return; }
+    [owner evaluateInTabID:tabID script:@"(()=>window.__shaarProbeInput||{waiting:true})()"
+        completion:^(NSString *json) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        NSDictionary *hit = [ProbeJSONValue(json) isKindOfClass:NSDictionary.class]
+            ? ProbeJSONValue(json) : nil;
+        if (ProbePointerMatched(hit, click, alt)) finish(YES);
+        else ProbePollPointer(owner, tabID, geom, click, alt, attempt + 1, finish);
+      });
+    }];
+  });
+}
+
 @implementation ARCChromiumRuntime (Verification)
 - (void)probeDevToolsRouteInTabID:(NSString *)tabID operation:(NSInteger)operation
                          payload:(NSDictionary *)payload
@@ -807,17 +1445,189 @@ void ARCCompletePrivateQuitDialogCancellation(
                       finish(error ? nil : open);
                     }];
 }
+- (void)probeSetRendererMetricsVisible:(BOOL)visible forTabID:(NSString *)tabID {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() || !tabID.length ||
+      !NSThread.isMainThread) {
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSView *page = [runtime viewForTabID:tabID];
+  NSWindow *window = page.window;
+  if (!window) return;
+  // Ending a hold must still restore a window this probe ordered off-screen.
+  if (visible && !ProbeTrustedInputSurfaceAllowed(page)) return;
+  ProbeInstallInputSwizzles();
+  if (!visible) {
+    ProbeEndHiddenInput(window);
+    return;
+  }
+  ProbeBeginHiddenInput(window);
+  // A previous click can leave a window device, and the normal order then
+  // no-ops. Park and order anyway so the renderer is shown off-screen.
+  if (window.alphaValue != 0 || window.windowNumber < 0) {
+    if (!gProbeDidOrder) {
+      gProbeSavedFrame = window.frame;
+      gProbeSavedAlpha = window.alphaValue;
+      gProbeDidOrder = YES;
+      gProbeOrderedOnce = YES;
+    }
+    NSRect offscreen = window.frame;
+    offscreen.origin = NSMakePoint(-20000, -20000);
+    window.alphaValue = 0;
+    [window setFrame:offscreen display:NO];
+    ((void (*)(id, SEL, NSWindowOrderingMode, NSInteger))gOrigOrderWindow)(
+        window, @selector(orderWindow:relativeTo:), NSWindowAbove, 0);
+    gProbeWindowNumber = window.windowNumber;
+    ProbeSetRendererVisible(window, YES);
+    ProbeSpin(0.05);
+  }
+}
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (^)(NSError *))completion {
   completion(ProbeUnsupported());
 }
 - (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector
                             frames:(NSArray<NSString *> *)frames click:(BOOL)click modifiers:(NSInteger)modifiers
-                        completion:(void (^)(BOOL))completion { completion(NO); }
+                        completion:(void (^)(BOOL))completion {
+  if (!completion) return;
+  void (^finish)(BOOL) = ^(BOOL accepted) {
+    if (NSThread.isMainThread) completion(accepted);
+    else dispatch_async(dispatch_get_main_queue(), ^{ completion(accepted); });
+  };
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() || !selector.length ||
+      !NSThread.isMainThread) {
+    finish(NO);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSView *page = [runtime viewForTabID:tabID];
+  NSView *widget = ProbeRenderWidget(page, 0);
+  if (!widget || !ProbeTrustedInputSurfaceAllowed(page)) {
+    finish(NO);
+    return;
+  }
+  ProbeInstallInputSwizzles();
+  NSString *script = ProbePointerGeometryScript(selector, frames);
+  if (!script) { finish(NO); return; }
+  BOOL alt = ProbeModifierFlags(modifiers) == NSEventModifierFlagOption;
+  __block BOOL finished = NO;
+  void (^finishOnce)(BOOL) = ^(BOOL accepted) {
+    if (finished) return;
+    finished = YES;
+    finish(accepted);
+  };
+  [runtime evaluateInTabID:tabID script:script completion:^(NSString *json) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSDictionary *geom = [ProbeJSONValue(json) isKindOfClass:NSDictionary.class]
+          ? ProbeJSONValue(json) : nil;
+      double viewportWidth = [geom[@"viewportWidth"] doubleValue];
+      double viewportHeight = [geom[@"viewportHeight"] doubleValue];
+      NSPoint location = ProbeWindowPoint(widget, [geom[@"x"] doubleValue], [geom[@"y"] doubleValue],
+                                          viewportWidth, viewportHeight);
+      if (!geom || !std::isfinite(location.x) || !std::isfinite(location.y)) {
+        finishOnce(NO);
+        return;
+      }
+      NSEventModifierFlags flags = ProbeModifierFlags(modifiers);
+      gProbeHoldVisible = YES;
+      gProbeWidget = widget;
+      @try {
+        ProbeBeginHiddenInput(widget.window);
+        if (click) {
+          ProbePostMouse(widget, NSEventTypeLeftMouseDown, location, flags, 1);
+          ProbePostMouse(widget, NSEventTypeLeftMouseUp, location, flags, 1);
+        } else {
+          ProbePostMouse(widget, NSEventTypeMouseMoved, location, flags, 0);
+        }
+      } @finally {
+        ProbeEndHiddenInput(widget.window);
+      }
+      ProbePollPointer(runtime, tabID, geom, click, alt, 0, finishOnce);
+    });
+  }];
+}
 - (void)inspectorProbeKeyInTabID:(NSString *)tabID key:(NSString *)key
-                    completion:(void (^)(BOOL))completion { completion(NO); }
-- (BOOL)inspectProbeElementInTabID:(NSString *)tabID { return NO; }
-- (BOOL)probeInspectFound { return NO; }
-- (NSDictionary *)probeInspectAudit { return nil; }
+                    completion:(void (^)(BOOL))completion {
+  if (!completion) return;
+  void (^finish)(BOOL) = ^(BOOL accepted) {
+    if (NSThread.isMainThread) completion(accepted);
+    else dispatch_async(dispatch_get_main_queue(), ^{ completion(accepted); });
+  };
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() || !NSThread.isMainThread) {
+    finish(NO);
+    return;
+  }
+  unsigned short keyCode = 0;
+  NSString *characters = nil;
+  if ([key isEqualToString:@"ArrowUp"]) { keyCode = 126; characters = @"\uF700"; }
+  else if ([key isEqualToString:@"ArrowDown"]) { keyCode = 125; characters = @"\uF701"; }
+  else if ([key isEqualToString:@"ArrowLeft"]) { keyCode = 123; characters = @"\uF702"; }
+  else if ([key isEqualToString:@"ArrowRight"]) { keyCode = 124; characters = @"\uF703"; }
+  else if ([key isEqualToString:@"Escape"]) { keyCode = 53; characters = @"\u001b"; }
+  else { finish(NO); return; }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSView *widget = ProbeRenderWidget([runtime viewForTabID:tabID], 0);
+  if (!widget || !ProbeTrustedInputSurfaceAllowed(widget)) { finish(NO); return; }
+  ProbeInstallInputSwizzles();
+  gProbeWidget = widget;
+  BOOL down = NO, up = NO;
+  @try {
+    ProbeBeginHiddenInput(widget.window);
+    down = ProbePostKey(widget, NSEventTypeKeyDown, keyCode, characters);
+    up = ProbePostKey(widget, NSEventTypeKeyUp, keyCode, characters);
+  } @finally {
+    ProbeEndHiddenInput(widget.window);
+  }
+  finish(down && up);
+}
+- (BOOL)inspectProbeElementInTabID:(NSString *)tabID {
+  gProbeInspectGeneration += 1;
+  gProbeInspectFound = NO;
+  gProbeInspectAudit = nil;
+  gProbeInspectClick = nil;
+  gProbeMenuInvoked = NO;
+  gProbeInspectOpened = NO;
+  gProbeMenuArmed = NO;
+  gProbeIgnoreBypass = 0;
+  gProbeMouseEntries = 0;
+  gProbeLastJSON = nil;
+  gProbeWidgetCount = 0;
+  if (!NSThread.isMainThread || ![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed())
+    return NO;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSView *page = [runtime viewForTabID:tabID];
+  NSView *widget = ProbeRenderWidget(page, 0);
+  if (!widget || !ProbeTrustedInputSurfaceAllowed(page)) return NO;
+  ProbeInstallInputSwizzles();
+  NSString *installed = ProbeEvaluateSync(runtime, tabID,
+      @"(()=>{window.__shaarInspectProbe={events:[]};if(!window.__shaarInspectProbeListener){"
+      "window.__shaarInspectProbeListener=e=>{const probe=window.__shaarInspectProbe||"
+      "(window.__shaarInspectProbe={events:[]});const list=probe.events;if(list.length<16)"
+      "list.push({type:e.type,trusted:!!e.isTrusted,button:e.button,"
+      "tag:(e.target&&e.target.tagName)||'',id:(e.target&&e.target.id)||''});};"
+      "for(const type of ['mousedown','pointerdown','mouseup','pointerup','contextmenu'])"
+      "window.addEventListener(type,window.__shaarInspectProbeListener,true);}return true;})()");
+  if (![installed isEqualToString:@"true"]) return NO;
+  gProbeWidgetBounds = widget.bounds;
+  gProbeWidgetFrame = widget.frame;
+  gProbeWidgetWasHidden = widget.isHidden;
+  gProbeWindowNumber = widget.window.windowNumber;
+  gProbeContentSuperview = widget.window.contentView.superview != nil;
+  NSPoint center = [widget convertPoint:NSMakePoint(NSMidX(widget.bounds), NSMidY(widget.bounds))
+                                  toView:nil];
+  gProbeWidgetPoint = center;
+  gProbeRoundTrip = [widget convertPoint:center fromView:nil];
+  gProbeMenuArmed = YES;
+  BOOL posted = ProbePostInspectGesture(widget, center);
+  ProbeHidePageWindow(page.window);
+  if (!posted) {
+    gProbeMenuArmed = NO;
+    return NO;
+  }
+  ProbeScheduleInspectPoll(runtime, tabID, page.window, gProbeInspectGeneration, 0);
+  return YES;
+}
+- (BOOL)probeInspectFound { return gProbeInspectFound; }
+- (NSDictionary *)probeInspectAudit { return gProbeInspectAudit; }
 - (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url {
   if (!ProbeCaptureAllowed() || ![url isKindOfClass:NSString.class]) return nil;
   auto launches = reinterpret_cast<const char* (*)()>(

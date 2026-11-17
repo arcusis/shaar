@@ -30,6 +30,59 @@ struct NativeActivationFeedbackTests {
     #expect(runtime.activations.isEmpty)
     #expect(runtime.restoredTabs == [tab.uuidString])
   }
+
+  @Test func activationDuringReconcileKeepsTheLatestTarget() throws {
+    let profile = BrowserProfile(name: "Company")
+    let first = BrowserTab(url: URL(string: "https://example.com/first")!)
+    let target = BrowserTab(url: URL(string: "https://example.com/target")!)
+    let source = BrowserSpace(
+      profileID: profile.id, name: "Source", symbol: "house", tint: .ocean, tabs: [first])
+    let destination = BrowserSpace(
+      profileID: profile.id, name: "Shared", symbol: "folder", tint: .forest, tabs: [target])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [source, destination], selectedSpaceID: source.id)
+    let store = BrowserStore(session: session)
+    let runtime = ReenteredActivationRuntime(
+      initialTab: first.id.uuidString, reenterTarget: target.id.uuidString,
+      reenterProfile: profile.id.uuidString)
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), windowID: "feedback-window", store: store,
+      presentsNativePanels: false)
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs.insert(first.id)
+    engine.liveTabs.insert(target.id)
+    #expect(engine.events.router.bindTab(first.id.uuidString, windowID: engine.windowID))
+    #expect(engine.events.router.bindTab(target.id.uuidString, windowID: engine.windowID))
+    engine.reconcile()
+    #expect(store.session.selectedSpaceID == destination.id)
+    #expect(store.session.selectedPage?.tab.id == target.id)
+  }
+}
+
+private final class ReenteredActivationRuntime: ARCChromiumRuntime, @unchecked Sendable {
+  let initialTab: String
+  let reenterTarget: String
+  let reenterProfile: String
+  nonisolated(unsafe) private var didReenter = false
+
+  init(initialTab: String, reenterTarget: String, reenterProfile: String) {
+    self.initialTab = initialTab
+    self.reenterTarget = reenterTarget
+    self.reenterProfile = reenterProfile
+    super.init()
+  }
+
+  override func windowID(forTabID tabID: String) -> String? { "feedback-window" }
+  override func loadProfileID(_ profileID: String, completion: @escaping (Error?) -> Void) {}
+  override func view(forTabID tabID: String) -> NSView? { nil }
+  override func activateTabID(_ tabID: String) {
+    let tab = tabID
+    MainActor.assumeIsolated {
+      guard !self.didReenter, tab == self.initialTab else { return }
+      self.didReenter = true
+      self.onTabActivated?(self.reenterTarget, self.reenterProfile)
+    }
+  }
 }
 
 private final class ActivationFeedbackRuntime: ARCChromiumRuntime {

@@ -89,7 +89,10 @@ struct DeveloperSimulation: Codable, Equatable, Sendable {
       ("Emulation.setLocaleOverride", ["locale": locale]),
       (
         "Emulation.setUserAgentOverride",
-        locale.isEmpty ? ["userAgent": ""] : ["userAgent": userAgent, "acceptLanguage": locale]
+        // shaar.48 rejects an empty userAgent before Chromium can clear the override.
+        // Omitting acceptLanguage stores "" and drops a previous language.
+        locale.isEmpty
+          ? ["userAgent": userAgent] : ["userAgent": userAgent, "acceptLanguage": locale]
       ),
       (
         "Emulation.setEmulatedMedia",

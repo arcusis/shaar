@@ -68,6 +68,7 @@ struct BrowserRuntimeRouterTests {
     #expect(router.bindTab("saved-space-tab", windowID: "first"))
 
     router.setWindowClosing(true, id: "first")
+    #expect(router.isWindowClosing("first"))
     router.tabClosed("saved-space-tab", windowID: "first")
 
     #expect(closed.isEmpty)

@@ -201,7 +201,9 @@ final class EngineRequestedWindowProbe {
       if type == "normal" {
         retained = created.id
       } else {
-        runtime.closeWindowID(created.nativeID)
+        // Use the host-owned native close path so its close notification marks
+        // this as intentional before the renderer-loss recovery check runs.
+        created.window.close()
         try await wait("extension popup closure") { self.host.contexts[created.id] == nil }
         try expect(
           host.workspace.workspace.window(created.id) == nil,

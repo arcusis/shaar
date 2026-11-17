@@ -147,6 +147,7 @@ final class DeveloperPageModel {
       let current = revision
       let desired = simulation
       let destination = target
+      var lastMethod = ""
       do {
         if performanceEnabled { try retainDeveloperSession() }
         if desired.isActive || overridesMayBeActive {
@@ -168,6 +169,7 @@ final class DeveloperPageModel {
           overridesMayBeActive = true
           for (method, params) in desired.commands(userAgent: userAgent) {
             guard current == revision else { break }
+            lastMethod = method
             _ = try await call(method, params: params)
           }
           if current == revision {
@@ -182,7 +184,15 @@ final class DeveloperPageModel {
         }
         if current == revision && destination == target { failure = nil }
       } catch {
-        if current == revision { failure = Self.failureMessage(for: error) }
+        if current == revision {
+          failure = Self.failureMessage(for: error)
+          if !(error is DeveloperModeFailure) {
+            let detail = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !detail.isEmpty {
+              failure = "\(failure ?? "") [\(lastMethod): \(detail)]"
+            }
+          }
+        }
       }
       completed = current
     }

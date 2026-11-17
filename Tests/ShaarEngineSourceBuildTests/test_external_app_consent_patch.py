@@ -45,7 +45,7 @@ class ExternalAppConsentPatchTests(unittest.TestCase):
         listed = {entry["file"]: entry["sha256"] for entry in manifest["patches"]}
         name = str(PATCH.relative_to(ROOT))
         self.assertEqual(listed[name], hashlib.sha256(PATCH.read_bytes()).hexdigest())
-        self.assertEqual(len(manifest["patches"]), 89)
+        self.assertEqual(len(manifest["patches"]), 90)
         layer = manifest["layer"]
         self.assertEqual(
             set(layer["files"]),

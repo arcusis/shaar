@@ -658,6 +658,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0162-shaar-save-prompt-diagnostic-scope.patch",
       "sha256": "f1e0dc6999b1ff71f1b82646b6d2df8689aaafd8f76ebcecf40bdd535859c14c"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0163-shaar-skip-post-install-ui.patch",
+      "sha256": "71c9da3b4912fa9716f630c7c86cf2795c3078006cc7ab3c51f02cd23e8718bb"
     }
   ],
   "devtoolsFrontend157": {

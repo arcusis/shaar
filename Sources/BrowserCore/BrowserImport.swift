@@ -100,21 +100,27 @@ public enum BrowserImport {
     }
   }
 
+  /// The engine accepts whole milliseconds only. Chrome stores microseconds and Safari
+  /// fractional seconds, so truncate instead of sending a fraction it would reject.
+  static func wholeMilliseconds(_ date: Date) -> Double {
+    (date.timeIntervalSince1970 * 1_000).rounded(.towardZero)
+  }
+
   public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {
     var rows: [[String: Any]] = []
     rows.reserveCapacity(items.count)
     for item in items where item.kind == .history && !item.visitTimes.isEmpty {
       var visits: [Double] = []
       visits.reserveCapacity(item.visitTimes.count)
-      var latest = item.visitTimes[0].timeIntervalSince1970
+      var latest = wholeMilliseconds(item.visitTimes[0])
       for visit in item.visitTimes {
-        let seconds = visit.timeIntervalSince1970
-        visits.append(seconds * 1_000)
-        if latest < seconds { latest = seconds }
+        let milliseconds = wholeMilliseconds(visit)
+        visits.append(milliseconds)
+        if latest < milliseconds { latest = milliseconds }
       }
       rows.append([
         "u": item.address, "t": item.title, "n": visits.count,
-        "l": latest * 1_000,
+        "l": latest,
         "v": visits, "s": item.source.rawValue,
       ])
     }

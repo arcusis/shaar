@@ -60,6 +60,19 @@ private func threadCPUSeconds() -> Double {
   }
 }
 
+@Test func historyImportRowsSendWholeMilliseconds() {
+  // Chrome stores microseconds and Safari fractional seconds; the engine rejects fractions.
+  let item = BrowserImportItem(
+    kind: .history, source: .chrome, title: "Fractional", address: "https://example.com/",
+    visitTimes: [
+      Date(timeIntervalSince1970: 1_700_000_000.123_456),
+      Date(timeIntervalSince1970: 1_700_000_001.999_9),
+    ])
+  let row = BrowserImport.historyRows(for: [item])[0]
+  #expect(row["v"] as? [Double] == [1_700_000_000_123, 1_700_000_001_999])
+  #expect(row["l"] as? Double == 1_700_000_001_999)
+}
+
 @Test func historyImportRowAllocationBenchmark() {
   let items = (0..<2_500).map { itemIndex in
     BrowserImportItem(

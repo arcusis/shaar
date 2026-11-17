@@ -349,8 +349,9 @@ import SwiftUI
 
   /// An element larger than 16 megapixels at 2x used to fail the whole copy; it must now copy
   /// its text and a downscaled screenshot.
-  private func copyOversizedElement(_ inspector: InspectorModel, to board: NSPasteboard) async throws
-  {
+  private func copyOversizedElement(
+    _ inspector: InspectorModel, to board: NSPasteboard
+  ) async throws {
     let resize =
       "(()=>{const el=document.querySelector('#ai-save');el.dataset.shaarProbeStyle=el.getAttribute('style')||'';el.style.setProperty('width','2400px','important');el.style.setProperty('height','9000px','important');el.style.setProperty('display','block','important');return true;})()"
     let restore =

@@ -4,7 +4,9 @@
 
 import importlib.util
 from pathlib import Path
+import sqlite3
 import subprocess
+import tempfile
 import unittest
 
 
@@ -48,3 +50,28 @@ class EngineFixtureSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LibraryImportFixtureTests(unittest.TestCase):
+    def test_import_visits_move_inside_chromium_history_retention(self):
+        now = 1_800_000_000.0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixtures = ROOT / "Tests/BrowserCoreTests/Fixtures/BrowserImport"
+            chrome, safari = root / "History", root / "History.db"
+            for sql, path in (("ChromiumHistory.sql", chrome), ("SafariHistory.sql", safari)):
+                with sqlite3.connect(path) as database:
+                    database.executescript((fixtures / sql).read_text())
+            FIXTURE.move_import_visits_into_retention(chrome, safari, now)
+            day = FIXTURE.ONE_DAY_SECONDS
+            with sqlite3.connect(chrome) as database:
+                visits = [row[0] for row in database.execute("SELECT visit_time FROM visits ORDER BY id")]
+                last = database.execute("SELECT last_visit_time FROM urls").fetchone()[0]
+            newest = int((now - day + FIXTURE.CHROMIUM_EPOCH_OFFSET_SECONDS) * 1_000_000)
+            self.assertEqual(visits, [newest - 1_000_000, newest, 0])
+            self.assertEqual(last, newest)
+            with sqlite3.connect(safari) as database:
+                safari_visits = [row[0] for row in database.execute(
+                    "SELECT visit_time FROM history_visits ORDER BY id")]
+            self.assertEqual(safari_visits, [now - day - FIXTURE.SAFARI_EPOCH_OFFSET_SECONDS, -1.0])
+

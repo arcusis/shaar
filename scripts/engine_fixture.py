@@ -1902,6 +1902,34 @@ def prepare_library_import_fixtures(root):
             ('SafariHistory.sql', safari, 'History.db')):
         with sqlite3.connect(profile / database_name) as database:
             database.executescript((fixtures / sql_name).read_text())
+    move_import_visits_into_retention(chrome / 'History', safari / 'History.db', time.time())
+
+
+# Chromium deletes history older than 90 days, so a restarted probe would lose the
+# fixture's fixed old visits. Move the valid visits so the newest is one day old;
+# invalid timestamps (zero or negative) stay as they are for the importer checks.
+CHROMIUM_EPOCH_OFFSET_SECONDS = 11_644_473_600
+SAFARI_EPOCH_OFFSET_SECONDS = 978_307_200
+ONE_DAY_SECONDS = 24 * 60 * 60
+
+
+def move_import_visits_into_retention(chrome_history, safari_history, now):
+    chrome_target = int((now - ONE_DAY_SECONDS + CHROMIUM_EPOCH_OFFSET_SECONDS) * 1_000_000)
+    with sqlite3.connect(chrome_history) as database:
+        newest = database.execute('SELECT MAX(visit_time) FROM visits WHERE visit_time > 0').fetchone()[0]
+        if newest:
+            delta = chrome_target - newest
+            database.execute('UPDATE visits SET visit_time = visit_time + ? WHERE visit_time > 0', (delta,))
+            database.execute(
+                'UPDATE urls SET last_visit_time = last_visit_time + ? WHERE last_visit_time > 0', (delta,))
+    safari_target = now - ONE_DAY_SECONDS - SAFARI_EPOCH_OFFSET_SECONDS
+    with sqlite3.connect(safari_history) as database:
+        newest = database.execute(
+            'SELECT MAX(visit_time) FROM history_visits WHERE visit_time > 0').fetchone()[0]
+        if newest:
+            database.execute(
+                'UPDATE history_visits SET visit_time = visit_time + ? WHERE visit_time > 0',
+                (safari_target - newest,))
 
 
 def main(argv=None):

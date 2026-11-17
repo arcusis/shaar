@@ -1205,8 +1205,11 @@ static NSPoint ProbeWindowPoint(NSView *view, double cssX, double cssY,
   NSRect bounds = view.bounds;
   if (viewportWidth <= 0 || viewportHeight <= 0 || bounds.size.width <= 0 || bounds.size.height <= 0)
     return NSMakePoint(NAN, NAN);
-  NSPoint local = NSMakePoint(cssX * bounds.size.width / viewportWidth,
-                              bounds.size.height - cssY * bounds.size.height / viewportHeight);
+  // RenderWidgetHostViewCocoa is not flipped today. A flipped container keeps
+  // CSS y growing downward, matching the page-tools hit test.
+  double scaleY = bounds.size.height / viewportHeight;
+  CGFloat y = view.isFlipped ? cssY * scaleY : bounds.size.height - cssY * scaleY;
+  NSPoint local = NSMakePoint(cssX * bounds.size.width / viewportWidth, y);
   return [view convertPoint:local toView:nil];
 }
 

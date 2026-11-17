@@ -474,8 +474,9 @@ import SwiftUI
     }
   }
 
-  private func sampleVisibleMetrics(_ model: DeveloperPageModel, tabID: String) async throws -> Bool
-  {
+  private func sampleVisibleMetrics(
+    _ model: DeveloperPageModel, inspector: InspectorModel, tabID: String
+  ) async throws -> Bool {
     engine.runtime.probeSetRendererMetricsVisible(true, forTabID: tabID)
     do {
       // Ordering the sample can count as recent input. Layout shift ignores the
@@ -488,17 +489,35 @@ import SwiftUI
         "fetch('/inspector-slow?metrics='+Math.random(),{cache:'no-store'}).then(r=>r.text()).then(()=>true)"
       )
       try await Task.sleep(for: .milliseconds(200))
+      // Page mode suspend is its own task. Click only after the picking shield
+      // no longer covers the button, while the renderer is still shown off-screen.
+      try await exposeFixtureButton(inspector)
+      let clicked: Bool = await withCheckedContinuation { continuation in
+        engine.runtime.inspectorProbePointer(
+          inTabID: tabID, selector: "#performance-input", frames: [], click: true, modifiers: 0
+        ) { continuation.resume(returning: $0) }
+      }
+      engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
+      return clicked
     } catch {
       engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
       throw error
     }
-    engine.runtime.probeSetRendererMetricsVisible(false, forTabID: tabID)
-    let clicked: Bool = await withCheckedContinuation { continuation in
-      engine.runtime.inspectorProbePointer(
-        inTabID: tabID, selector: "#performance-input", frames: [], click: true, modifiers: 0
-      ) { continuation.resume(returning: $0) }
+  }
+
+  private func exposeFixtureButton(_ inspector: InspectorModel) async throws {
+    try await wait("page mode leaves the fixture button exposed") {
+      try await inspector.evaluate(
+        """
+        (()=>{const api=globalThis.__shaarInspectorV2;if(!api)return false;api.suspend(true);
+        const node=document.getElementById('performance-input');if(!node)return false;
+        node.scrollIntoView({block:'center',inline:'nearest'});
+        const r=node.getBoundingClientRect();
+        const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+        return hit===node||!!(hit&&node.contains(hit));})()
+        """
+      ) as? Bool == true
     }
-    return clicked
   }
 
   private func waitForLiveVitals(_ tools: InspectorPageToolsModel, model: DeveloperPageModel)
@@ -536,11 +555,12 @@ import SwiftUI
     // The sample window stays off-screen, at alpha 0, and does not become key.
     try await Task.sleep(for: .milliseconds(650))
     let tabID = model.target.tabID.uuidString
-    let clicked = try await sampleVisibleMetrics(model, tabID: tabID)
+    let clicked = try await sampleVisibleMetrics(model, inspector: inspector, tabID: tabID)
     try expect(clicked, "trusted page input works while element picking is suspended")
-    try expect(
-      try await model.evaluate("window.clicked") as? Int == 1,
-      "Page mode does not intercept the page button")
+    let clicks = try await model.evaluate("window.clicked")
+    let clickCount =
+      (clicks as? Int) ?? (clicks as? Double).map(Int.init) ?? (clicks as? NSNumber)?.intValue
+    try expect(clickCount == 1, "Page mode does not intercept the page button")
     try await waitForLiveVitals(tools, model: model)
     try await capture(inspector, feature: "vitals")
     let origin = model.performanceSnapshot?.timeOrigin

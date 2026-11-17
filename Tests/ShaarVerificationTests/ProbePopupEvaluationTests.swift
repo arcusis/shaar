@@ -21,7 +21,9 @@ private final class RecordingPopupRuntime: ARCChromiumRuntime {
   let runtime = RecordingPopupRuntime()
   dispatchProbePopupEvaluation(runtime, popupID: "popup", script: "return true")
 
-  for _ in 0..<10 where runtime.evaluations.isEmpty {
+  // Coverage instrumentation can leave the unstructured bridge task queued
+  // past a handful of yields. This still does not wait on wall-clock time.
+  for _ in 0..<1000 where runtime.evaluations.isEmpty {
     await Task.yield()
   }
 

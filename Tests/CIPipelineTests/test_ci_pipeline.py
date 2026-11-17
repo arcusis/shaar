@@ -114,6 +114,24 @@ class PipelineGateTests(unittest.TestCase):
             self.assertIn("shaar_operation_contract_values", contract)
             self.assertIn("#expect(swiftValue == cValues?[index])", contract)
 
+    def test_coverage_base_stretches_short_popup_bridge_yield(self):
+        temporary_root = ROOT / "build/ci"
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as temporary:
+            base = Path(temporary)
+            path = base / "Tests/ShaarVerificationTests/ProbePopupEvaluationTests.swift"
+            path.parent.mkdir(parents=True)
+            path.write_text("for _ in 0..<10 where runtime.evaluations.isEmpty {\n}\n")
+            STAGES.repair_async_popup_probe_yield(base)
+            STAGES.repair_async_popup_probe_yield(base)
+            text = path.read_text()
+            self.assertIn("for _ in 0..<1000 where runtime.evaluations.isEmpty {", text)
+            self.assertNotIn("for _ in 0..<10 where", text)
+            path.write_text("for _ in 0..<1000 where runtime.evaluations.isEmpty {\n}\n")
+            STAGES.repair_async_popup_probe_yield(base)
+            self.assertIn("0..<1000", path.read_text())
+            self.assertEqual(path.read_text().count("0..<1000"), 1)
+
     def test_ci_gate_reports_missing_required_environment_inputs(self):
         required = {
             "CI_NEEDS": "{}",

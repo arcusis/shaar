@@ -165,6 +165,7 @@ def build_base_coverage(checks: Commands) -> None:
         source.extractall(base, filter="data")
     archive.unlink()
     repair_legacy_coverage_base(base)
+    repair_async_popup_probe_yield(base)
     if test_commands(checks, cwd=base, scratch=str(ROOT / "build/swiftpm/coverage-base")):
         raise RuntimeError("Baseline coverage build/tests failed")
 
@@ -182,6 +183,24 @@ def repair_legacy_coverage_base(base: Path) -> None:
                    "-i", str(patch)]
         subprocess.run(["patch", "--dry-run", *command[1:]], check=True)
         subprocess.run(command, check=True)
+
+
+def repair_async_popup_probe_yield(base: Path) -> None:
+    """The archived popup-bridge test only yielded 10 times.
+
+    Coverage instrumentation can leave that unstructured task queued past
+    those yields. Stretch the archived wait to match the current tree.
+    A base that already waits longer is left alone.
+    """
+    path = base / "Tests/ShaarVerificationTests/ProbePopupEvaluationTests.swift"
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8")
+    short = "for _ in 0..<10 where runtime.evaluations.isEmpty {"
+    longer = "for _ in 0..<1000 where runtime.evaluations.isEmpty {"
+    if short not in text:
+        return
+    path.write_text(text.replace(short, longer, 1), encoding="utf-8")
 
 
 def load_coverage_metadata(path: Path, label: str) -> dict:

@@ -385,6 +385,22 @@
         }
       }
     },
+    "Copied element without a screenshot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied element without a screenshot"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האלמנט הועתק ללא צילום מסך"
+          }
+        }
+      }
+    },
     "Copied element to clipboard": {
       "localizations": {
         "en": {

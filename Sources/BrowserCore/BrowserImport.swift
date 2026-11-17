@@ -109,12 +109,13 @@ public enum BrowserImport {
       var latest = item.visitTimes[0].timeIntervalSince1970
       for visit in item.visitTimes {
         let seconds = visit.timeIntervalSince1970
-        visits.append(seconds * 1_000)
+        // The engine accepts whole milliseconds only; Chrome and Safari store finer times.
+        visits.append(Double(Int64(seconds * 1_000)))
         if latest < seconds { latest = seconds }
       }
       rows.append([
         "u": item.address, "t": item.title, "n": visits.count,
-        "l": latest * 1_000,
+        "l": Double(Int64(latest * 1_000)),
         "v": visits, "s": item.source.rawValue,
       ])
     }

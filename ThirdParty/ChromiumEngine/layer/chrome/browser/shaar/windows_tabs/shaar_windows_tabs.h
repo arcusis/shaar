@@ -44,6 +44,19 @@ struct SelectedRegularTab {
 
 bool ShouldEmitTabActivation(const TabStripSelectionChange& selection);
 
+// True while the host's own activate-tab operation changes the active tab.
+// Activation events raised then are tagged so the host can tell them apart
+// from activations a page or extension started.
+bool HostActivationInProgress();
+
+class ScopedHostActivation {
+ public:
+  ScopedHostActivation();
+  ScopedHostActivation(const ScopedHostActivation&) = delete;
+  ScopedHostActivation& operator=(const ScopedHostActivation&) = delete;
+  ~ScopedHostActivation();
+};
+
 bool HasHiddenNativeWindow(content::WebContents* contents);
 void UpdateDockedDevTools(content::WebContents* inspected,
                           content::WebContents* frontend);

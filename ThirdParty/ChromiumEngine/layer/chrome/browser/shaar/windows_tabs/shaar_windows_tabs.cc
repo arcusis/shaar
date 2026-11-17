@@ -31,6 +31,22 @@ bool ShouldEmitTabActivation(const TabStripSelectionChange& selection) {
 }
 
 namespace {
+int g_host_activation_depth = 0;
+}  // namespace
+
+bool HostActivationInProgress() {
+  return g_host_activation_depth > 0;
+}
+
+ScopedHostActivation::ScopedHostActivation() {
+  ++g_host_activation_depth;
+}
+
+ScopedHostActivation::~ScopedHostActivation() {
+  --g_host_activation_depth;
+}
+
+namespace {
 BrowserTabRegistryImpl g_registry;
 
 std::unordered_map<Browser*, base::CallbackListSubscription>&

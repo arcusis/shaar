@@ -237,6 +237,8 @@ class TabActivationObserver final : public TabStripModelObserver {
     base::DictValue payload;
     payload.Set("kind", "activated");
     payload.Set("schemaVersion", 1);
+    if (shaar::windows_tabs::HostActivationInProgress())
+      payload.Set("source", "host");
     std::string json;
     if (!base::JSONWriter::Write(base::Value(std::move(payload)), &json))
       return;

@@ -194,7 +194,10 @@ shaar_error_code HandleWindowActivateTab(const ModuleCall* call,
     return Fail(SHAAR_NOT_FOUND, error);
   content::WebContents* previous =
       call->tab_strip_model->GetActiveWebContents();
-  call->tab_strip_model->ActivateTabAt(index);
+  {
+    shaar::windows_tabs::ScopedHostActivation host_activation;
+    call->tab_strip_model->ActivateTabAt(index);
+  }
   shaar::windows_tabs::ActivatePageHost(call->window, call->scoped_browser,
                                          previous, it->second);
   return Succeed(error);

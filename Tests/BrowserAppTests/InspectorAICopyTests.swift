@@ -144,6 +144,24 @@ import Testing
       model.notes.filter { $0.feedback == "New" }.count == 49 && model.clearedNotes.count == 49)
   }
 
+  @Test func largeElementCapturesScaleDownInsteadOfFailing() throws {
+    #expect(InspectorStylesModel.captureFactor(width: 400, height: 300) == 2)
+    let tall = try #require(InspectorStylesModel.captureFactor(width: 1440, height: 6000))
+    #expect(tall < 2 && tall >= 0.25)
+    #expect(1440 * 6000 * tall * tall <= 16_777_216.0001)
+    let narrow = try #require(InspectorStylesModel.captureFactor(width: 20, height: 30_000))
+    #expect(30_000 * narrow <= 16_384.0001)
+    #expect(InspectorStylesModel.captureFactor(width: 40_000, height: 40_000) == nil)
+  }
+
+  @Test func clipboardKeepsMarkdownWhenTheScreenshotIsUnavailable() throws {
+    let board = MemoryClipboard()
+    try InspectorAICopyModel.write("Markdown fixture", png: nil, to: board)
+    #expect(board.items.count == 1)
+    #expect(board.string(forType: .string) == "Markdown fixture")
+    #expect(board.data(forType: .png) == nil)
+  }
+
   @Test func clipboardHasMarkdownAndRealPNGOnOneItemAndCorruptionDoesNotReplaceIt() throws {
     let board = MemoryClipboard()
     let bitmap = try #require(

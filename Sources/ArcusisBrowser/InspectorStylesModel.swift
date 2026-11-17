@@ -634,6 +634,14 @@ final class InspectorStylesModel {
     } catch { failure = Self.failureMessage(for: error) }
   }
 
+  /// Output pixels per CSS pixel for an element capture: 2× when the element fits, otherwise
+  /// scaled down to stay within 16 megapixels and 16,384 pixels per side. Nil when even a
+  /// quarter-scale capture would not fit.
+  static func captureFactor(width: Double, height: Double) -> Double? {
+    let factor = min(2, (16_777_216 / (width * height)).squareRoot(), 16_384 / max(width, height))
+    return factor >= 0.25 ? factor : nil
+  }
+
   func screenshot() async throws -> Data {
     guard !Task.isCancelled else { throw CancellationError() }
     guard !capturing else {
@@ -652,7 +660,7 @@ final class InspectorStylesModel {
       let width = clip["width"] as? Double, let height = clip["height"] as? Double,
       let dpr = clip["devicePixelRatio"] as? Double,
       [x, y, width, height, dpr].allSatisfy(\.isFinite), width > 0, height > 0, dpr > 0,
-      width * height * 4 <= 16_777_216, max(width, height) * 2 <= 16_384
+      let factor = Self.captureFactor(width: width, height: height)
     else {
       throw InspectorFailure(
         InspectorL10n.string("Select an element smaller than 16 megapixels at 2×."))
@@ -671,7 +679,7 @@ final class InspectorStylesModel {
         "Page.captureScreenshot",
         params: [
           "format": "png", "captureBeyondViewport": true,
-          "clip": ["x": x, "y": y, "width": width, "height": height, "scale": 2 / dpr],
+          "clip": ["x": x, "y": y, "width": width, "height": height, "scale": factor / dpr],
         ])
       guard inspector.documentGeneration == generation, inspector.selection?.id == selection.id
       else { throw CancellationError() }

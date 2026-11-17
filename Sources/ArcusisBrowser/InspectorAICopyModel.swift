@@ -179,6 +179,37 @@ final class InspectorAICopyModel {
       let context = try await context(captureDetails: kind == .image ? false : includeDetails)
       guard let inspector else { throw CancellationError() }
       let generation = inspector.documentGeneration
+      let png = try await privateScreenshot(of: context, required: kind == .image)
+      guard operation == revision, inspector.isOpen, inspector.documentGeneration == generation,
+        inspector.selection?.id == context.id
+      else { throw CancellationError() }
+      let file = try png.map { try screenshotCache.save($0, tag: context.tag) }
+      var markdown = Formatter.element(
+        context, detailed: includeDetails, screenshotPath: file?.path)
+      if kind == .withNotes, !notes.isEmpty {
+        markdown += "\n" + Formatter.notes(notes, detailed: includeDetails)
+      }
+      try Self.write(kind == .image ? nil : markdown, png: png, to: pasteboard)
+      status = InspectorL10n.string(copiedStatus(kind: kind, hasImage: png != nil))
+      inspector.presentation.copied(kind == .image ? "image" : "element")
+    } catch {
+      if operation == revision { failure = Self.failureMessage(for: error) }
+    }
+  }
+
+  private func copiedStatus(kind: CopyKind, hasImage: Bool) -> String {
+    if kind == .image { return "Copied image to clipboard" }
+    return hasImage ? "Copied element to clipboard" : "Copied element without a screenshot"
+  }
+
+  /// Captures the selected element with form controls masked. When the image is optional, a
+  /// failed capture returns nil so the text context still reaches the clipboard; the image is
+  /// dropped whenever the mask could not be verified, so private form values never leak into it.
+  private func privateScreenshot(
+    of context: Formatter.Context, required: Bool
+  ) async throws -> Data? {
+    guard let inspector else { throw CancellationError() }
+    do {
       guard
         let token = try await inspector.evaluate(
           "globalThis.__shaarInspectorCopy.begin(\(context.id))") as? String
@@ -199,20 +230,12 @@ final class InspectorAICopyModel {
         throw InspectorFailure(
           InspectorL10n.string("The page changed during the private capture. Try again."))
       }
-      guard operation == revision, inspector.isOpen, inspector.documentGeneration == generation,
-        inspector.selection?.id == context.id
-      else { throw CancellationError() }
-      let file = try screenshotCache.save(png, tag: context.tag)
-      var markdown = Formatter.element(context, detailed: includeDetails, screenshotPath: file.path)
-      if kind == .withNotes, !notes.isEmpty {
-        markdown += "\n" + Formatter.notes(notes, detailed: includeDetails)
-      }
-      try Self.write(kind == .image ? nil : markdown, png: png, to: pasteboard)
-      status = InspectorL10n.string(
-        kind == .image ? "Copied image to clipboard" : "Copied element to clipboard")
-      inspector.presentation.copied(kind == .image ? "image" : "element")
+      return png
+    } catch is CancellationError {
+      throw CancellationError()
     } catch {
-      if operation == revision { failure = Self.failureMessage(for: error) }
+      if required { throw error }
+      return nil
     }
   }
 

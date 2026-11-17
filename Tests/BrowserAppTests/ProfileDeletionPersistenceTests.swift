@@ -62,6 +62,21 @@ final class ProfileDeletionPersistenceTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
   }
 
+  func testRecreatedProfileDirectoryIsRemovedAgain() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let recreate = Task {
+      try await Task.sleep(for: .milliseconds(30))
+      try FileManager.default.createDirectory(
+        at: directory.appending(path: "BudgetDatabase"), withIntermediateDirectories: true)
+    }
+    try await recreate.value
+    await ProfileDataDirectoryRemoval.removeIfRecreated(
+      at: directory, checks: 4, interval: .milliseconds(20))
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+  }
+
   func testDirectoryRemovalFailureDoesNotUndoCompletedProfileDeletion() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

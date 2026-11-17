@@ -42,6 +42,7 @@ final class BrowserSettingsState {
     applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil,
     removeProfileDirectory: @escaping ProfileDirectoryRemovalOperation = { directory in
       try await ProfileDataDirectoryRemoval.removeIfPresent(at: directory)
+      ProfileDataDirectoryRemoval.watchForRecreation(at: directory)
     }
   ) {
     self.workspace = workspace
@@ -357,6 +358,28 @@ final class BrowserSettingsState {
 }
 
 enum ProfileDataDirectoryRemoval {
+  /// Chromium's profile services can finish starting after the profile is deleted and
+  /// recreate empty stores in its folder. Watch briefly and remove the folder again.
+  static func watchForRecreation(at directory: URL?) {
+    guard let directory else { return }
+    Task.detached(priority: .utility) { await removeIfRecreated(at: directory) }
+  }
+
+  static func removeIfRecreated(
+    at directory: URL, checks: Int = 40, interval: Duration = .milliseconds(250),
+    fileExists: @escaping @Sendable (URL) -> Bool = {
+      FileManager.default.fileExists(atPath: $0.path)
+    },
+    removeItem: @escaping @Sendable (URL) throws -> Void = {
+      try FileManager.default.removeItem(at: $0)
+    }
+  ) async {
+    for _ in 0..<checks {
+      do { try await Task.sleep(for: interval) } catch { return }
+      if fileExists(directory) { try? removeItem(directory) }
+    }
+  }
+
   static func removeIfPresent(
     at directory: URL?,
     fileExists: @escaping @Sendable (URL) -> Bool = {

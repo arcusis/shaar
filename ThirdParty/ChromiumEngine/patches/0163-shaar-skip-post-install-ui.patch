@@ -1,0 +1,23 @@
+--- a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
++++ b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+@@ -8,6 +8,7 @@
+ #include <utility>
+ 
+ #include "base/check.h"
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/scoped_observation.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -119,6 +120,12 @@
+   if (IsUiDisabled() || skip_post_install_ui() || extension->is_theme()) {
+     return;
+   }
++  // Shaar confirms installs in its own UI and keeps Chromium browser windows
++  // hidden. The post-install dialog would make a Chromium window visible and
++  // name Chromium as the product.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    return;
++  }
+ 
+   if (!profile()) {
+     // TODO(zelidrag): Figure out what exact conditions cause crash

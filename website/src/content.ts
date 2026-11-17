@@ -7,15 +7,17 @@ export const siteOrigin = "https://shaar.arcusis.com";
 export const appcast = "https://arcusis.github.io/shaar/appcast.xml";
 export const commandInterfaceName = "Nativ";
 
-// Published release snapshot. Update alongside a published release, not an unreleased version bump.
+// Current public release. Asset names follow scripts/release_feed.py: Shaar_<version>_aarch64.dmg and Shaar-<version>-macos.zip.
 export const release = {
   version: "0.2.0",
-  date: "2026-11-12",
-  label: "12 November 2026",
-  size: "See GitHub Release",
   url: `${repository}/releases/tag/v0.2.0`,
   dmg: `${repository}/releases/download/v0.2.0/Shaar_0.2.0_aarch64.dmg`,
   zip: `${repository}/releases/download/v0.2.0/Shaar-0.2.0-macos.zip`,
+};
+
+// Release-note groups for the current public beta. The download itself is `release`.
+export const upcomingRelease = {
+  version: "0.2.0",
   highlights: [
     "Shaar now runs on Chromium 157, bringing a newer web engine to everyday browsing.",
     "Press F12 or Option-Command-I for Chromium Developer Tools, with Shaar panels for viewports, network rules, 3D stacking, focus and more. The old developer tools window has been replaced; Shaar Inspector remains available.",
@@ -30,49 +32,43 @@ export const release = {
     "Extension Settings explains when loading an unpacked extension needs a newer Shaar engine.",
     "Saved-space tabs now stay in their Space when a window closes.",
   ],
+  tour: [
+    {
+      heading: "Everyday browsing",
+      items: [
+        "Spaces and separate profiles keep tabs and accounts in place.",
+        "Command-T finds tabs, history, bookmarks and browser actions.",
+        "Downloads show progress, opening and Finder actions; private windows isolate their session.",
+        "Stop Loading, session restore and reopen closed tabs or windows keep work recoverable.",
+      ],
+    },
+    {
+      heading: "Web platform",
+      items: [
+        "JavaScript dialogs and HTTP Basic authentication use Shaar sheets.",
+        "Camera, microphone, location, notifications and MIDI requests ask for permission.",
+        "Protocol handlers ask before opening apps; Bluetooth and Serial use device pickers.",
+      ],
+    },
+    {
+      heading: "Media and performance",
+      items: [
+        "Video and audio playback include picture-in-picture.",
+        "The engine supports Widevine when a licensed CDM is present; DRM support is coming to the public build.",
+        "Inactive tabs can sleep, with controls for when they sleep and sites that stay awake.",
+      ],
+    },
+    {
+      heading: "Tools and trust",
+      items: [
+        "Chrome Web Store extensions install through Shaar consent.",
+        "HTTPS-first warns before insecure public pages.",
+        "F12 opens Chromium Developer Tools with Shaar panels.",
+        "Hebrew and right-to-left layouts cover browser flows and sheets.",
+      ],
+    },
+  ],
 };
-
-// Real Shaar screenshots (live Chromium pages, captured offscreen at 2x by the
-// website screenshot harness). Files live in website/screens/; the build falls back to
-// the repository's .github/assets/ when a file is missing.
-export const screens = {
-  hero: {
-    file: "hero.png",
-    width: 2880,
-    height: 1920,
-    alt: "Shaar in the Work Space on arcusis.com, with its tabs in the sidebar",
-  },
-  spaces: {
-    file: "spaces.webp",
-    width: 2880,
-    height: 1920,
-    alt: "Shaar in the Hasbara Space, in its own color, on hasbara.co.il",
-  },
-  profiles: {
-    file: "profiles.webp",
-    width: 1800,
-    height: 1464,
-    alt: "Shaar Settings showing the Work profile used by the Work, Hasbara and Freight Spaces, and a separate Personal profile",
-  },
-  launcher: {
-    file: "command-t.webp",
-    width: 2880,
-    height: 1920,
-    alt: `${commandInterfaceName} searching for freight across history, open tabs and Spaces`,
-  },
-  siteControls: {
-    file: "site-controls.webp",
-    width: 2880,
-    height: 1920,
-    alt: "Site control center on arcusis.com with permissions, the secure connection and reload actions",
-  },
-  extensions: {
-    file: "extensions.webp",
-    width: 2880,
-    height: 1920,
-    alt: "Shaar on arcusis.com with Dark Reader and Bitwarden from the Chrome Web Store in the toolbar",
-  },
-} as const;
 
 export interface SitePage {
   path: string;

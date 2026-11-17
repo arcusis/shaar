@@ -126,6 +126,9 @@ final class BrowserRuntimeRouter {
     subscriptions[windowID]?.client?.onTabClosed?(id, windowID)
   }
 
+  /// True while the runtime is closing this window on purpose (app or engine initiated).
+  func isWindowClosing(_ id: String) -> Bool { closingWindows.contains(id) }
+
   func setWindowClosing(_ closing: Bool, id: String) {
     if closing {
       closingWindows.insert(id)

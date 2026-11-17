@@ -304,9 +304,10 @@ p {
 
 .hero-frame {
   position: relative;
+  display: flex;
+  flex-direction: column;
   margin: 12px;
-  height: min(calc(100svh - 24px), 940px);
-  min-height: 640px;
+  min-height: min(calc(100svh - 24px), 900px);
   border-radius: 24px;
   overflow: hidden;
   isolation: isolate;
@@ -332,6 +333,7 @@ p {
 .hero-copy {
   position: relative;
   z-index: 2;
+  flex: 1 1 auto;
   max-width: 1200px;
   margin: 0 auto;
   padding: clamp(48px, 9vh, 110px) 48px 0;
@@ -375,7 +377,7 @@ p {
   position: relative;
   z-index: 4;
   max-width: 1120px;
-  margin: -150px auto 0;
+  margin: 28px auto 0;
   padding: 0 24px;
 }
 
@@ -708,7 +710,7 @@ p {
   }
 
   .hero-window {
-    margin-top: -90px;
+    margin-top: 20px;
   }
 
   .footer-grid {
@@ -907,13 +909,13 @@ p {
 }
 
 .hero-bottom {
-  position: absolute;
-  inset: auto 24px 20px;
-  z-index: 3;
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin: 12px 24px 22px;
   color: rgb(255 255 255 / 0.9);
 }
 
@@ -961,7 +963,6 @@ p {
 
 .hero-window {
   max-width: 1180px;
-  margin-top: -170px;
 }
 
 .beta-strip {
@@ -1033,7 +1034,7 @@ p {
   }
 
   .hero-window {
-    margin-top: -80px;
+    margin-top: 20px;
   }
 }
 
@@ -1694,4 +1695,251 @@ kbd {
 
 .demo [hidden] {
   display: none !important;
+}
+
+/* 0.2.0 field guide */
+.tour {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: clamp(88px, 11vw, 160px) 32px 80px;
+}
+.tour-intro {
+  max-width: 950px;
+  padding-bottom: clamp(56px, 8vw, 110px);
+}
+.tour-intro > .mono,
+.tour-more > h3 {
+  color: var(--forest);
+  font-weight: 650;
+  letter-spacing: 0.11em;
+}
+.tour-intro h2 {
+  margin: 16px 0 22px;
+  white-space: pre-line;
+  font-size: clamp(48px, 6.8vw, 104px);
+  line-height: 0.99;
+  letter-spacing: -0.05em;
+}
+.tour-intro > p:last-child {
+  max-width: 630px;
+  color: var(--ink-2);
+  font-size: clamp(18px, 2vw, 22px);
+}
+.tour-feature {
+  --tour-parallax: 0px;
+  display: grid;
+  grid-template-columns: minmax(290px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: clamp(38px, 6vw, 100px);
+  min-height: 0;
+  padding: clamp(48px, 6vw, 88px) 0;
+  border-top: 1px solid var(--line-strong);
+  scroll-margin-top: 76px;
+}
+.tour-feature:nth-child(even) {
+  grid-template-columns: minmax(0, 1.2fr) minmax(290px, 0.8fr);
+}
+.tour-feature:nth-child(even) .tour-image {
+  grid-column: 1;
+  grid-row: 1;
+}
+.tour-feature:nth-child(even) .tour-copy {
+  grid-column: 2;
+  grid-row: 1;
+}
+.tour-copy {
+  max-width: 530px;
+}
+.tour-count {
+  display: block;
+  margin-bottom: 40px;
+  color: var(--ink-3);
+}
+.tour-count span {
+  padding: 0 6px;
+  color: var(--line-strong);
+}
+.tour-feature h3 {
+  margin: 13px 0 20px;
+  font-size: clamp(34px, 4.1vw, 62px);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+.tour-description {
+  max-width: 48ch;
+  color: var(--ink-2);
+  font-size: clamp(17px, 1.5vw, 20px);
+  line-height: 1.55;
+}
+.tour-more {
+  margin-top: clamp(28px, 4vw, 48px);
+  padding-top: clamp(36px, 5vw, 64px);
+  border-top: 1px solid var(--line-strong);
+}
+.tour-more > h3 {
+  margin: 0 0 22px;
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: -0.03em;
+}
+.tour-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.tour-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #f7f6f1;
+}
+.tour-card figure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+.tour-shot {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #e7ebe3;
+}
+.tour-card h3 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.tour-card p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.tour-card figcaption {
+  margin-top: 8px;
+  color: var(--ink-3);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.tour-image {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(16px, 2vw, 28px);
+  border-radius: 26px;
+  background: #e7ebe3;
+  transform: translateY(var(--tour-parallax));
+}
+.tour-feature:nth-child(4n + 2) .tour-image {
+  background: #e8e9de;
+}
+.tour-feature:nth-child(4n + 3) .tour-image {
+  background: #e0e9e7;
+}
+.tour-feature:nth-child(4n) .tour-image {
+  background: #eae8e2;
+}
+.tour-image img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: var(--window-shadow);
+}
+.tour-card .tour-shot img {
+  position: absolute;
+  inset: 12px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 8px;
+}
+.tour-image figcaption {
+  margin-top: 16px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+@media (min-width: 961px) and (prefers-reduced-motion: no-preference) {
+  [data-tour-motion] .tour-feature .tour-copy {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 650ms var(--ease),
+      transform 650ms var(--ease);
+  }
+  [data-tour-motion] .tour-feature[data-revealed] .tour-copy {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 960px) {
+  .tour-grid {
+    grid-template-columns: 1fr;
+  }
+  .tour {
+    padding: 88px 24px 60px;
+  }
+  .tour-feature,
+  .tour-feature:nth-child(even) {
+    grid-template-columns: 1fr;
+    gap: 30px;
+    min-height: 0;
+    padding: 66px 0;
+  }
+  .tour-feature:nth-child(even) .tour-image,
+  .tour-feature:nth-child(even) .tour-copy {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .tour-count {
+    margin-bottom: 22px;
+  }
+  .tour-image {
+    transform: none;
+  }
+}
+@media (max-width: 600px) {
+  .tour {
+    padding: 72px 18px 50px;
+  }
+  .tour-intro {
+    padding-bottom: 48px;
+  }
+  .tour-feature {
+    padding: 54px 0;
+  }
+  .tour-feature h3 {
+    font-size: clamp(34px, 9vw, 48px);
+  }
+  .tour-image {
+    padding: 12px;
+    border-radius: 18px;
+  }
+  .tour-image img {
+    border-radius: 8px;
+  }
+  .tour-image figcaption {
+    margin: 10px 4px 2px;
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-image {
+    --tour-parallax: 0px;
+  }
+  .tour-options button:hover {
+    transform: none;
+  }
 }

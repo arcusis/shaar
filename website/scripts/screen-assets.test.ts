@@ -7,7 +7,7 @@ import { statSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { HomePage } from "../src/components/home";
-import { screens } from "../src/content";
+import { tourCards, tourFeatures } from "../src/components/tour";
 import { websiteScreenAssets } from "./screen-assets";
 
 test("site build includes only screenshots referenced by page content", () => {
@@ -20,20 +20,28 @@ test("site build includes only screenshots referenced by page content", () => {
   assert.ok(!assets.includes("hero.png"));
   assert.ok(!assets.includes("page-arcusis.png"));
   assert.ok(!assets.includes("page-github.png"));
+  for (const feature of [...tourFeatures, ...tourCards]) {
+    assert.ok(assets.includes(feature.shot.file), feature.id);
+  }
 });
 
-test("homepage story uses smaller lossless WebP screenshot assets", () => {
+test("homepage tour uses smaller lossless WebP screenshots", () => {
   const home = HomePage();
-  const storyScreens = Object.entries(screens).filter(([name]) => name !== "hero");
+  assert.equal(home.includes("REFERENCE CAPTURE"), false);
+  assert.equal(home.includes("capture pending"), false);
+  const seen = new Set<string>();
 
-  for (const [, screen] of storyScreens) {
-    assert.ok(screen.file.endsWith(".webp"), screen.file);
-    assert.ok(home.includes(`/assets/screens/${screen.file}`), screen.file);
+  for (const feature of [...tourFeatures, ...tourCards]) {
+    const shot = feature.shot;
+    if (seen.has(shot.file)) continue;
+    seen.add(shot.file);
+    assert.ok(shot.file.endsWith(".webp"), feature.id);
+    assert.ok(home.includes(`/assets/screens/${shot.file}`), feature.id);
     const webpSize = statSync(
-      fileURLToPath(new URL(`../screens/${screen.file}`, import.meta.url)),
+      fileURLToPath(new URL(`../screens/${shot.file}`, import.meta.url)),
     ).size;
-    const png = screen.file.replace(/\.webp$/, ".png");
+    const png = shot.file.replace(/\.webp$/, ".png");
     const pngSize = statSync(fileURLToPath(new URL(`../screens/${png}`, import.meta.url))).size;
-    assert.ok(webpSize < pngSize, `${screen.file} should be smaller than ${png}`);
+    assert.ok(webpSize < pngSize, `${shot.file} should be smaller than ${png}`);
   }
 });

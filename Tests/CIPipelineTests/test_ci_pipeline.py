@@ -371,7 +371,7 @@ class PipelineGateTests(unittest.TestCase):
         valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",
                  "status": "completed", "conclusion": "success"}
         for change in ({"head_sha": "b" * 40}, {"event": "pull_request"}, {"event": "workflow_dispatch"},
-                       {"status": "in_progress"}, {"conclusion": "failure"}, {"head_branch": "feature"}):
+                       {"status": "in_progress"}, {"head_branch": "feature"}):
             self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [dict(valid, **change)]}, revision), [])
         for alerts in ([], [{"number": 1, "state": "open"}]):
             responses = [{"workflow_runs": [valid]},
@@ -396,6 +396,21 @@ class PipelineGateTests(unittest.TestCase):
         for event in ("push", "pull_request", "merge_group"):
             run = dict(valid, event=event)
             self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [run]}, revision, swift_events), [])
+
+    def test_release_gate_accepts_failed_run_when_required_job_passed(self):
+        revision = "a" * 40
+        failed_run = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",
+                      "status": "completed", "conclusion": "failure"}
+        advisory_failure = {"jobs": [
+            {"name": "CI required", "status": "completed", "conclusion": "success"},
+            {"name": "Engine simulations / Engine shard engine-1", "status": "completed", "conclusion": "failure"}]}
+        with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [failed_run]}, advisory_failure]):
+            self.assertEqual(RELEASE_CI.require_workflow("arcusis/shaar", revision, "source-checks.yml",
+                                                         {"CI required"}), 9)
+        gate_failure = {"jobs": [{"name": "CI required", "status": "completed", "conclusion": "failure"}]}
+        with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [failed_run]}, gate_failure]):
+            with self.assertRaisesRegex(ValueError, "No successful production source-checks.yml"):
+                RELEASE_CI.require_workflow("arcusis/shaar", revision, "source-checks.yml", {"CI required"})
 
     def test_release_artifact_downloads_have_connection_and_total_timeouts(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()

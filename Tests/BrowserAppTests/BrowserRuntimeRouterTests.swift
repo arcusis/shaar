@@ -162,4 +162,14 @@ struct BrowserRuntimeRouterTests {
     #expect(weakFirst == nil)
     #expect(router.clients(forProfile: "shared").map(\.windowID) == ["second"])
   }
+
+  @Test func windowClosingStateFollowsTheRuntimeCloseLifecycle() {
+    let router = BrowserRuntimeRouter()
+    #expect(!router.isWindowClosing("popup"))
+    router.setWindowClosing(true, id: "popup")
+    #expect(router.isWindowClosing("popup"))
+    #expect(!router.isWindowClosing("other"))
+    router.setWindowClosing(false, id: "popup")
+    #expect(!router.isWindowClosing("popup"))
+  }
 }

@@ -1001,6 +1001,18 @@ final class EngineProbe {
         finish(error: nil)
         return
       }
+      if ProcessInfo.processInfo.environment["SHAAR_INSPECTOR_AI_COPY_ONLY"] == "1" {
+        guard let browserEngine else {
+          throw ProbeFailure("Inspector AI copy probe engine is missing.")
+        }
+        fixtureStage = "Inspector"
+        checks += try await InspectorAICopyProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       if ProcessInfo.processInfo.environment["SHAAR_NATIVE_HOST_ONLY"] == "1" {
         guard let browserEngine else {
           throw ProbeFailure("Native-host-only probe engine is missing.")

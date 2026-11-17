@@ -1490,8 +1490,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func closed(_ id: UUID, quitting: Bool) {
+    // A renderer that exits while its window is being closed on purpose is not a
+    // lost window; recovering it would bring back a window the user or an
+    // extension just closed.
     if !quitting, !appClosingWindows.contains(id),
       let context = contexts[id],
+      !events.router.isWindowClosing(context.nativeID),
       let selected = context.store.session.selectedPage?.tab.id,
       context.store.rendererFailures[selected] != nil
     {

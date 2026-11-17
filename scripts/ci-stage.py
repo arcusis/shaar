@@ -185,22 +185,62 @@ def repair_legacy_coverage_base(base: Path) -> None:
         subprocess.run(command, check=True)
 
 
+_POPUP_YIELD_WAIT = """\
+  dispatchProbePopupEvaluation(runtime, popupID: "popup", script: "return true")
+
+  for _ in 0..<10 where runtime.evaluations.isEmpty {
+    await Task.yield()
+  }
+"""
+
+_POPUP_CONTINUATION_WAIT = """\
+  // The bridge hops through an unstructured task. Suspending lets that task
+  // run; a fixed yield count returns before it is scheduled under coverage.
+  await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+    runtime.onEvaluate = { continuation.resume() }
+    dispatchProbePopupEvaluation(runtime, popupID: "popup", script: "return true")
+  }
+"""
+
+_POPUP_RUNTIME_FIELDS = """\
+  var evaluations: [(String, String)] = []
+
+  override func evaluateProbePopupID(_ popupID: String, script: String) async -> String? {
+    evaluations.append((popupID, script))
+    return nil
+  }
+"""
+
+_POPUP_RUNTIME_FIELDS_WITH_NOTIFY = """\
+  var evaluations: [(String, String)] = []
+  var onEvaluate: (@MainActor () -> Void)?
+
+  override func evaluateProbePopupID(_ popupID: String, script: String) async -> String? {
+    evaluations.append((popupID, script))
+    let notify = onEvaluate
+    onEvaluate = nil
+    notify?()
+    return nil
+  }
+"""
+
+
 def repair_async_popup_probe_yield(base: Path) -> None:
     """The archived popup-bridge test only yielded 10 times.
 
     Coverage instrumentation can leave that unstructured task queued past
-    those yields. Stretch the archived wait to match the current tree.
-    A base that already waits longer is left alone.
+    those yields, so the evaluation count stays 0. Wait by suspending until
+    the override runs. A base that already does so is left alone.
     """
     path = base / "Tests/ShaarVerificationTests/ProbePopupEvaluationTests.swift"
     if not path.is_file():
         return
     text = path.read_text(encoding="utf-8")
-    short = "for _ in 0..<10 where runtime.evaluations.isEmpty {"
-    longer = "for _ in 0..<1000 where runtime.evaluations.isEmpty {"
-    if short not in text:
+    if _POPUP_YIELD_WAIT not in text or _POPUP_RUNTIME_FIELDS not in text:
         return
-    path.write_text(text.replace(short, longer, 1), encoding="utf-8")
+    text = text.replace(_POPUP_RUNTIME_FIELDS, _POPUP_RUNTIME_FIELDS_WITH_NOTIFY, 1)
+    text = text.replace(_POPUP_YIELD_WAIT, _POPUP_CONTINUATION_WAIT, 1)
+    path.write_text(text, encoding="utf-8")
 
 
 def load_coverage_metadata(path: Path, label: str) -> dict:

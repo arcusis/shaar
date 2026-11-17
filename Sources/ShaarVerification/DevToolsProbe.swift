@@ -80,7 +80,6 @@ final class DevToolsProbe {
       "opening DevTools never orders the probe window onscreen")
     let page = inspected
     try expect(!page.isHidden && !tools.isHidden, "selected native page and inspector are unhidden")
-    let initial = page.frame
     let size = card.frame.size
     card.setFrameSize(NSSize(width: size.width - 60, height: size.height - 40))
     card.layoutSubtreeIfNeeded()
@@ -88,6 +87,9 @@ final class DevToolsProbe {
     card.setFrameSize(size)
     card.layoutSubtreeIfNeeded()
     try expect(resizedCorrectly, "engine layout keeps page and inspector bounded during resize")
+    // Empty bounds crop the page to 60% until the frontend reports the splitter.
+    // Remember the frame after that report, or the crop if it never arrives.
+    let initial = try await rememberSettledDockFrame(identity, page: page, container: card)
 
     store.perform(.open(fixture.appending(path: "developer-tools-other")))
     guard let other = store.session.selectedPage?.tab.id else { throw Failure("No second tab") }
@@ -197,6 +199,38 @@ final class DevToolsProbe {
       && abs(reopened.minY - initial.minY) <= 1
       && abs(reopened.width - initial.width) <= 1
       && abs(reopened.height - initial.height) <= 1
+  }
+
+  /// The pinned engine crops to 60% of the container while DevTools bounds are
+  /// still empty. A later splitter update is the layout reopen has to restore.
+  static func isEmptyBoundsPlaceholder(_ page: NSRect, in container: NSRect) -> Bool {
+    guard container.width > 1, container.height > 1 else { return false }
+    return abs(page.minX - container.minX) <= 1
+      && abs(page.minY - container.minY) <= 1
+      && abs(page.height - container.height) <= 1
+      && abs(page.width - container.width * 0.6) <= 1
+  }
+
+  private func rememberSettledDockFrame(
+    _ identity: String, page: NSView, container: NSView
+  ) async throws -> NSRect {
+    let budget = Int(150 * ProbeTimeout.scale)
+    var latest: NSRect?
+    for _ in 0..<budget {
+      if isDocked(identity, page: page, container: container) {
+        latest = page.frame
+        if !Self.isEmptyBoundsPlaceholder(page.frame, in: container.bounds) {
+          checks.append("DevTools applies the engine's dock bounds")
+          return page.frame
+        }
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    if let latest {
+      checks.append("DevTools keeps the initial dock crop")
+      return latest
+    }
+    throw Failure("Timed out: DevTools applies the engine's dock bounds")
   }
 
   private func wait(_ message: String, _ condition: () -> Bool) async throws {

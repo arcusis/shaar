@@ -19,6 +19,19 @@ import Testing
     #expect(!DevToolsProbe.rememberedDockFrameMatches(initial, nil))
   }
 
+  @Test func emptyBoundsPlaceholderIsTheSixtyPercentCrop() {
+    let container = NSRect(x: 0, y: 0, width: 984, height: 729)
+    #expect(
+      DevToolsProbe.isEmptyBoundsPlaceholder(
+        NSRect(x: 0, y: 0, width: 590.4, height: 729), in: container))
+    #expect(
+      !DevToolsProbe.isEmptyBoundsPlaceholder(
+        NSRect(x: 0, y: 0, width: 429, height: 729), in: container))
+    #expect(
+      !DevToolsProbe.isEmptyBoundsPlaceholder(
+        NSRect(x: 12, y: 0, width: 590.4, height: 729), in: container))
+  }
+
   @Test func dockAuditRequiresOpenGeometryAndARealResize() {
     let state: [AnyHashable: Any] = [
       "open": true, "pageWidth": 700.0, "containerWidth": 1000.0, "pageHeight": 600.0,

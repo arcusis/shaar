@@ -194,6 +194,13 @@ final class BitwardenProbe {
     guard let installed else {
       throw BitwardenProbeFailure("The signed store extension was not registered in its profile.")
     }
+    let visibleWindows = NSApp.windows.filter(\.isVisible).map { window in
+      ["class": String(describing: type(of: window)), "title": window.title]
+    }
+    try write(
+      ["allWindowsHidden": visibleWindows.isEmpty, "visibleWindows": visibleWindows],
+      name: "bitwarden-post-install-windows.json")
+    try expect(visibleWindows.isEmpty, "Bitwarden install leaves every NSApp window hidden")
     try expect(true, "\(phase) Bitwarden is registered as a non-component store extension")
     store.perform(.open(fixture))
     let tab = store.session.selectedSpace.selectedTabID!.uuidString

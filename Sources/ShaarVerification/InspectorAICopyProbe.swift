@@ -63,6 +63,7 @@ import SwiftUI
       "private-query-fixture", "private-fragment-fixture", "password-private-fixture",
       "input-private-fixture", "textarea-private-fixture", "selected-private-fixture",
     ] { try check(!text.contains(secret), "Private fixture value leaked into Markdown.") }
+    try await copyOversizedElement(inspector, to: board)
     ai.feedback = "Increase the button padding."
     await ai.addNote()
     try check(ai.notes.count == 1 && ai.feedback.isEmpty, "Locked element note was not added.")
@@ -346,8 +347,62 @@ import SwiftUI
     }
   }
 
+  /// An element larger than 16 megapixels at 2x used to fail the whole copy; it must now copy
+  /// its text and a downscaled screenshot.
+  private func copyOversizedElement(
+    _ inspector: InspectorModel, to board: NSPasteboard
+  ) async throws {
+    let resize =
+      "(()=>{const el=document.querySelector('#ai-save');el.dataset.shaarProbeStyle=el.getAttribute('style')||'';el.style.setProperty('width','2400px','important');el.style.setProperty('height','9000px','important');el.style.setProperty('display','block','important');return true;})()"
+    let restore =
+      "(()=>{const el=document.querySelector('#ai-save');el.setAttribute('style',el.dataset.shaarProbeStyle||'');delete el.dataset.shaarProbeStyle;if(!el.getAttribute('style'))el.removeAttribute('style');return true;})()"
+    _ = try await inspector.evaluate(resize)
+    do {
+      try await checkOversizedCopy(inspector, board: board)
+    } catch {
+      _ = try? await inspector.evaluate(restore)
+      throw error
+    }
+    _ = try await inspector.evaluate(restore)
+  }
+
+  private func checkOversizedCopy(_ inspector: InspectorModel, board: NSPasteboard) async throws {
+    await inspector.aiCopy.copyElement(to: board)
+    try check(
+      inspector.aiCopy.failure == nil,
+      "Oversized element copy failed: \(inspector.aiCopy.failure ?? "")")
+    let text = board.string(forType: .string) ?? ""
+    try check(
+      text.contains("Accessible name: Save changes"), "Oversized element text was not copied.")
+    guard let png = board.pasteboardItems?.first?.data(forType: .png),
+      let bitmap = NSBitmapImageRep(data: png)
+    else { throw InspectorFailure("Oversized element screenshot is missing.") }
+    try check(
+      bitmap.pixelsWide * bitmap.pixelsHigh <= 16_777_216
+        && max(bitmap.pixelsWide, bitmap.pixelsHigh) <= 16_384,
+      "Oversized element screenshot exceeds the capture limit.")
+  }
+
+  /// Isolated runs have no laid-out host window for trusted pointer input, so lock the element
+  /// through the Inspector page script instead.
+  private func lockWithoutPointer(_ inspector: InspectorModel, selector: String) async throws {
+    let literal = String(data: try JSONEncoder().encode(selector), encoding: .utf8)!
+    let locked =
+      try await inspector.evaluate(
+        "__shaarInspectorV2.select(document.querySelector(\(literal)))") as? Bool
+    try check(locked == true, "AI fixture could not lock \(selector).")
+    try await wait("AI fixture lock \(selector)") {
+      _ = await inspector.refresh()
+      return inspector.selection?.locked == true && inspector.mode == .locked
+    }
+  }
+
   private func pick(_ inspector: InspectorModel, _ selector: String) async throws {
     let targetSelector = selector == "#ai-card" ? "#ai-save" : selector
+    if ProcessInfo.processInfo.environment["SHAAR_INSPECTOR_AI_COPY_ONLY"] == "1" {
+      try await lockWithoutPointer(inspector, selector: selector)
+      return
+    }
     guard let activation = inspector.pick() else {
       throw InspectorFailure("AI Inspector picker is unavailable.")
     }

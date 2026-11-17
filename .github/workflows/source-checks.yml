@@ -131,6 +131,13 @@ jobs:
         with:
           mode: fast
           tools: 'true'
+      - name: Fetch the pinned engine archive when the cache has no copy
+        if: needs.plan.outputs.abi_contract == 'true'
+        # A new pin has no cached archive until a later job saves one. fetch-engine.sh
+        # verifies the pinned SHA-256 and the patch receipt before keeping it.
+        run: |
+          asset=$(jq -er .asset ThirdParty/ChromiumEngine/pin.json)
+          if [ ! -f "build/EngineCache/$asset" ]; then bash scripts/fetch-engine.sh; fi
       - name: Check bridge ABI against the cached pinned engine archive
         if: needs.plan.outputs.abi_contract == 'true'
         run: .venv/bin/python scripts/ci-stage.py abi-contract

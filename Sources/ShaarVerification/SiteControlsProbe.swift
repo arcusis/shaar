@@ -339,7 +339,7 @@ private enum EvaluateWait {
   case timedOut
 }
 
-private final class EvaluateBox: @unchecked Sendable {
+final class EvaluateBox: @unchecked Sendable {
   private let lock = NSLock()
   private var arrived = false
   private var value: String?

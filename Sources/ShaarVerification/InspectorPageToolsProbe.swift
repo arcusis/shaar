@@ -696,7 +696,7 @@ private final class GeolocationDoneFlag: @unchecked Sendable {
   var done = false
 }
 
-private struct GeolocationReading: Sendable {
+struct GeolocationReading: Sendable {
   var latitude: Double?
   var permission: String?
   var message: String?

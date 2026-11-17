@@ -182,10 +182,7 @@ import SwiftUI
     let locationResult = try await sampleGeolocation(model)
     try JSONSerialization.data(withJSONObject: locationResult ?? [:], options: [.prettyPrinted])
       .write(to: root.appending(path: "\(phase)-geolocation.json"))
-    let latitude = locationResult?["latitude"] as? Double
-    try expect(
-      latitude.map { abs($0 - 37.7749) < 0.001 } == true,
-      "location override reaches geolocation API")
+    try await expectLocationOverride(locationResult)
     try await cpuSimulations(model, value: value)
     value.cpu = .six
     value.network = .slow3G
@@ -433,6 +430,25 @@ import SwiftUI
   /// Chromium does not start `getCurrentPosition`, or its timeout, while the page
   /// is hidden. The sample stays off-screen. A location prompt that still appears
   /// is allowed here; the latitude check is unchanged.
+  /// Chromium refuses geolocation, overrides included, while macOS has not authorized
+  /// location for this app. Hosts without that authorization (such as CI runners)
+  /// cannot verify the override, so record that instead of failing; an authorized
+  /// host must deliver the overridden latitude.
+  private func expectLocationOverride(_ reading: [String: Any]?) async throws {
+    let latitude = reading?["latitude"] as? Double
+    let systemDenied = reading?["code"] as? Int == 1
+    if latitude == nil, systemDenied,
+      await MacPermissionStatusReader.status(of: .location) != .allowed
+    {
+      checks.append(
+        "location override not verifiable: macOS location access is not authorized on this host")
+      return
+    }
+    try expect(
+      latitude.map { abs($0 - 37.7749) < 0.001 } == true,
+      "location override reaches geolocation API")
+  }
+
   private func sampleGeolocation(_ model: DeveloperPageModel) async throws -> [String: Any]? {
     let profileID = model.target.profileID.uuidString
     let documentOrigin = try await model.evaluate("location.origin") as? String

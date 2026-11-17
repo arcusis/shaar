@@ -5,7 +5,7 @@
 import { initializeDemo } from "./demo";
 import { startScene } from "./scene";
 import { initializeSky, type SkyState } from "./sky";
-import { nearestStep } from "./story";
+import { initializeTour } from "./tour";
 
 // Home only: the sticky bar slides in once the hero frame (with its own nav) leaves view.
 function initializeStickyHeader(): void {
@@ -23,36 +23,9 @@ function initializeStickyHeader(): void {
   }).observe(hero);
 }
 
-// Story: the step nearest the middle of the viewport picks the window shown beside it.
-function initializeStory(): void {
-  const grid = document.querySelector<HTMLElement>(".story-grid");
-  if (!grid) return;
-  const intersecting = new Set<HTMLElement>();
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!(entry.target instanceof HTMLElement)) continue;
-        if (entry.isIntersecting) intersecting.add(entry.target);
-        else intersecting.delete(entry.target);
-      }
-      const active = nearestStep(intersecting, window.innerHeight / 2);
-      if (active) {
-        grid.dataset.active = active.dataset.step ?? "0";
-        for (const step of grid.querySelectorAll<HTMLElement>(".step")) {
-          step.toggleAttribute("data-current", step === active);
-        }
-      }
-    },
-    { rootMargin: "-45% 0px -45% 0px" },
-  );
-  const steps = grid.querySelectorAll<HTMLElement>(".step");
-  steps[0]?.setAttribute("data-current", "");
-  for (const step of steps) observer.observe(step);
-}
-
 document.addEventListener("DOMContentLoaded", () => {
   initializeStickyHeader();
-  initializeStory();
+  initializeTour();
   initializeDemo();
   let updateScene: ((state: SkyState) => void) | null = null;
   initializeSky((state) => {

@@ -3,7 +3,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Require exact production CI, Swift security and zero open code-scanning alerts."""
+"""Require exact production CI, Swift security and zero open code-scanning alerts.
+
+A workflow run counts when its required gate job succeeded, even if the run as a whole failed.
+The gate job (for example "CI required") already applies CI_ADVISORY_STAGES, so advisory stages
+such as the engine shards report without blocking the release, the same as in the merge queue.
+"""
 
 import argparse
 import json
@@ -31,7 +36,7 @@ def production_runs(document: dict, revision: str, events: tuple[str, ...] = ("p
     return [run for run in document["workflow_runs"]
             if run.get("head_sha") == revision and run.get("head_branch") == "production"
             and run.get("event") in events and run.get("status") == "completed"
-            and run.get("conclusion") == "success" and type(run.get("id")) is int
+            and type(run.get("id")) is int
             and run["id"] > 0]
 
 
@@ -39,7 +44,7 @@ def require_workflow(repository: str, revision: str, workflow: str, required: se
                      events: tuple[str, ...] = ("push",)) -> int:
     prefix = f"repos/{repository}/actions"
     event_filter = f"&event={events[0]}" if len(events) == 1 else ""
-    runs = api(f"{prefix}/workflows/{workflow}/runs?head_sha={revision}{event_filter}&branch=production&status=success&per_page=100")
+    runs = api(f"{prefix}/workflows/{workflow}/runs?head_sha={revision}{event_filter}&branch=production&status=completed&per_page=100")
     if (not isinstance(runs, dict) or not isinstance(runs.get("workflow_runs"), list)
             or any(not isinstance(run, dict) for run in runs["workflow_runs"])):
         raise ValueError(f"Invalid GitHub API response for {workflow} workflow runs")

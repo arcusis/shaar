@@ -23,6 +23,21 @@ enum BitwardenProbeEvidence {
       return !disabled.boolValue
     }
   }
+
+  @MainActor
+  static func waitForExtensionPopup(
+    attempts: Int = 50, interval: Duration = .milliseconds(100),
+    panel: () -> ExtensionPanelRoute?, notice: () -> String?
+  ) async throws -> ExtensionPopupContext {
+    for _ in 0..<attempts {
+      if case .popup(let popup) = panel() { return popup }
+      if let notice = notice() {
+        throw BitwardenProbeFailure("Native extension action failed: \(notice)")
+      }
+      try await Task.sleep(for: interval)
+    }
+    throw BitwardenProbeFailure("Bitwarden did not open its native-hosted popup.")
+  }
 }
 
 enum BitwardenStoreButtonValidation {
@@ -188,10 +203,8 @@ final class BitwardenProbe {
     }
     engine.refreshExtensions()
     engine.executeExtension(extensionID)
-    guard case .popup(var popup) = engine.extensionPanel else {
-      throw BitwardenProbeFailure(
-        "Bitwarden did not open its native-hosted popup: \(engine.notice ?? "no native notice")")
-    }
+    var popup = try await BitwardenProbeEvidence.waitForExtensionPopup(
+      panel: { engine.extensionPanel }, notice: { engine.notice })
     try expect(
       popup.profileID == profile && popup.tabID.uuidString == tab,
       "Bitwarden popup retains the selected profile and page target")
@@ -217,7 +230,10 @@ final class BitwardenProbe {
           let tabID = UUID(uuidString: tab)
         else {
           throw BitwardenProbeFailure(
-            "An unexpected page/profile replaced the Bitwarden probe context.")
+            "An unexpected page/profile replaced the Bitwarden probe context "
+              + "(url=\(selected.selectedTab?.url.absoluteString ?? "none"), "
+              + "sameProfile=\(selected.profileID == profile), "
+              + "welcomeNavigations=\(welcomeNavigations)).")
         }
         welcomeNavigations += 1
         transitions.append([
@@ -228,12 +244,11 @@ final class BitwardenProbe {
           "Bitwarden welcome navigation closes the popup in its original context")
         store.perform(.tab(space: owner.id, tab: tabID))
         engine.executeExtension(extensionID)
-        guard case .popup(let reopened) = engine.extensionPanel else {
-          throw BitwardenProbeFailure("Could not reopen Bitwarden after its welcome navigation.")
-        }
-        popup = reopened
+        popup = try await BitwardenProbeEvidence.waitForExtensionPopup(
+          panel: { engine.extensionPanel }, notice: { engine.notice })
         skippedSetup = false
         openedLogin = false
+        try await waitForPopupView(popup.id)
         attachHiddenPopup(popup.id)
       }
       let popupScript = """
@@ -385,6 +400,13 @@ final class BitwardenProbe {
   private func write(_ object: [String: Any], name: String) throws {
     try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: name), options: .atomic)
+  }
+
+  /// The engine reports a reopened popup before its view exists; attach only once it does.
+  private func waitForPopupView(_ id: String) async throws {
+    for _ in 0..<50 where runtime.view(forExtensionPopupID: id) == nil {
+      try await Task.sleep(for: .milliseconds(100))
+    }
   }
 
   private func attachHiddenPopup(_ id: String) {

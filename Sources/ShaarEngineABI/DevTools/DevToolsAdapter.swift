@@ -163,30 +163,6 @@ public protocol ShaarDevToolsSubmitting: Sendable {
   ) throws -> UInt64
 }
 
-private final class ShaarDevToolsReplyBox: @unchecked Sendable {
-  let expectedRequestID: UInt64
-  let completion: @Sendable (Result<Data, ShaarEngineError>) -> Void
-  init(
-    _ requestID: UInt64, _ completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
-  ) {
-    expectedRequestID = requestID
-    self.completion = completion
-  }
-}
-
-private final class ShaarDevToolsRequestIDs: @unchecked Sendable {
-  private let lock = NSLock()
-  private var next: UInt64 = 1
-  func take() -> UInt64 {
-    lock.lock()
-    defer { lock.unlock() }
-    let value = next
-    next &+= 1
-    if next == 0 { next = 1 }
-    return value
-  }
-}
-
 private func copyDevToolsBytes(_ bytes: shaar_bytes) throws -> Data {
   guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
     throw ShaarEngineError.invalidEvent("invalid DevTools byte slice")
@@ -196,32 +172,29 @@ private func copyDevToolsBytes(_ bytes: shaar_bytes) throws -> Data {
 }
 
 private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
-  guard let context else { return }
-  let box = Unmanaged<ShaarDevToolsReplyBox>.fromOpaque(context).takeRetainedValue()
-  guard let result else {
-    box.completion(.failure(.invalidEvent("missing DevTools result")))
-    return
-  }
-  do {
-    let value = result.pointee
-    guard value.size >= UInt32(MemoryLayout<shaar_result>.size),
-      value.request_id == box.expectedRequestID
-    else { throw ShaarEngineError.invalidEvent("invalid DevTools result envelope") }
-    guard value.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
-      throw ShaarEngineError.invalidEvent("short DevTools error")
+  ShaarABIReplyRegistry.shared.resolve(context: context) { requestID in
+    guard let result else { return .failure(.invalidEvent("missing DevTools result")) }
+    do {
+      let value = result.pointee
+      guard value.size >= UInt32(MemoryLayout<shaar_result>.size),
+        value.request_id == requestID
+      else { throw ShaarEngineError.invalidEvent("invalid DevTools result envelope") }
+      guard value.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+        throw ShaarEngineError.invalidEvent("short DevTools error")
+      }
+      try ShaarStatusCode.decode(
+        UInt32(value.error.code.rawValue), platformCode: value.error.platform_code,
+        message: String(decoding: try copyDevToolsBytes(value.error.message), as: UTF8.self))
+      let data = try copyDevToolsBytes(value.payload_json)
+      guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        devToolsEnvelopeInteger(root["schemaVersion"]) == 1
+      else { throw ShaarEngineError.invalidEvent("invalid DevTools response payload") }
+      return .success(data)
+    } catch let error as ShaarEngineError {
+      return .failure(error)
+    } catch {
+      return .failure(.invalidEvent("invalid DevTools response bytes"))
     }
-    try ShaarStatusCode.decode(
-      UInt32(value.error.code.rawValue), platformCode: value.error.platform_code,
-      message: String(decoding: try copyDevToolsBytes(value.error.message), as: UTF8.self))
-    let data = try copyDevToolsBytes(value.payload_json)
-    guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      devToolsEnvelopeInteger(root["schemaVersion"]) == 1
-    else { throw ShaarEngineError.invalidEvent("invalid DevTools response payload") }
-    box.completion(.success(data))
-  } catch let error as ShaarEngineError {
-    box.completion(.failure(error))
-  } catch {
-    box.completion(.failure(.invalidEvent("invalid DevTools response bytes")))
   }
 }
 
@@ -230,7 +203,6 @@ private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
 public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sendable {
   private let submitSymbol: UnsafeRawPointer
   private let handleResolver: any ShaarNavigationHandleResolving
-  private let requestIDs: ShaarDevToolsRequestIDs
 
   public init(resolver: ShaarSymbolResolving, handleResolver: any ShaarNavigationHandleResolving)
     throws
@@ -240,7 +212,6 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
     }
     submitSymbol = symbol
     self.handleResolver = handleResolver
-    requestIDs = ShaarDevToolsRequestIDs()
   }
 
   public func submit(
@@ -252,9 +223,9 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
     guard handles.scope.size >= UInt32(MemoryLayout<shaar_scope>.size),
       (handles.scope.profile != nil) != (handles.scope.private_session != nil)
     else { throw ShaarEngineError.invalidEvent("native DevTools scope is invalid") }
-    let requestID = requestIDs.take()
-    let box = ShaarDevToolsReplyBox(requestID, completion)
-    let context = Unmanaged.passRetained(box).toOpaque()
+    let box = ShaarABIReplyRegistry.shared.make(resolve: completion)
+    let requestID = box.requestID
+    let context = ShaarABIReplyRegistry.shared.context(for: box)
     var immediateError = shaar_error(
       size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
       platform_code: 0,
@@ -269,7 +240,7 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
         shaarDevToolsABICallback, context, &immediateError)
     }
     guard status == 0 else {
-      Unmanaged<ShaarDevToolsReplyBox>.fromOpaque(context).release()
+      ShaarABIReplyRegistry.shared.discard(context: context)
       guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
         throw ShaarEngineError.invalidEvent("short DevTools error")
       }

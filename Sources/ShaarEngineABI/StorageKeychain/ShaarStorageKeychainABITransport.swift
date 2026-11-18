@@ -22,30 +22,6 @@ public protocol ShaarStorageKeychainProfileResolving: Sendable {
   func resolve(profileID: UUID) async throws -> ShaarStorageKeychainNativeProfile
 }
 
-private final class StorageKeychainRequestIDs: @unchecked Sendable {
-  private let lock = NSLock()
-  private var next: UInt64 = 0x1400_0000_0000_0001
-
-  func take() -> UInt64 {
-    lock.lock()
-    defer { lock.unlock() }
-    let requestID = next
-    next &+= 1
-    if next == 0 { next = 0x1400_0000_0000_0001 }
-    return requestID
-  }
-}
-
-private final class StorageKeychainReplyBox: @unchecked Sendable {
-  let requestID: UInt64
-  let continuation: CheckedContinuation<Data, Error>
-
-  init(requestID: UInt64, continuation: CheckedContinuation<Data, Error>) {
-    self.requestID = requestID
-    self.continuation = continuation
-  }
-}
-
 private func copyStorageKeychainBytes(_ bytes: shaar_bytes) throws -> Data {
   guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
     throw ShaarEngineError.invalidEvent("invalid storage-keychain byte slice")
@@ -55,35 +31,35 @@ private func copyStorageKeychainBytes(_ bytes: shaar_bytes) throws -> Data {
 }
 
 private let storageKeychainReply: shaar_reply_fn = { context, result in
-  guard let context else { return }
-  let box = Unmanaged<StorageKeychainReplyBox>.fromOpaque(context).takeRetainedValue()
-  guard let result else {
-    box.continuation.resume(
-      throwing: ShaarEngineError.invalidEvent("missing storage-keychain result"))
-    return
-  }
-  do {
-    let result = result.pointee
-    guard result.size >= UInt32(MemoryLayout<shaar_result>.size),
-      result.request_id == box.requestID
-    else {
-      throw ShaarEngineError.invalidEvent("storage-keychain result does not match request")
+  ShaarABIReplyRegistry.shared.resolve(context: context) { requestID in
+    guard let result else {
+      return .failure(.invalidEvent("missing storage-keychain result"))
     }
-    guard result.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
-      throw ShaarEngineError.invalidEvent("short storage-keychain error")
+    do {
+      let value = result.pointee
+      guard value.size >= UInt32(MemoryLayout<shaar_result>.size),
+        value.request_id == requestID
+      else {
+        throw ShaarEngineError.invalidEvent("storage-keychain result does not match request")
+      }
+      guard value.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+        throw ShaarEngineError.invalidEvent("short storage-keychain error")
+      }
+      let message = String(
+        decoding: try copyStorageKeychainBytes(value.error.message), as: UTF8.self)
+      try ShaarStatusCode.decode(
+        UInt32(value.error.code.rawValue), platformCode: value.error.platform_code,
+        message: message)
+      let payload = try copyStorageKeychainBytes(value.payload_json)
+      guard !payload.isEmpty else {
+        throw ShaarEngineError.invalidEvent("empty storage-keychain result")
+      }
+      return .success(payload)
+    } catch let error as ShaarEngineError {
+      return .failure(error)
+    } catch {
+      return .failure(.invalidEvent("invalid storage-keychain result bytes"))
     }
-    let message = String(
-      decoding: try copyStorageKeychainBytes(result.error.message), as: UTF8.self)
-    try ShaarStatusCode.decode(
-      UInt32(result.error.code.rawValue), platformCode: result.error.platform_code,
-      message: message)
-    let payload = try copyStorageKeychainBytes(result.payload_json)
-    guard !payload.isEmpty else {
-      throw ShaarEngineError.invalidEvent("empty storage-keychain result")
-    }
-    box.continuation.resume(returning: payload)
-  } catch {
-    box.continuation.resume(throwing: error)
   }
 }
 
@@ -94,7 +70,6 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
 {
   private let submitSymbol: UnsafeRawPointer
   private let profileResolver: any ShaarStorageKeychainProfileResolving
-  private let requestIDs = StorageKeychainRequestIDs()
 
   public init(
     resolver: ShaarSymbolResolving,
@@ -123,11 +98,16 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
       throw ShaarEngineError.invalidEvent("storage-keychain requires a regular profile")
     }
 
-    let requestID = requestIDs.take()
     return try await withCheckedThrowingContinuation {
       (continuation: CheckedContinuation<Data, Error>) in
-      let box = StorageKeychainReplyBox(requestID: requestID, continuation: continuation)
-      let replyContext = Unmanaged.passRetained(box).toOpaque()
+      let box = ShaarABIReplyRegistry.shared.make { result in
+        switch result {
+        case .success(let data): continuation.resume(returning: data)
+        case .failure(let error): continuation.resume(throwing: error)
+        }
+      }
+      let requestID = box.requestID
+      let replyContext = ShaarABIReplyRegistry.shared.context(for: box)
       var immediateError = shaar_error(
         size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
         platform_code: 0, message: shaar_bytes(data: nil, size: 0))
@@ -140,7 +120,7 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
           storageKeychainReply, replyContext, &immediateError)
       }
       if status != 0 {
-        Unmanaged<StorageKeychainReplyBox>.fromOpaque(replyContext).release()
+        ShaarABIReplyRegistry.shared.discard(context: replyContext)
         guard immediateError.size >= UInt32(MemoryLayout<shaar_error>.size) else {
           continuation.resume(
             throwing: ShaarEngineError.invalidEvent("short storage-keychain error"))

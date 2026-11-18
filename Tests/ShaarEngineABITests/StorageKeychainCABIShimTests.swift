@@ -2,9 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Foundation
 import ShaarEngineC
 import ShaarStorageKeychainABIC
 import Testing
+
+@testable import ShaarEngineABI
 
 private let noOpStorageKeychainReply:
   @convention(c) (
@@ -88,4 +91,21 @@ private let fakeStorageKeychainSubmitSuccess:
   }
 
   #expect(result == invalidArgument)
+}
+
+@Test func storageKeychainReplyBoxResumesPendingCallerOnceOnShutdown() async {
+  let value = await withCheckedContinuation {
+    (continuation: CheckedContinuation<Result<Data, ShaarEngineError>, Never>) in
+    let registry = ShaarABIReplyRegistry()
+    let box = registry.make { result in continuation.resume(returning: result) }
+    let context = registry.context(for: box)
+    registry.shutdown()
+    registry.resolve(context: context, .success(Data("duplicate".utf8)))
+  }
+
+  #expect(
+    value
+      == .failure(
+        .status(
+          .shuttingDown, platformCode: 0, message: "engine is shutting down")))
 }

@@ -111,6 +111,14 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       : null;
     return { account: account ?? null, tabID: tab?.id ?? null, tabURL: tab?.url ?? null,
       offscreen, tabs, serviceWorker: true };
-  })().then(reply, (error) => reply({ error: String(error) }));
+  })().then(reply, (error) => {
+    const detail = String(error);
+    if (message.action === "activate-probe") {
+      chrome.storage.local.set({ activationProbe: {
+        token: message.token, windowID: message.windowID, error: detail,
+      } });
+    }
+    reply({ error: detail });
+  });
   return true;
 });

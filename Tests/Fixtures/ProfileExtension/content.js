@@ -4,7 +4,7 @@ function showAccount(value) {
 chrome.storage.local.get("account").then(({ account }) => showAccount(account));
 function showActivation(value) {
   if (value && typeof value.token === "string" && Number.isInteger(value.windowID)
-    && Number.isInteger(value.tabID)) {
+    && (Number.isInteger(value.tabID) || typeof value.error === "string")) {
     document.documentElement.dataset.arcusisActivation = JSON.stringify(value);
   }
 }

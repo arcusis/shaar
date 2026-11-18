@@ -128,9 +128,15 @@ final class NativeSelectionProbe {
     try await capture(secondStore, color: .dark, suffix: "dark")
     let rapid = try await sendActivation(
       from: secondary, tabs: [a.id, b.id, a.id], windowID: owner, profile: alpha)
-    try await wait("rapid engine activation") {
-      secondStore.session.selectedSpaceID == spaces[0].id
-        && secondStore.session.selectedSpace.selectedTabID == a.id
+    do {
+      try await wait("rapid engine activation") {
+        secondStore.session.selectedSpaceID == spaces[0].id
+          && secondStore.session.selectedSpace.selectedTabID == a.id
+      }
+    } catch {
+      let report = await activationReportSnapshot(in: a.id)
+      throw NativeSelectionFailure(
+        "\(error.localizedDescription); selectedSpaceID=\(secondStore.session.selectedSpaceID.uuidString); selectedTabID=\(secondStore.session.selectedSpace.selectedTabID?.uuidString ?? "none"); worker activation report=\(report)")
     }
     let rapidReport = try await activationReport(rapid, in: a.id)
     observations.append(rapidReport)
@@ -291,8 +297,19 @@ final class NativeSelectionProbe {
 
   private func dispatchActivation(popup: String, json: String) {
     runtime.evaluateProbePopupID(
-      popup, script: "(()=>{chrome.runtime.sendMessage(\(json)).catch(()=>{});return {};})()"
+      popup,
+      script: "(()=>{chrome.runtime.sendMessage(\(json)).then(r=>{if(r?.error)document.documentElement.dataset.arcusisActivationWorkerError=r.error}).catch(e=>{document.documentElement.dataset.arcusisActivationWorkerError=String(e)});return {};})()"
     ) { _ in }
+  }
+
+  private func activationReportSnapshot(in tab: UUID) async -> String {
+    let json: String? = await withCheckedContinuation { continuation in
+      runtime.evaluate(
+        inTabID: tab.uuidString,
+        script: "JSON.stringify({report:JSON.parse(document.documentElement.dataset.arcusisActivation||'null'),error:document.documentElement.dataset.arcusisActivationWorkerError||null})"
+      ) { continuation.resume(returning: $0) }
+    }
+    return json ?? "unavailable"
   }
 
   private func activationReport(_ token: String, in tab: UUID) async throws
@@ -309,6 +326,9 @@ final class NativeSelectionProbe {
         let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
         NativeSelectionActivationReportValidation.isForToken(value, token)
       {
+        if let error = value["error"] as? String {
+          throw NativeSelectionFailure("Extension activation worker failed: \(error)")
+        }
         guard value["title"] as? String == activationTitleByToken[token] else {
           throw NativeSelectionFailure("Extension activation selected an unexpected tab.")
         }
@@ -369,7 +389,7 @@ final class NativeSelectionProbe {
   }
 
   private func wait(_ label: String, until ready: () -> Bool) async throws {
-    for _ in 0..<100 {
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
       if ready() { return }
       try await Task.sleep(for: .milliseconds(100))
     }

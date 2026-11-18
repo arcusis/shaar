@@ -136,7 +136,8 @@ final class NativeSelectionProbe {
     } catch {
       let report = await activationReportSnapshot(in: a.id)
       throw NativeSelectionFailure(
-        "\(error.localizedDescription); selectedSpaceID=\(secondStore.session.selectedSpaceID.uuidString); selectedTabID=\(secondStore.session.selectedSpace.selectedTabID?.uuidString ?? "none"); worker activation report=\(report)")
+        "\(error.localizedDescription); selectedSpaceID=\(secondStore.session.selectedSpaceID.uuidString); selectedTabID=\(secondStore.session.selectedSpace.selectedTabID?.uuidString ?? "none"); worker activation report=\(report)"
+      )
     }
     let rapidReport = try await activationReport(rapid, in: a.id)
     observations.append(rapidReport)
@@ -298,7 +299,8 @@ final class NativeSelectionProbe {
   private func dispatchActivation(popup: String, json: String) {
     runtime.evaluateProbePopupID(
       popup,
-      script: "(()=>{chrome.runtime.sendMessage(\(json)).then(r=>{if(r?.error)document.documentElement.dataset.arcusisActivationWorkerError=r.error}).catch(e=>{document.documentElement.dataset.arcusisActivationWorkerError=String(e)});return {};})()"
+      script:
+        "(()=>{chrome.runtime.sendMessage(\(json)).then(r=>{if(r?.error)document.documentElement.dataset.arcusisActivationWorkerError=r.error}).catch(e=>{document.documentElement.dataset.arcusisActivationWorkerError=String(e)});return {};})()"
     ) { _ in }
   }
 
@@ -306,7 +308,8 @@ final class NativeSelectionProbe {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluate(
         inTabID: tab.uuidString,
-        script: "JSON.stringify({report:JSON.parse(document.documentElement.dataset.arcusisActivation||'null'),error:document.documentElement.dataset.arcusisActivationWorkerError||null})"
+        script:
+          "JSON.stringify({report:JSON.parse(document.documentElement.dataset.arcusisActivation||'null'),error:document.documentElement.dataset.arcusisActivationWorkerError||null})"
       ) { continuation.resume(returning: $0) }
     }
     return json ?? "unavailable"

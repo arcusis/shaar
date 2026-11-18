@@ -440,6 +440,42 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   }
 }
 
+@Test func sqliteSnapshotRejectsSymlinksAndOversizedSources() throws {
+  let profile = try profileDirectory(name: "SQLiteSourceValidation")
+  let database = profile.appending(path: "History")
+  try createDatabase(sqlFixture: "ChromiumHistory.sql", at: database)
+  let symlink = profile.appending(path: "HistoryLink")
+  try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: database)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.rows(at: symlink, query: "SELECT 1")
+  }
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.rows(at: database, query: "SELECT 1", maximumSourceSize: 1)
+  }
+}
+
+@Test func sqliteSnapshotImportsRowsWithTriggersAndViewsInSchema() throws {
+  let profile = try profileDirectory(name: "SQLiteSchemaObjects")
+  let database = profile.appending(path: "History")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: database,
+    extraSQL: """
+      CREATE TABLE trigger_effects(value INTEGER);
+      CREATE TRIGGER record_insert AFTER INSERT ON urls BEGIN
+        INSERT INTO trigger_effects VALUES(NEW.id);
+      END;
+      CREATE VIEW url_view AS SELECT id, url FROM urls;
+      """
+  )
+
+  let rows = try BrowserImportSQLite.rows(at: database, query: "SELECT id FROM urls")
+  #expect(rows.count == 1)
+  let effects = try BrowserImportSQLite.rows(at: database, query: "SELECT value FROM trigger_effects")
+  #expect(effects.isEmpty)
+  let viewRows = try BrowserImportSQLite.rows(at: database, query: "SELECT id FROM url_view")
+  #expect(viewRows.count == 1)
+}
+
 @Test func sqliteSnapshotPreservesTextAfterEmbeddedNUL() throws {
   let profile = try profileDirectory(name: "SQLiteNUL")
   let database = profile.appending(path: "History")

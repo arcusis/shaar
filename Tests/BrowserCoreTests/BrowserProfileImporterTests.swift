@@ -636,6 +636,25 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   }
 }
 
+@Test func firefoxProfileDoesNotApplyExportCapToPlacesDatabase() throws {
+  let database = try databaseURLProfile(name: "FirefoxLarge", databaseName: "places.sqlite")
+  defer { try? FileManager.default.removeItem(at: database.deletingLastPathComponent()) }
+  let descriptor = open(database.path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)
+  #expect(descriptor >= 0)
+  guard descriptor >= 0 else { return }
+  defer { close(descriptor) }
+  #expect(ftruncate(descriptor, off_t(65 * 1024 * 1024)) == 0)
+
+  do {
+    _ = try BrowserImport.readProfile(at: database, source: .firefox)
+    Issue.record("The sparse database should fail SQLite parsing")
+  } catch let error as BrowserImport.ImportError {
+    if case .unsupported = error {
+      Issue.record("The export size cap must not reject SQLite databases")
+    }
+  }
+}
+
 @Test func safariFallbackOnlyAcceptsKnownSafariFiles() throws {
   let directory = try profileDirectory(name: "SafariWrongFileFallback")
   defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }

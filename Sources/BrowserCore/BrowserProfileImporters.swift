@@ -59,7 +59,6 @@ private struct ChromiumProfileImporter: BrowserProfileImporter {
       hasBookmarks ? try BrowserImport.read(bookmarksURL).map { $0.with(source: source) } : []
     let historyItems: [BrowserImportItem]
     if hasHistory {
-      _ = try BrowserImportFileReader.read(historyURL)
       historyItems = try ChromiumHistoryReader.read(historyURL, source: source)
     } else {
       historyItems = []
@@ -93,7 +92,6 @@ private struct SafariProfileImporter: BrowserProfileImporter {
       hasBookmarks ? try BrowserImport.read(bookmarksURL).map { $0.with(source: source) } : []
     let historyItems: [BrowserImportItem]
     if hasHistory {
-      _ = try BrowserImportFileReader.read(historyURL)
       historyItems = try SafariHistoryReader.read(historyURL)
     } else {
       historyItems = []
@@ -113,7 +111,6 @@ private struct FirefoxProfileImporter: BrowserProfileImporter {
     guard isRegularProfileFile(databaseURL) else {
       throw BrowserImport.ImportError.unsupported
     }
-    _ = try BrowserImportFileReader.read(databaseURL)
     let imported = try FirefoxHistoryReader.read(databaseURL)
     let bookmarkItems = imported.bookmarks.map { $0.with(source: source) }
     let historyItems = imported.history

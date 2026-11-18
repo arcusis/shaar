@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Darwin
 import Foundation
 
 public enum BrowserImportSource: String, CaseIterable, Identifiable, Sendable {
@@ -51,12 +52,18 @@ private struct ChromiumProfileImporter: BrowserProfileImporter {
     guard isDirectory else { throw BrowserImport.ImportError.unsupported }
     let bookmarksURL = url.appending(path: "Bookmarks")
     let historyURL = url.appending(path: "History")
-    let hasBookmarks = FileManager.default.fileExists(atPath: bookmarksURL.path)
-    let hasHistory = FileManager.default.fileExists(atPath: historyURL.path)
+    let hasBookmarks = isRegularProfileFile(bookmarksURL)
+    let hasHistory = isRegularProfileFile(historyURL)
     guard hasBookmarks || hasHistory else { throw BrowserImport.ImportError.unsupported }
     let bookmarkItems =
       hasBookmarks ? try BrowserImport.read(bookmarksURL).map { $0.with(source: source) } : []
-    let historyItems = hasHistory ? try ChromiumHistoryReader.read(historyURL, source: source) : []
+    let historyItems: [BrowserImportItem]
+    if hasHistory {
+      _ = try BrowserImportFileReader.read(historyURL)
+      historyItems = try ChromiumHistoryReader.read(historyURL, source: source)
+    } else {
+      historyItems = []
+    }
     return BrowserImportBatch(source: source, items: bookmarkItems + historyItems)
   }
 }
@@ -69,15 +76,28 @@ private struct SafariProfileImporter: BrowserProfileImporter {
     let isDirectory =
       url.hasDirectoryPath
       || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-    let directory = isDirectory ? url : url.deletingLastPathComponent()
+    let directory: URL
+    if isDirectory {
+      directory = url
+    } else if ["Bookmarks.plist", "History.db"].contains(url.lastPathComponent) {
+      directory = url.deletingLastPathComponent()
+    } else {
+      throw BrowserImport.ImportError.unsupported
+    }
     let bookmarksURL = directory.appending(path: "Bookmarks.plist")
     let historyURL = directory.appending(path: "History.db")
-    let hasBookmarks = FileManager.default.fileExists(atPath: bookmarksURL.path)
-    let hasHistory = FileManager.default.fileExists(atPath: historyURL.path)
+    let hasBookmarks = isRegularProfileFile(bookmarksURL)
+    let hasHistory = isRegularProfileFile(historyURL)
     guard hasBookmarks || hasHistory else { throw BrowserImport.ImportError.unsupported }
     let bookmarkItems =
       hasBookmarks ? try BrowserImport.read(bookmarksURL).map { $0.with(source: source) } : []
-    let historyItems = hasHistory ? try SafariHistoryReader.read(historyURL) : []
+    let historyItems: [BrowserImportItem]
+    if hasHistory {
+      _ = try BrowserImportFileReader.read(historyURL)
+      historyItems = try SafariHistoryReader.read(historyURL)
+    } else {
+      historyItems = []
+    }
     return BrowserImportBatch(source: source, items: bookmarkItems + historyItems)
   }
 }
@@ -90,14 +110,20 @@ private struct FirefoxProfileImporter: BrowserProfileImporter {
     let databaseURL =
       url.lastPathComponent == "places.sqlite"
       ? url : url.appending(path: "places.sqlite")
-    guard FileManager.default.fileExists(atPath: databaseURL.path) else {
+    guard isRegularProfileFile(databaseURL) else {
       throw BrowserImport.ImportError.unsupported
     }
+    _ = try BrowserImportFileReader.read(databaseURL)
     let imported = try FirefoxHistoryReader.read(databaseURL)
     let bookmarkItems = imported.bookmarks.map { $0.with(source: source) }
     let historyItems = imported.history
     return BrowserImportBatch(source: source, items: bookmarkItems + historyItems)
   }
+}
+
+private func isRegularProfileFile(_ url: URL) -> Bool {
+  var info = stat()
+  return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
 }
 
 private func rejectPrivateProfile(_ url: URL) throws {

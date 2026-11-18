@@ -592,6 +592,61 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   }
 }
 
+@Test func profileImportersRejectSymlinkedChildFiles() throws {
+  let outside = try profileDirectory(name: "Outside")
+  defer { try? FileManager.default.removeItem(at: outside.deletingLastPathComponent()) }
+  let outsideBookmarks = outside.appending(path: "Bookmarks")
+  try copyFixture("ChromiumBookmarks", to: outsideBookmarks)
+  try copyFixture("SafariBookmarks.plist", to: outside.appending(path: "Bookmarks.plist"))
+  try createDatabase(sqlFixture: "FirefoxPlaces.sql", at: outside.appending(path: "places.sqlite"))
+  let chromium = try profileDirectory(name: "ChromeSymlink")
+  defer { try? FileManager.default.removeItem(at: chromium.deletingLastPathComponent()) }
+  try FileManager.default.createSymbolicLink(
+    at: chromium.appending(path: "Bookmarks"), withDestinationURL: outsideBookmarks)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: chromium, source: .chrome)
+  }
+
+  let safari = try profileDirectory(name: "SafariSymlink")
+  defer { try? FileManager.default.removeItem(at: safari.deletingLastPathComponent()) }
+  try FileManager.default.createSymbolicLink(
+    at: safari.appending(path: "Bookmarks.plist"),
+    withDestinationURL: outside.appending(path: "Bookmarks.plist"))
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: safari, source: .safari)
+  }
+
+  let firefox = try profileDirectory(name: "FirefoxSymlink")
+  defer { try? FileManager.default.removeItem(at: firefox.deletingLastPathComponent()) }
+  try FileManager.default.createSymbolicLink(
+    at: firefox.appending(path: "places.sqlite"),
+    withDestinationURL: outside.appending(path: "places.sqlite"))
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: firefox, source: .firefox)
+  }
+}
+
+@Test func cappedProfileReadRejectsOversizedExport() throws {
+  let export = FileManager.default.temporaryDirectory.appending(
+    path: "BrowserImport-large-\(UUID()).json")
+  defer { try? FileManager.default.removeItem(at: export) }
+  try Data(repeating: 0x20, count: 8).write(to: export)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportFileReader.read(export, maximumSize: 4)
+  }
+}
+
+@Test func safariFallbackOnlyAcceptsKnownSafariFiles() throws {
+  let directory = try profileDirectory(name: "SafariWrongFileFallback")
+  defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+  try copyFixture("SafariBookmarks.plist", to: directory.appending(path: "Bookmarks.plist"))
+  let unrelated = directory.appending(path: "notes.txt")
+  try Data("not a Safari profile file".utf8).write(to: unrelated)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: unrelated, source: .safari)
+  }
+}
+
 private func profileDirectory(name: String) throws -> URL {
   let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
   let profile = root.appending(path: name)

@@ -2,7 +2,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Darwin
 import Foundation
+
+enum BrowserImportFileReader {
+  static let maximumSize = 64 * 1024 * 1024
+
+  static func read(_ url: URL, maximumSize: Int = maximumSize) throws -> Data {
+    var info = stat()
+    guard lstat(url.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+      info.st_size >= 0, info.st_size <= maximumSize
+    else { throw BrowserImport.ImportError.unsupported }
+    return try Data(contentsOf: url, options: .mappedIfSafe)
+  }
+}
 
 private struct BrowserImportFolderKey: Hashable {
   let parentID: UUID
@@ -41,7 +54,7 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
 /// Reads browser export files without opening the source browser's profile database.
 public enum BrowserImport {
   public static func read(_ url: URL) throws -> [BrowserImportItem] {
-    let data = try Data(contentsOf: url)
+    let data = try BrowserImportFileReader.read(url)
     if ["html", "htm"].contains(url.pathExtension.lowercased()) {
       guard let html = String(data: data, encoding: .utf8) else { throw ImportError.unsupported }
       return htmlBookmarks(html)

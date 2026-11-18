@@ -18,7 +18,7 @@
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)](#requirements)
 [![Apple silicon](https://img.shields.io/badge/Apple%20silicon-arm64-000000?logo=apple&logoColor=white)](#requirements)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift&logoColor=white)](https://www.swift.org)
-[![Chromium 155](https://img.shields.io/badge/Chromium-155-4285F4?logo=googlechrome&logoColor=white)](ThirdParty/ChromiumEngine)
+[![Chromium 157](https://img.shields.io/badge/Chromium-157-4285F4?logo=googlechrome&logoColor=white)](ThirdParty/ChromiumEngine)
 [![Open issues](https://img.shields.io/github/issues/arcusis/shaar?color=71E122)](https://github.com/arcusis/shaar/issues)
 
 [**Download**](https://github.com/arcusis/shaar/releases) ·

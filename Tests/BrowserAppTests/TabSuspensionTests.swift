@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import BrowserTestSupport
 import ChromiumBridge
 import Foundation
 import Testing
@@ -154,7 +155,9 @@ struct TabSuspensionTests {
     let before = beforeSamples.sorted()[beforeSamples.count / 2]
     let after = afterSamples.sorted()[afterSamples.count / 2]
     print("privateSleepingCandidateDownloadLookup: before=\(before), after=\(after)")
-    #expect(after < before * 0.5)
+    if !BrowserTestEnvironment.isSanitizerRun {
+      #expect(after < before * 0.5)
+    }
   }
 
   @Test func anEditedFormStaysAwake() throws {

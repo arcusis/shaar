@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import BrowserTestSupport
 import Foundation
 import QuickLookThumbnailing
 import SwiftUI
@@ -134,7 +135,9 @@ struct LibraryDownloadTests {
     let before = beforeSamples.sorted()[beforeSamples.count / 2]
     let after = afterSamples.sorted()[afterSamples.count / 2]
     print("downloadDateGroupsBenchmark: before=\(before), after=\(after)")
-    #expect(after < before * 0.75)
+    if !BrowserTestEnvironment.isSanitizerRun {
+      #expect(after < before * 0.75)
+    }
   }
 
   private func legacyDateGroups(

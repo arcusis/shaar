@@ -393,9 +393,13 @@ def run_localization_engine(checks: Commands) -> None:
 
 def run_sanitizer(checks: Commands, sanitizer: str) -> None:
     environment = dict(os.environ, ASAN_OPTIONS="halt_on_error=1", TSAN_OPTIONS="halt_on_error=1")
-    run_swift_tests(checks, sanitizer, ["swift", "test", "--jobs", "2", "--force-resolved-versions",
-                    "--scratch-path", f"build/swiftpm/{sanitizer}", "--sanitize", sanitizer,
-                    "--xunit-output", str(checks.directory / "swift.xml")], env=environment)
+    run_swift_tests(
+        checks, sanitizer,
+        ["swift", "test", "--jobs", "2", "--no-parallel", "--force-resolved-versions",
+         "--scratch-path", f"build/swiftpm/{sanitizer}", "--sanitize", sanitizer,
+         "--xunit-output", str(checks.directory / "swift.xml")],
+        env=environment,
+    )
 
 
 def record_stage_error(checks: Commands, error: Exception) -> None:

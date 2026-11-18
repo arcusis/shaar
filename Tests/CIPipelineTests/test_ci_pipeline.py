@@ -1514,6 +1514,19 @@ class SwiftReportTests(unittest.TestCase):
 
 
 class ProbeSoakTests(unittest.TestCase):
+    def test_sanitizer_tests_run_without_parallel_workers(self):
+        checks = unittest.mock.Mock()
+        checks.directory = Path("/tmp/sanitizer-reports")
+        with (
+            patch.object(STAGES, "require_hosted_mac"),
+            patch.object(STAGES, "run_swift_tests") as run,
+        ):
+            STAGES.run_sanitizer(checks, "thread")
+        command = run.call_args.args[2]
+        self.assertIn("--no-parallel", command)
+        self.assertLess(command.index("--jobs"), command.index("--no-parallel"))
+        self.assertEqual(command[command.index("--sanitize") + 1], "thread")
+
     def test_engine_shard_runs_later_assignments_after_a_probe_failure(self):
         checks = SimpleNamespace(results=[])
 

@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserTestSupport
 import CSQLite
 import Darwin
 import Foundation
@@ -168,7 +169,9 @@ private func legacyHistoryRows(_ items: [BrowserImportItem]) -> [[String: Any]] 
   let before = beforeSamples.sorted()[beforeSamples.count / 2]
   let after = afterSamples.sorted()[afterSamples.count / 2]
   print("browserImportFolderPathAllocationBenchmark: before=\(before), after=\(after)")
-  #expect(after < before * 0.9)
+  if !BrowserTestEnvironment.isSanitizerRun {
+    #expect(after < before * 0.9)
+  }
 }
 
 private func legacyImportOperations(

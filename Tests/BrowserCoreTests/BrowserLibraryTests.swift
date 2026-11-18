@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserTestSupport
 import CoreFoundation
 import Darwin
 import Foundation
@@ -198,7 +199,9 @@ private func threadCPUSeconds() -> Double {
   let before = beforeSamples.sorted()[beforeSamples.count / 2]
   let after = afterSamples.sorted()[afterSamples.count / 2]
   print("historyVisitMaximumAllocationBenchmark: before=\(before), after=\(after)")
-  #expect(after < before * 0.8)
+  if !BrowserTestEnvironment.isSanitizerRun {
+    #expect(after < before * 0.8)
+  }
 }
 
 @Test func historyEntryDecodingFocusedBenchmark() throws {

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import CSQLite
+import Darwin
 import Foundation
 
 enum BrowserImportSQLite {
@@ -13,34 +14,54 @@ enum BrowserImportSQLite {
     case null
   }
 
-  static func rows(at source: URL, query: String, limit: Int = 100_000) throws -> [[String: Value]]
-  {
+  static func rows(
+    at source: URL, query: String, limit: Int = 100_000,
+    maximumSourceSize: Int64 = 512 * 1024 * 1024
+  ) throws -> [[String: Value]] {
     var rows: [[String: Value]] = []
-    try read(at: source, queries: [query], limit: limit) { _, result in rows = result }
+    try read(at: source, queries: [query], limit: limit, maximumSourceSize: maximumSourceSize) {
+      _, result in rows = result
+    }
     return rows
   }
 
   static func read(
     at source: URL, queries: [String], limit: Int = 100_000,
+    maximumSourceSize: Int64 = 512 * 1024 * 1024,
+    snapshotDirectory: URL = FileManager.default.temporaryDirectory,
     consume: (Int, [[String: Value]]) throws -> Void
   ) throws {
     guard !queries.isEmpty else { return }
-    let temporary = FileManager.default.temporaryDirectory
-      .appending(path: "shaar-import-\(UUID().uuidString).sqlite")
+    var sourceInfo = stat()
+    guard lstat(source.path, &sourceInfo) == 0,
+      (sourceInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+      sourceInfo.st_size >= 0, sourceInfo.st_size <= maximumSourceSize
+    else { throw BrowserImport.ImportError.databaseUnavailable("invalid source file") }
+    let sourceParent = source.deletingLastPathComponent().path.withCString {
+      shaar_realpath_or_original($0)
+    }
+    let parentPath =
+      sourceParent.map { String(cString: $0) } ?? source.deletingLastPathComponent().path
+    let sourcePath = URL(fileURLWithPath: parentPath, isDirectory: true)
+      .appending(path: source.lastPathComponent).path
+    free(sourceParent)
+    let temporary = snapshotDirectory.appending(path: "shaar-import-\(UUID().uuidString).sqlite")
     defer {
       try? FileManager.default.removeItem(at: temporary)
       try? FileManager.default.removeItem(at: URL(filePath: temporary.path + "-wal"))
       try? FileManager.default.removeItem(at: URL(filePath: temporary.path + "-shm"))
     }
 
-    var original: OpaquePointer?
-    guard
-      sqlite3_open_v2(source.path, &original, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil)
-        == SQLITE_OK,
-      let original
-    else { throw BrowserImport.ImportError.databaseUnavailable("open source") }
+    let original = try openSource(at: sourcePath)
     defer { sqlite3_close(original) }
+    try configure(original)
     sqlite3_busy_timeout(original, 2_000)
+
+    let temporaryDescriptor = open(temporary.path, O_CREAT | O_EXCL | O_RDWR, mode_t(0o600))
+    guard temporaryDescriptor >= 0 else {
+      throw BrowserImport.ImportError.databaseUnavailable("create snapshot")
+    }
+    _ = close(temporaryDescriptor)
 
     var copy: OpaquePointer?
     guard
@@ -51,12 +72,11 @@ enum BrowserImportSQLite {
     defer {
       if let copy { sqlite3_close(copy) }
     }
+    try configure(destinationDatabase)
 
-    guard let backup = sqlite3_backup_init(destinationDatabase, "main", original, "main") else {
-      throw BrowserImport.ImportError.databaseUnavailable("start snapshot")
-    }
-    let backupResult = sqlite3_backup_step(backup, -1)
-    let backupFinished = sqlite3_backup_finish(backup)
+    let backup = sqlite3_backup_init(destinationDatabase, "main", original, "main")
+    let backupResult = backup.map { sqlite3_backup_step($0, -1) } ?? SQLITE_ERROR
+    let backupFinished = backup.map(sqlite3_backup_finish) ?? SQLITE_ERROR
     guard backupResult == SQLITE_DONE, backupFinished == SQLITE_OK else {
       throw BrowserImport.ImportError.databaseUnavailable("copy snapshot")
     }
@@ -72,6 +92,7 @@ enum BrowserImportSQLite {
       let snapshot
     else { throw BrowserImport.ImportError.databaseUnavailable("open copied snapshot") }
     defer { sqlite3_close(snapshot) }
+    try configure(snapshot)
 
     for (queryIndex, query) in queries.enumerated() {
       var statement: OpaquePointer?
@@ -118,5 +139,26 @@ enum BrowserImportSQLite {
       }
       try consume(queryIndex, result)
     }
+  }
+
+  static func configure(
+    _ database: OpaquePointer,
+    enableDefensive: (OpaquePointer) -> Int32 = shaar_sqlite_enable_defensive
+  ) throws {
+    guard enableDefensive(database) == SQLITE_OK,
+      sqlite3_exec(database, "PRAGMA trusted_schema=OFF", nil, nil, nil) == SQLITE_OK
+    else { throw BrowserImport.ImportError.databaseUnavailable("configure database") }
+    sqlite3_limit(database, SQLITE_LIMIT_LENGTH, 512 * 1024 * 1024)
+  }
+
+  static func openSource(at path: String) throws -> OpaquePointer {
+    var database: OpaquePointer?
+    let result = sqlite3_open_v2(
+      path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_NOFOLLOW, nil)
+    guard result == SQLITE_OK, let database else {
+      if let database { sqlite3_close(database) }
+      throw BrowserImport.ImportError.databaseUnavailable("open source")
+    }
+    return database
   }
 }

@@ -52,17 +52,7 @@ enum BrowserImportSQLite {
       try? FileManager.default.removeItem(at: URL(filePath: temporary.path + "-shm"))
     }
 
-    var original: OpaquePointer?
-    let openResult = sqlite3_open_v2(
-      sourcePath, &original, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_NOFOLLOW,
-      nil)
-    guard
-      openResult == SQLITE_OK,
-      let original
-    else {
-      if let original { sqlite3_close(original) }
-      throw BrowserImport.ImportError.databaseUnavailable("open source")
-    }
+    let original = try openSource(at: sourcePath)
     defer { sqlite3_close(original) }
     try configure(original)
     sqlite3_busy_timeout(original, 2_000)
@@ -84,11 +74,9 @@ enum BrowserImportSQLite {
     }
     try configure(destinationDatabase)
 
-    guard let backup = sqlite3_backup_init(destinationDatabase, "main", original, "main") else {
-      throw BrowserImport.ImportError.databaseUnavailable("start snapshot")
-    }
-    let backupResult = sqlite3_backup_step(backup, -1)
-    let backupFinished = sqlite3_backup_finish(backup)
+    let backup = sqlite3_backup_init(destinationDatabase, "main", original, "main")
+    let backupResult = backup.map { sqlite3_backup_step($0, -1) } ?? SQLITE_ERROR
+    let backupFinished = backup.map(sqlite3_backup_finish) ?? SQLITE_ERROR
     guard backupResult == SQLITE_DONE, backupFinished == SQLITE_OK else {
       throw BrowserImport.ImportError.databaseUnavailable("copy snapshot")
     }
@@ -161,5 +149,16 @@ enum BrowserImportSQLite {
       sqlite3_exec(database, "PRAGMA trusted_schema=OFF", nil, nil, nil) == SQLITE_OK
     else { throw BrowserImport.ImportError.databaseUnavailable("configure database") }
     sqlite3_limit(database, SQLITE_LIMIT_LENGTH, 512 * 1024 * 1024)
+  }
+
+  static func openSource(at path: String) throws -> OpaquePointer {
+    var database: OpaquePointer?
+    let result = sqlite3_open_v2(
+      path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_NOFOLLOW, nil)
+    guard result == SQLITE_OK, let database else {
+      if let database { sqlite3_close(database) }
+      throw BrowserImport.ImportError.databaseUnavailable("open source")
+    }
+    return database
   }
 }

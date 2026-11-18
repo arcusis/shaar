@@ -452,6 +452,11 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   #expect(throws: BrowserImport.ImportError.self) {
     try BrowserImportSQLite.rows(at: database, query: "SELECT 1", maximumSourceSize: 1)
   }
+  let malformedDatabase = profile.appending(path: "MalformedHistory")
+  try Data("not a SQLite database".utf8).write(to: malformedDatabase)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.rows(at: malformedDatabase, query: "SELECT 1")
+  }
   #expect(throws: BrowserImport.ImportError.self) {
     try BrowserImportSQLite.read(
       at: database, queries: ["SELECT 1"],
@@ -605,6 +610,9 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   let absent = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID()).sqlite")
   #expect(throws: BrowserImport.ImportError.self) {
     try BrowserImportSQLite.rows(at: absent, query: "SELECT 1")
+  }
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.openSource(at: absent.path)
   }
 
   let profile = try profileDirectory(name: "SQLiteQuery")

@@ -84,18 +84,6 @@ public protocol ShaarNavigationHandleResolving: Sendable {
   ) throws -> ShaarABINativeHandles
 }
 
-private final class ShaarNavigationReplyBox: @unchecked Sendable {
-  let expectedRequestID: UInt64
-  let completion: @Sendable (Result<Data, ShaarEngineError>) -> Void
-  init(
-    requestID: UInt64,
-    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
-  ) {
-    expectedRequestID = requestID
-    self.completion = completion
-  }
-}
-
 private func copyABISlice(_ bytes: shaar_bytes) throws -> Data {
   guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
     throw ShaarEngineError.invalidEvent("invalid ABI byte slice")
@@ -105,50 +93,33 @@ private func copyABISlice(_ bytes: shaar_bytes) throws -> Data {
 }
 
 private let shaarNavigationReply: shaar_reply_fn = { context, result in
-  guard let context else { return }
-  let box = Unmanaged<ShaarNavigationReplyBox>.fromOpaque(context).takeRetainedValue()
-  guard let result else {
-    box.completion(.failure(.invalidEvent("missing navigation result")))
-    return
-  }
-  do {
-    let result = result.pointee
-    guard result.size >= UInt32(MemoryLayout<shaar_result>.size) else {
-      throw ShaarEngineError.invalidEvent("short navigation result")
+  ShaarABIReplyRegistry.shared.resolve(context: context) { requestID in
+    guard let result else { return .failure(.invalidEvent("missing navigation result")) }
+    do {
+      let value = result.pointee
+      guard value.size >= UInt32(MemoryLayout<shaar_result>.size) else {
+        throw ShaarEngineError.invalidEvent("short navigation result")
+      }
+      guard value.request_id == requestID else {
+        throw ShaarEngineError.invalidEvent("navigation result request ID mismatch")
+      }
+      guard value.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
+        throw ShaarEngineError.invalidEvent("short navigation error")
+      }
+      try ShaarStatusCode.decode(
+        UInt32(value.error.code.rawValue), platformCode: value.error.platform_code,
+        message: String(decoding: try copyABISlice(value.error.message), as: UTF8.self))
+      let payload = try copyABISlice(value.payload_json)
+      guard !payload.isEmpty,
+        let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+        navigationInteger(object["schemaVersion"]) == 1
+      else { throw ShaarEngineError.invalidEvent("invalid navigation result payload") }
+      return .success(payload)
+    } catch let error as ShaarEngineError {
+      return .failure(error)
+    } catch {
+      return .failure(.invalidEvent("invalid navigation result bytes"))
     }
-    guard result.request_id == box.expectedRequestID else {
-      throw ShaarEngineError.invalidEvent("navigation result request ID mismatch")
-    }
-    guard result.error.size >= UInt32(MemoryLayout<shaar_error>.size) else {
-      throw ShaarEngineError.invalidEvent("short navigation error")
-    }
-    try ShaarStatusCode.decode(
-      UInt32(result.error.code.rawValue), platformCode: result.error.platform_code,
-      message: String(decoding: try copyABISlice(result.error.message), as: UTF8.self))
-    let payload = try copyABISlice(result.payload_json)
-    guard !payload.isEmpty,
-      let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
-      navigationInteger(object["schemaVersion"]) == 1
-    else { throw ShaarEngineError.invalidEvent("invalid navigation result payload") }
-    box.completion(.success(payload))
-  } catch let error as ShaarEngineError {
-    box.completion(.failure(error))
-  } catch {
-    box.completion(.failure(.invalidEvent("invalid navigation result bytes")))
-  }
-}
-
-private final class ShaarNavigationRequestIDs: @unchecked Sendable {
-  private let lock = NSLock()
-  private var next: UInt64 = 1
-
-  func take() -> UInt64 {
-    lock.lock()
-    defer { lock.unlock() }
-    let result = next
-    next &+= 1
-    if next == 0 { next = 1 }
-    return result
   }
 }
 
@@ -157,7 +128,6 @@ private final class ShaarNavigationRequestIDs: @unchecked Sendable {
 public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked Sendable {
   private let submitSymbol: UnsafeRawPointer
   private let handleResolver: any ShaarNavigationHandleResolving
-  private let requestIDs: ShaarNavigationRequestIDs
 
   public init(
     resolver: ShaarSymbolResolving,
@@ -168,7 +138,6 @@ public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked
     }
     submitSymbol = symbol
     self.handleResolver = handleResolver
-    requestIDs = ShaarNavigationRequestIDs()
   }
 
   public func submit(
@@ -182,9 +151,11 @@ public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked
     guard handles.scope.size >= UInt32(MemoryLayout<shaar_scope>.size),
       hasRegularProfile != hasPrivateSession
     else { throw ShaarEngineError.invalidEvent("native navigation scope is invalid") }
-    let requestID = requestIDs.take()
-    let replyBox = ShaarNavigationReplyBox(requestID: requestID, completion: completion)
-    let replyContext = Unmanaged.passRetained(replyBox).toOpaque()
+    let replyBox = ShaarABIReplyRegistry.shared.make { result in
+      Task { @MainActor in completion(result) }
+    }
+    let requestID = replyBox.requestID
+    let replyContext = ShaarABIReplyRegistry.shared.context(for: replyBox)
     var immediateError = shaar_error(
       size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
       platform_code: 0,
@@ -199,7 +170,7 @@ public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked
         shaarNavigationReply, replyContext, &immediateError)
     }
     guard status == ShaarStatusCode.ok.rawValue else {
-      Unmanaged<ShaarNavigationReplyBox>.fromOpaque(replyContext).release()
+      ShaarABIReplyRegistry.shared.discard(context: replyContext)
       let message =
         (try? String(decoding: copyABISlice(immediateError.message), as: UTF8.self)) ?? ""
       try ShaarStatusCode.decode(

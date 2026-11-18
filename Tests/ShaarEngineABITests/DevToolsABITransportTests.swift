@@ -116,3 +116,29 @@ private struct FakeDevToolsABIHandleResolver: ShaarNavigationHandleResolving {
     try transport.submit(request) { _ in Issue.record("unexpected asynchronous reply") }
   }
 }
+
+@Test func sharedReplyBoxIgnoresDuplicateAndFailsPendingRequestOnShutdown() {
+  var results: [Result<Data, ShaarEngineError>] = []
+  let registry = ShaarABIReplyRegistry()
+  let box = registry.make { results.append($0) }
+  let context = registry.context(for: box)
+
+  registry.shutdown()
+  registry.resolve(context: context, .success(Data("late".utf8)))
+
+  #expect(results.count == 1)
+  #expect(results.first == .failure(.status(
+    .shuttingDown, platformCode: 0, message: "engine is shutting down")))
+}
+
+@Test func sharedReplyBoxDiscardsImmediateSubmitFailureOnce() {
+  var results: [Result<Data, ShaarEngineError>] = []
+  let registry = ShaarABIReplyRegistry()
+  let box = registry.make { results.append($0) }
+  let context = registry.context(for: box)
+
+  registry.discard(context: context)
+  registry.resolve(context: context, .failure(.invalidStatusCode(4)))
+
+  #expect(results.isEmpty)
+}

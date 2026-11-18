@@ -192,6 +192,7 @@ private func receiveShaarEvent(
     guard let engine, hasRun, !runReturned else {
       throw ShaarEngineError.status(.notReady, platformCode: 0, message: "engine is not running")
     }
+    ShaarABIReplyRegistry.shared.shutdown()
     var error = Self.emptyError()
     let result = withUnsafeMutablePointer(to: &error) {
       requestQuitFunction(engine, UnsafeMutableRawPointer($0))
@@ -201,6 +202,7 @@ private func receiveShaarEvent(
 
   public func release() {
     guard runReturned || !hasRun else { return }
+    ShaarABIReplyRegistry.shared.shutdown()
     if let engine {
       releaseFunction(engine)
       self.engine = nil

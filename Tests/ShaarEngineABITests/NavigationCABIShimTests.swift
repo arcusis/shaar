@@ -2,9 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Foundation
 import ShaarEngineABIC
 import ShaarEngineC
 import Testing
+
+@testable import ShaarEngineABI
 
 private typealias NavigationShimSubmit =
   @convention(c) (
@@ -106,4 +109,22 @@ private func fakeNavigationCShimSubmit(
       shaar_bytes(data: nil, size: 0), 1, noOpNavigationReply, nil, &error)
   }
   #expect(status == invalidArgument)
+}
+
+@Test func navigationReplyBoxIgnoresDuplicateReplyAfterShutdown() {
+  var replyCount = 0
+  var received: Result<Data, ShaarEngineError>?
+  let registry = ShaarABIReplyRegistry()
+  let box = registry.make { result in
+    replyCount += 1
+    received = result
+  }
+  let context = registry.context(for: box)
+
+  registry.shutdown()
+  registry.resolve(context: context, .success(Data("late".utf8)))
+
+  #expect(replyCount == 1)
+  #expect(received == .failure(.status(
+    .shuttingDown, platformCode: 0, message: "engine is shutting down")))
 }

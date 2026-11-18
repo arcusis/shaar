@@ -7,10 +7,10 @@ Shaar is a native macOS browser with a SwiftUI/AppKit shell and an embedded, pin
 - `Sources/ArcusisBrowser` contains the app entry point, native window and browser presentation, browser store, command launcher, settings, library, Inspector, and feature-specific UI and coordinators.
 - `Sources/BrowserCore` contains platform-independent browser state and policies: profiles, spaces, tabs, sessions, permissions, imports, sleeping tabs, persistence, and resource models.
 - `Sources/ChromiumBridge` is the Objective-C++ boundary to the embedded framework. It owns runtime creation, navigation, tabs, callbacks, and engine-facing services.
-- `Sources/ShaarEngineABI`, `Sources/ShaarEngineC`, and `Sources/ShaarEngineABIC` define the C/Swift ABI used for Shaar-specific Chromium operations. `ThirdParty/ChromiumEngine/layer` and its ordered patch set carry Chromium-side changes.
+- The SwiftPM target `ShaarEngineABIC` is sourced from `Sources/ShaarEngineABI/Navigation/CABI`; `ShaarStorageKeychainABIC` is sourced from `Sources/ShaarEngineABI/StorageKeychain/CABI`. `Sources/ShaarEngineABI` and `Sources/ShaarEngineC` contain the Swift and C ABI layers. `ThirdParty/ChromiumEngine/layer` and its ordered patch set carry Chromium-side changes.
 - `Sources/ShaarVerification` and `Sources/ChromiumBridgeVerification` provide hidden integration probes and verification-only bridge support; they are not the shipping UI.
 - `Tests` contains Swift unit and integration suites; Python checks under `scripts` cover repository contracts and CI orchestration.
-- `Website` contains the TypeScript static-site generator and Cloudflare Worker configuration. `Notebook` is the linked project and verification reference.
+- `website` contains the TypeScript static-site generator and Cloudflare Worker configuration. `Notebook` is the linked project and verification reference.
 
 ## Request and event flow
 
@@ -26,7 +26,7 @@ Native views send user actions to app coordinators and `BrowserStore`. BrowserCo
 
 ## Environments
 
-The public site is `https://shaar.arcusis.com`, served by the `shaar-website` Cloudflare Worker. There is no staging environment. Website checks run without Cloudflare credentials. Production deployment is a separate `wrangler deploy` operation; the workflow skips deployment with a warning if `CLOUDFLARE_API_TOKEN` is absent, so deployment remains manual from a logged-in operator environment in that case. Domain and public reachability must be verified separately. See [[Public_Website_Design]] and [Website setup](../Website/README.md).
+The public site is `https://shaar.arcusis.com`, served by the `shaar-website` Cloudflare Worker. There is no staging environment. Website checks run without Cloudflare credentials. Production deployment is a separate `wrangler deploy` operation; the workflow skips deployment with a warning if `CLOUDFLARE_API_TOKEN` is absent, so deployment remains manual from a logged-in operator environment in that case. Domain and public reachability must be verified separately. See [[Public_Website_Design]] and [Website setup](../website/README.md).
 
 The macOS app is developed and verified on macOS with Xcode; hidden probes are used for engine integration checks without bringing windows to the foreground. Normal app bundling fetches and verifies the pinned prebuilt engine. See [[Build_And_Run]], [[Verification_Harness]] and [[Chromium_157_Release_QA]].
 

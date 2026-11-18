@@ -34,6 +34,10 @@ FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
 FOUNDATION_EXPORT BOOL ARCProbeDevToolsCommandIsUnknown(NSString * _Nullable message);
 /// The quit hold may run only against an http loopback document.
 FOUNDATION_EXPORT BOOL ARCProbeLoopbackDocumentURL(NSString * _Nullable href);
+/// Suppress only host activation events that match the host's latest target.
+FOUNDATION_EXPORT BOOL ARCProbeShouldIgnoreHostTabActivationForTesting(
+  NSString * _Nullable source, NSString * _Nullable tabID,
+  NSString * _Nullable hostTargetTabID);
 /// Names the dialog outcome recorded on private probe contexts.
 FOUNDATION_EXPORT NSString *ARCProbePrivateQuitDialogResult(
   BOOL ownerCurrent, NSString * _Nullable dialogError);

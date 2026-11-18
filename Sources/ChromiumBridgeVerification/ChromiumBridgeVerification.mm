@@ -7,6 +7,7 @@
 #import "../ChromiumBridge/ChromiumRuntimeInternal.h"
 #import "../ChromiumBridge/ChromiumShaarExtensionsInternal.h"
 #import "../ChromiumBridge/ChromiumMediaSession.h"
+#import "../ChromiumBridge/ChromiumShaarActivation.h"
 #import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
 #import <objc/runtime.h>
 
@@ -16,6 +17,11 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <string>
+
+BOOL ARCProbeShouldIgnoreHostTabActivationForTesting(NSString *source, NSString *tabID,
+                                                      NSString *hostTargetTabID) {
+  return ARCShouldIgnoreHostTabActivation(source, tabID, hostTargetTabID);
+}
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 

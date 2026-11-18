@@ -943,14 +943,17 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     return;
   }
   if (event->kind == SHAAR_EVENT_TAB && [kind isEqualToString:@"activated"]) {
-    // The host's own activation is reported by its operation completion, which
-    // checks that the tab is still selected. Its event can arrive after a later
-    // page or extension activation and would undo it.
-    if ([payload[@"source"] isEqual:@"host"]) return;
-    if (_shaarTabs[tabID] &&
-        [profileID isEqualToString:_shaarTabProfiles[tabID]] &&
-        [String(event->window_id) isEqualToString:_shaarTabWindows[tabID]] &&
-        self.onTabActivated)
+    NSString *windowID = String(event->window_id);
+    if (!_shaarTabs[tabID] ||
+        ![profileID isEqualToString:_shaarTabProfiles[tabID]] ||
+        ![windowID isEqualToString:_shaarTabWindows[tabID]]) return;
+    // A nested page/extension activation can inherit source=host while the
+    // engine is inside ActivateTabAt. Drop only the host's requested target;
+    // accepting a different tab also invalidates stale host completions.
+    if (ARCShouldIgnoreHostTabActivation(payload[@"source"], tabID,
+                                         _shaarSelectedTabs[windowID])) return;
+    _shaarSelectedTabs[windowID] = tabID;
+    if (self.onTabActivated)
       self.onTabActivated(tabID, profileID);
     return;
   }

@@ -14,6 +14,14 @@ struct ShaarActivationDispatchTests {
     #expect(selected)
   }
 
+  @Test func rapidCrossSpaceFinalActivationIsNotDroppedAsAHostEvent() {
+    // In [a, b, a], the final extension activation of a can be nested inside
+    // the host's activation of b and inherit source=host from that operation.
+    #expect(!ARCProbeShouldIgnoreHostTabActivationForTesting("host", "a", "b"))
+    #expect(ARCProbeShouldIgnoreHostTabActivationForTesting("host", "b", "b"))
+    #expect(!ARCProbeShouldIgnoreHostTabActivationForTesting("extension", "a", "b"))
+  }
+
   @Test func nestedNativeNotificationsDeferSelectionUntilTabStripMutationReturns() async {
     var selections: [String] = []
     ARCPerformShaarEventCallback {

@@ -29,10 +29,12 @@ final class BrowserBackendSelectionTests: XCTestCase {
     waiters[profileID] = NSMutableArray()
     runtime.setValue(waiters, forKey: "_shaarProfileWaiters")
 
-    runtime.perform(NSSelectorFromString("finishProfileLoadID:error:"),
-                    with: profileID, with: NSError(domain: "test", code: 1))
-    runtime.perform(NSSelectorFromString("storeProfileValue:forID:"),
-                    with: NSValue(pointer: UnsafeMutableRawPointer(bitPattern: 1)), with: profileID)
+    runtime.perform(
+      NSSelectorFromString("finishProfileLoadID:error:"),
+      with: profileID, with: NSError(domain: "test", code: 1))
+    runtime.perform(
+      NSSelectorFromString("storeProfileValue:forID:"),
+      with: NSValue(pointer: UnsafeMutableRawPointer(bitPattern: 1)), with: profileID)
 
     let profiles = runtime.value(forKey: "_shaarProfiles") as? NSDictionary
     XCTAssertNil(profiles?[profileID])

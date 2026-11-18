@@ -304,6 +304,8 @@ struct Symbols {
 - (BOOL)submitWindowID:(NSString *)windowID profileID:(NSString *)profileID
              operation:(shaar_operation)operation payload:(NSDictionary *)payload;
 - (void)finishProfileLoadID:(NSString *)profileID error:(NSError *)error;
+- (void)storeProfileValue:(NSValue *)value forID:(NSString *)profileID;
+- (void)clearProfileHandlesForTeardown;
 - (void)finishWindowID:(NSString *)windowID;
 - (void)submitProfileID:(NSString *)profileID operation:(shaar_operation)operation
                 payload:(NSDictionary *)payload
@@ -611,6 +613,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
   [_hostSizes removeAllObjects];
   [_shaarWindows removeAllObjects];
   [_shaarTabs removeAllObjects];
+  [self clearProfileHandlesForTeardown];
   [_shaarFindTokens removeAllObjects];
   [_shaarFindRequests removeAllObjects];
   [_shaarMediaRequests removeAllObjects];
@@ -1062,6 +1065,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (NSValue *)loadedProfileValueForID:(NSString *)profileID {
+  if (!_shaarEngine) return nil;
   NSValue *value = _shaarProfiles[profileID];
   if (value) return value;
   for (NSString *key in _shaarProfiles) {
@@ -1072,7 +1076,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 
 - (BOOL)applyLiveHttpsOnly:(BOOL)enabled profileID:(NSString *)profileID {
   NSValue *value = [self loadedProfileValueForID:profileID];
-  if (!_shaarLibrary || !value) return NO;
+  if (!_shaarEngine || !_shaarLibrary || !value) return NO;
   auto setter = reinterpret_cast<shaar_error_code (*)(shaar_profile *, int, shaar_error *)>(
       dlsym(_shaarLibrary, "shaar_profile_set_https_only"));
   shaar_profile *profile = static_cast<shaar_profile *>(value.pointerValue);
@@ -1162,7 +1166,21 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
     [self finishProfileLoadID:profileID error:ShaarError(@"Shaar could not open the profile.")];
     return;
   }
-  _shaarProfiles[profileID] = [NSValue valueWithPointer:profile];
+  [self storeProfileValue:[NSValue valueWithPointer:profile] forID:profileID];
+}
+
+- (void)storeProfileValue:(NSValue *)value forID:(NSString *)profileID {
+  if (_shaarProfileWaiters[profileID]) _shaarProfiles[profileID] = value;
+}
+
+- (void)clearProfileHandlesForTeardown {
+  for (NSString *profileID in [_shaarProfileWaiters.allKeys copy]) {
+    [self finishProfileLoadID:profileID
+                        error:ShaarError(@"Shaar engine is shutting down.")];
+  }
+  [_shaarProfiles removeAllObjects];
+  [_shaarProfileWaiters removeAllObjects];
+  [_shaarTabProfiles removeAllObjects];
 }
 
 - (void)finishProfileLoadID:(NSString *)profileID error:(NSError *)error {
@@ -1178,7 +1196,7 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 - (shaar_engine *)privateEngineHandle { return _shaarEngine; }
 - (uint64_t)nextPrivateDevToolsRequestID { return _nextRequestID++; }
 - (shaar_profile *)privateProfileHandleForID:(NSString *)profileID {
-  return (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  return _shaarEngine ? (shaar_profile *)_shaarProfiles[profileID].pointerValue : nullptr;
 }
 
 - (NSString *)primaryWindowID { return _shaarPrimaryWindowID; }

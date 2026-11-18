@@ -17,6 +17,7 @@
 }
 
 - (NSString *)shaarProfileIDForNativeID:(NSString *)nativeID {
+  if (!_shaarEngine) return nil;
   for (NSString *profileID in _shaarProfiles)
     if ([profileID caseInsensitiveCompare:nativeID] == NSOrderedSame) return profileID;
   return nil;

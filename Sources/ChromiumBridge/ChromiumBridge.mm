@@ -218,4 +218,31 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (void)resolveSavePromptRequestID:(NSString *)requestID decision:(NSString *)decision {}
 
+- (BOOL)showDevToolsForTabID:(NSString *)tabID { return NO; }
+- (void)toggleDevToolsForTabID:(NSString *)tabID
+                   completion:(void (^)(NSError *))completion {
+  if (completion) completion(nil);
+}
+- (BOOL)closeDevToolsForTabID:(NSString *)tabID { return NO; }
+- (NSView *)devToolsViewForTabID:(NSString *)tabID { return nil; }
+
+- (NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID { return nil; }
+- (BOOL)sendMediaSessionAction:(ARCMediaSessionAction)action seconds:(double)seconds
+                         tabID:(NSString *)tabID { return NO; }
+- (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID { return NO; }
+- (BOOL)setMediaVolume:(double)volume tabID:(NSString *)tabID { return NO; }
+
+- (void)enterPictureInPictureInTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  if (completion) completion(NO);
+}
+- (void)exitPictureInPictureInTabID:(NSString *)tabID {}
+- (BOOL)engineHandlesAutoPictureInPictureForTabID:(NSString *)tabID { return NO; }
+- (void)setAutoPictureInPictureAllowed:(BOOL)allowed tabID:(NSString *)tabID {}
+- (NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID { return nil; }
+- (BOOL)sendPictureInPictureCommand:(ARCPictureInPictureCommand)command seconds:(double)seconds
+                              tabID:(NSString *)tabID { return NO; }
+
+- (NSDictionary<NSString *, id> *)securityInfoForTabID:(NSString *)tabID
+                                              profileID:(NSString *)profileID { return nil; }
+
 @end

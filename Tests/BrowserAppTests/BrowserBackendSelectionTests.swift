@@ -42,10 +42,15 @@ final class BrowserBackendSelectionTests: XCTestCase {
     let runtime = ARCShaarRuntime()
     let profileID = UUID().uuidString
     let tabID = UUID().uuidString
+    var callbackCount = 0
+    let waiter: @convention(block) (NSError?) -> Void = { error in
+      callbackCount += 1
+      XCTAssertNotNil(error)
+    }
     let profiles = NSMutableDictionary()
     profiles[profileID] = NSValue(pointer: UnsafeMutableRawPointer(bitPattern: 1))
     let waiters = NSMutableDictionary()
-    waiters[profileID] = [NSObject()]
+    waiters[profileID] = NSMutableArray(object: waiter)
     let tabProfiles = NSMutableDictionary()
     tabProfiles[tabID] = profileID
     runtime.setValue(profiles, forKey: "_shaarProfiles")
@@ -57,6 +62,7 @@ final class BrowserBackendSelectionTests: XCTestCase {
     XCTAssertEqual(profiles.count, 0)
     XCTAssertEqual(waiters.count, 0)
     XCTAssertEqual(tabProfiles.count, 0)
+    XCTAssertEqual(callbackCount, 1)
   }
 
   func testShaarOverridesWindowAndTabHosting() {

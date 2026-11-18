@@ -1174,6 +1174,10 @@ BOOL ARCBundleIsAdHocSigned(NSBundle *bundle) {
 }
 
 - (void)clearProfileHandlesForTeardown {
+  for (NSString *profileID in [_shaarProfileWaiters.allKeys copy]) {
+    [self finishProfileLoadID:profileID
+                        error:ShaarError(@"Shaar engine is shutting down.")];
+  }
   [_shaarProfiles removeAllObjects];
   [_shaarProfileWaiters removeAllObjects];
   [_shaarTabProfiles removeAllObjects];

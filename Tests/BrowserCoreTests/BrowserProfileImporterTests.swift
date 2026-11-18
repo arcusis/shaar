@@ -452,6 +452,26 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
   #expect(throws: BrowserImport.ImportError.self) {
     try BrowserImportSQLite.rows(at: database, query: "SELECT 1", maximumSourceSize: 1)
   }
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.read(
+      at: database, queries: ["SELECT 1"],
+      snapshotDirectory: profile.appending(path: "missing-directory")
+    ) { _, _ in }
+  }
+}
+
+@Test func sqliteSnapshotRejectsDatabaseConfigurationFailure() throws {
+  var database: OpaquePointer?
+  #expect(sqlite3_open(":memory:", &database) == SQLITE_OK)
+  guard let database else {
+    Issue.record("Could not create in-memory SQLite database.")
+    return
+  }
+  defer { sqlite3_close(database) }
+
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.configure(database, enableDefensive: { _ in SQLITE_ERROR })
+  }
 }
 
 @Test func sqliteSnapshotImportsRowsWithTriggersAndViewsInSchema() throws {
@@ -470,7 +490,8 @@ private func importOperationSignatures(_ operations: [[String: Any]]) -> [String
 
   let rows = try BrowserImportSQLite.rows(at: database, query: "SELECT id FROM urls")
   #expect(rows.count == 1)
-  let effects = try BrowserImportSQLite.rows(at: database, query: "SELECT value FROM trigger_effects")
+  let effects = try BrowserImportSQLite.rows(
+    at: database, query: "SELECT value FROM trigger_effects")
   #expect(effects.isEmpty)
   let viewRows = try BrowserImportSQLite.rows(at: database, query: "SELECT id FROM url_view")
   #expect(viewRows.count == 1)

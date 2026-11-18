@@ -17,8 +17,7 @@ enum BrowserImportSQLite {
   static func rows(
     at source: URL, query: String, limit: Int = 100_000,
     maximumSourceSize: Int64 = 512 * 1024 * 1024
-  ) throws -> [[String: Value]]
-  {
+  ) throws -> [[String: Value]] {
     var rows: [[String: Value]] = []
     try read(at: source, queries: [query], limit: limit, maximumSourceSize: maximumSourceSize) {
       _, result in rows = result
@@ -29,6 +28,7 @@ enum BrowserImportSQLite {
   static func read(
     at source: URL, queries: [String], limit: Int = 100_000,
     maximumSourceSize: Int64 = 512 * 1024 * 1024,
+    snapshotDirectory: URL = FileManager.default.temporaryDirectory,
     consume: (Int, [[String: Value]]) throws -> Void
   ) throws {
     guard !queries.isEmpty else { return }
@@ -37,20 +37,15 @@ enum BrowserImportSQLite {
       (sourceInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
       sourceInfo.st_size >= 0, sourceInfo.st_size <= maximumSourceSize
     else { throw BrowserImport.ImportError.databaseUnavailable("invalid source file") }
-    let sourceParent = source.deletingLastPathComponent().path.withCString { realpath($0, nil) }
-    guard let sourceParent else {
-      throw BrowserImport.ImportError.databaseUnavailable("resolve source path")
+    let sourceParent = source.deletingLastPathComponent().path.withCString {
+      shaar_realpath_or_original($0)
     }
-    let sourcePath = URL(fileURLWithPath: String(cString: sourceParent), isDirectory: true)
+    let parentPath =
+      sourceParent.map { String(cString: $0) } ?? source.deletingLastPathComponent().path
+    let sourcePath = URL(fileURLWithPath: parentPath, isDirectory: true)
       .appending(path: source.lastPathComponent).path
     free(sourceParent)
-    var resolvedInfo = stat()
-    guard lstat(sourcePath, &resolvedInfo) == 0,
-      (resolvedInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
-      resolvedInfo.st_size >= 0, resolvedInfo.st_size <= maximumSourceSize
-    else { throw BrowserImport.ImportError.databaseUnavailable("invalid source file") }
-    let temporary = FileManager.default.temporaryDirectory
-      .appending(path: "shaar-import-\(UUID().uuidString).sqlite")
+    let temporary = snapshotDirectory.appending(path: "shaar-import-\(UUID().uuidString).sqlite")
     defer {
       try? FileManager.default.removeItem(at: temporary)
       try? FileManager.default.removeItem(at: URL(filePath: temporary.path + "-wal"))
@@ -75,10 +70,6 @@ enum BrowserImportSQLite {
     let temporaryDescriptor = open(temporary.path, O_CREAT | O_EXCL | O_RDWR, mode_t(0o600))
     guard temporaryDescriptor >= 0 else {
       throw BrowserImport.ImportError.databaseUnavailable("create snapshot")
-    }
-    guard fchmod(temporaryDescriptor, mode_t(0o600)) == 0 else {
-      _ = close(temporaryDescriptor)
-      throw BrowserImport.ImportError.databaseUnavailable("secure snapshot")
     }
     _ = close(temporaryDescriptor)
 
@@ -162,8 +153,11 @@ enum BrowserImportSQLite {
     }
   }
 
-  private static func configure(_ database: OpaquePointer) throws {
-    guard shaar_sqlite_enable_defensive(database) == SQLITE_OK,
+  static func configure(
+    _ database: OpaquePointer,
+    enableDefensive: (OpaquePointer) -> Int32 = shaar_sqlite_enable_defensive
+  ) throws {
+    guard enableDefensive(database) == SQLITE_OK,
       sqlite3_exec(database, "PRAGMA trusted_schema=OFF", nil, nil, nil) == SQLITE_OK
     else { throw BrowserImport.ImportError.databaseUnavailable("configure database") }
     sqlite3_limit(database, SQLITE_LIMIT_LENGTH, 512 * 1024 * 1024)

@@ -22,6 +22,43 @@ final class BrowserBackendSelectionTests: XCTestCase {
     assertShaarOverrides("loadProfileID:completion:")
   }
 
+  func testSynchronousProfileOpenFailureDoesNotStoreHandle() {
+    let runtime = ARCShaarRuntime()
+    let profileID = UUID().uuidString
+    let waiters = NSMutableDictionary()
+    waiters[profileID] = NSMutableArray()
+    runtime.setValue(waiters, forKey: "_shaarProfileWaiters")
+
+    runtime.perform(NSSelectorFromString("finishProfileLoadID:error:"),
+                    with: profileID, with: NSError(domain: "test", code: 1))
+    runtime.perform(NSSelectorFromString("storeProfileValue:forID:"),
+                    with: NSValue(pointer: UnsafeMutableRawPointer(bitPattern: 1)), with: profileID)
+
+    let profiles = runtime.value(forKey: "_shaarProfiles") as? NSDictionary
+    XCTAssertNil(profiles?[profileID])
+  }
+
+  func testTeardownClearsProfileHandleAndTabMaps() {
+    let runtime = ARCShaarRuntime()
+    let profileID = UUID().uuidString
+    let tabID = UUID().uuidString
+    let profiles = NSMutableDictionary()
+    profiles[profileID] = NSValue(pointer: UnsafeMutableRawPointer(bitPattern: 1))
+    let waiters = NSMutableDictionary()
+    waiters[profileID] = [NSObject()]
+    let tabProfiles = NSMutableDictionary()
+    tabProfiles[tabID] = profileID
+    runtime.setValue(profiles, forKey: "_shaarProfiles")
+    runtime.setValue(waiters, forKey: "_shaarProfileWaiters")
+    runtime.setValue(tabProfiles, forKey: "_shaarTabProfiles")
+
+    runtime.perform(NSSelectorFromString("clearProfileHandlesForTeardown"))
+
+    XCTAssertEqual(profiles.count, 0)
+    XCTAssertEqual(waiters.count, 0)
+    XCTAssertEqual(tabProfiles.count, 0)
+  }
+
   func testShaarOverridesWindowAndTabHosting() {
     for selector in [
       "createWindowID:error:", "closeWindowID:",

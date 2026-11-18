@@ -92,7 +92,10 @@ final class ShaarABIReplyRegistry: @unchecked Sendable {
     let boxes = Array(pending.values)
     pending.removeAll()
     lock.unlock()
-    let error = ShaarEngineError.status(.shuttingDown, platformCode: 0, message: "engine is shutting down")
-    boxes.forEach { $0.resolve(.failure(error)) }
+    let error = ShaarEngineError.status(
+      .shuttingDown, platformCode: 0, message: "engine is shutting down")
+    for box in boxes {
+      box.resolve(.failure(error))
+    }
   }
 }

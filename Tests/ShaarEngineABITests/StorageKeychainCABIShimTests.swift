@@ -103,6 +103,9 @@ private let fakeStorageKeychainSubmitSuccess:
     registry.resolve(context: context, .success(Data("duplicate".utf8)))
   }
 
-  #expect(value == .failure(.status(
-    .shuttingDown, platformCode: 0, message: "engine is shutting down")))
+  #expect(
+    value
+      == .failure(
+        .status(
+          .shuttingDown, platformCode: 0, message: "engine is shutting down")))
 }

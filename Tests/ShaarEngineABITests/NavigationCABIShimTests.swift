@@ -125,6 +125,9 @@ private func fakeNavigationCShimSubmit(
   registry.resolve(context: context, .success(Data("late".utf8)))
 
   #expect(replyCount == 1)
-  #expect(received == .failure(.status(
-    .shuttingDown, platformCode: 0, message: "engine is shutting down")))
+  #expect(
+    received
+      == .failure(
+        .status(
+          .shuttingDown, platformCode: 0, message: "engine is shutting down")))
 }

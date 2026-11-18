@@ -127,8 +127,11 @@ private struct FakeDevToolsABIHandleResolver: ShaarNavigationHandleResolving {
   registry.resolve(context: context, .success(Data("late".utf8)))
 
   #expect(results.count == 1)
-  #expect(results.first == .failure(.status(
-    .shuttingDown, platformCode: 0, message: "engine is shutting down")))
+  #expect(
+    results.first
+      == .failure(
+        .status(
+          .shuttingDown, platformCode: 0, message: "engine is shutting down")))
 }
 
 @Test func sharedReplyBoxDiscardsImmediateSubmitFailureOnce() {

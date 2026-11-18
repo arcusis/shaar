@@ -24,3 +24,8 @@ void ARCDispatchShaarTabActivation(void (^activation)(void)) {
     activation();
   }
 }
+
+BOOL ARCShouldIgnoreHostTabActivation(NSString * _Nullable source, NSString *tabID,
+                                      NSString * _Nullable hostTargetTabID) {
+  return [source isEqual:@"host"] && [tabID isEqualToString:hostTargetTabID];
+}

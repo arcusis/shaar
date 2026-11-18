@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Host-caused tab activations are tagged in the engine and ignored by the bridge."""
+"""Host-caused tab activations are tagged and matched against the bridge target."""
 
 from pathlib import Path
 import unittest
@@ -11,6 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 TABS = ROOT / "ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/windows_tabs"
 BRIDGE = ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm"
+ACTIVATION = ROOT / "Sources/ChromiumBridge/ChromiumShaarActivation.mm"
 
 
 class HostActivationSourceTests(unittest.TestCase):
@@ -24,10 +25,20 @@ class HostActivationSourceTests(unittest.TestCase):
         self.assertIn('if (shaar::windows_tabs::HostActivationInProgress())\n      payload.Set("source", "host");',
                       lifecycle)
 
-    def test_bridge_drops_host_activation_events(self):
+    def test_bridge_drops_only_host_activation_for_its_current_target(self):
         bridge = BRIDGE.read_text()
         activated = bridge.index('[kind isEqualToString:@"activated"]')
-        self.assertLess(activated, bridge.index('if ([payload[@"source"] isEqual:@"host"]) return;'))
+        target_check = bridge.index("if (ARCShouldIgnoreHostTabActivation(", activated)
+        callback = bridge.index("self.onTabActivated(tabID, profileID);", target_check)
+        self.assertLess(activated, target_check)
+        self.assertLess(target_check, callback)
+        self.assertIn('_shaarSelectedTabs[windowID]', bridge[target_check:callback])
+
+        activation = ACTIVATION.read_text()
+        self.assertIn(
+            '[source isEqual:@"host"] && [tabID isEqualToString:hostTargetTabID]',
+            activation,
+        )
 
 
 if __name__ == "__main__":

@@ -8,4 +8,9 @@ public enum BrowserTestEnvironment {
   public static var isSanitizerRun: Bool {
     ProcessInfo.processInfo.environment["CI_SANITIZER"] != nil
   }
+
+  /// Wall-clock speedup ratios are noisy on shared machines, so tests assert them only on request.
+  public static var assertsSpeedupRatios: Bool {
+    ProcessInfo.processInfo.environment["SPEEDUP_BENCHMARK"] == "1"
+  }
 }

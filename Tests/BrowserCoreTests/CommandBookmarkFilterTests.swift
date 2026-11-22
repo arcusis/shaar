@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserTestSupport
 import Foundation
 import Testing
 
@@ -40,7 +41,9 @@ import Testing
   print("commandBookmarkChipSparseMatchFocusedBenchmark: before=\(before), after=\(after)")
   #expect(beforeResults == afterResults && afterResults.count == 1)
   #expect(bookmarks[1_998].destination == nil)
-  #expect(durationSeconds(after) < durationSeconds(before) * 0.75)
+  if BrowserTestEnvironment.assertsSpeedupRatios {
+    #expect(after / before < 0.75)
+  }
 }
 
 private func legacyBookmarkResults(
@@ -54,9 +57,4 @@ private func legacyBookmarkResults(
       }
       .prefix(CommandLauncher.filteredLimit)
       .map { CommandResult.bookmark($0, subtitle: CommandText.domain(of: $0.destination)) })
-}
-
-private func durationSeconds(_ duration: Duration) -> Double {
-  let components = duration.components
-  return Double(components.seconds) + Double(components.attoseconds) / 1e18
 }

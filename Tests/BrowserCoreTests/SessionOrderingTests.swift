@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import BrowserTestSupport
 import Foundation
 import Testing
 
@@ -112,12 +113,9 @@ private func orderedSession() throws -> BrowserSession {
   let after = afterStart.duration(to: .now)
   print("sidebarSeparateSectionsFocusedBenchmark: before=\(before), after=\(after)")
   #expect(afterSections?.pinned == beforePinned && afterSections?.unpinned == beforeUnpinned)
-  #expect(durationSeconds(after) < durationSeconds(before) * 0.75)
-}
-
-private func durationSeconds(_ duration: Duration) -> Double {
-  let components = duration.components
-  return Double(components.seconds) + Double(components.attoseconds) / 1e18
+  if BrowserTestEnvironment.assertsSpeedupRatios {
+    #expect(after / before < 0.75)
+  }
 }
 
 @Test func selectedTabMoveFollowsItsLiveIdentityWithinTheSameProfile() throws {

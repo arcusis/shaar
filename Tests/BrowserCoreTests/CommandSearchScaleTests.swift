@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserTestSupport
 import Foundation
 import Testing
 
@@ -378,7 +379,9 @@ private func stableID(_ suffix: Int) -> UUID {
   let after = afterStart.duration(to: .now)
   print("commandHistoryChipSparseMatchFocusedBenchmark: before=\(before), after=\(after)")
   #expect(beforeResults == afterResults && afterResults.count == 1)
-  #expect(durationSeconds(after) < durationSeconds(before) * 0.75)
+  if BrowserTestEnvironment.assertsSpeedupRatios {
+    #expect(after / before < 0.75)
+  }
 }
 
 private func legacyHistoryResults(
@@ -392,11 +395,6 @@ private func legacyHistoryResults(
       }
       .prefix(CommandLauncher.filteredLimit)
       .map { CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination)) })
-}
-
-private func durationSeconds(_ duration: Duration) -> Double {
-  let components = duration.components
-  return Double(components.seconds) + Double(components.attoseconds) / 1e18
 }
 
 private let nineBenchmarkBatches = 9

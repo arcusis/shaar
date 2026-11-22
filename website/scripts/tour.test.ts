@@ -49,9 +49,9 @@ test("homepage tour keeps a short list of distinct screenshots and a thumbnail g
   assert.equal(text.includes("parity-user"), false);
   assert.equal(text.includes("127.0.0.1"), false);
   assert.equal(text.includes("0.1.0"), false);
-  assert.match(text, /v0\.2\.0 beta available/);
-  assert.match(text, /Current release 0\.2\.0/);
-  assert.match(text, /Shaar 0\.2\.0 · MPL-2\.0/);
+  assert.match(text, /v0\.2\.1 beta available/);
+  assert.match(text, /Current release 0\.2\.1/);
+  assert.match(text, /Shaar 0\.2\.1 · MPL-2\.0/);
   assert.equal(text.includes("Preview what's coming"), false);
   assert.equal(text.includes("Preview 0.2.0"), false);
   assert.equal(text.includes("Unknown access"), false);
@@ -60,15 +60,15 @@ test("homepage tour keeps a short list of distinct screenshots and a thumbnail g
   assert.ok(document.querySelector("#stop-loading .tour-shot img"));
 });
 
-test("download and changelog treat 0.2.0 as the current release", () => {
+test("download and changelog treat 0.2.1 as the current release", () => {
   const pages = Pages("", "", "");
   const download = pages.find((page) => page.path === "/download/");
   const changelog = pages.find((page) => page.path === "/changelog/");
   assert.ok(download);
   assert.ok(changelog);
   assert.match(download.body, new RegExp(release.dmg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(download.body, /Shaar-0\.2\.0-macos\.zip/);
-  assert.match(download.body, /Shaar 0\.2\.0/);
+  assert.match(download.body, /Shaar-0\.2\.1-macos\.zip/);
+  assert.match(download.body, /Shaar 0\.2\.1/);
   assert.equal(download.body.includes("0.1.0"), false);
   assert.equal(download.body.includes("Coming in"), false);
   assert.equal(changelog.body.includes("Coming soon"), false);

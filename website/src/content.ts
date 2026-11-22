@@ -9,16 +9,23 @@ export const commandInterfaceName = "Nativ";
 
 // Current public release. Asset names follow scripts/release_feed.py: Shaar_<version>_aarch64.dmg and Shaar-<version>-macos.zip.
 export const release = {
-  version: "0.2.0",
-  url: `${repository}/releases/tag/v0.2.0`,
-  dmg: `${repository}/releases/download/v0.2.0/Shaar_0.2.0_aarch64.dmg`,
-  zip: `${repository}/releases/download/v0.2.0/Shaar-0.2.0-macos.zip`,
+  version: "0.2.1",
+  url: `${repository}/releases/tag/v0.2.1`,
+  dmg: `${repository}/releases/download/v0.2.1/Shaar_0.2.1_aarch64.dmg`,
+  zip: `${repository}/releases/download/v0.2.1/Shaar-0.2.1-macos.zip`,
 };
 
 // Release-note groups for the current public beta. The download itself is `release`.
 export const upcomingRelease = {
-  version: "0.2.0",
+  version: "0.2.1",
   highlights: [
+    "Importing history from Chrome and Safari works again. Visits from those browsers were being rejected during import.",
+    "Importing from another browser now skips linked or unusually large files instead of following or loading them.",
+    "When an extension or page switches tabs several times quickly, Shaar now ends on the tab that was chosen last.",
+    "Installing an extension from the Chrome Web Store no longer opens a stray Chromium window.",
+    "A window you close on purpose stays closed instead of being restored.",
+    "Deleting a profile now also removes the profile folder if Chromium recreates it right after deletion.",
+    "Shaar recovers more reliably when its web engine stops or restarts.",
     "Shaar now runs on Chromium 157, bringing a newer web engine to everyday browsing.",
     "Press F12 or Option-Command-I for Chromium Developer Tools, with Shaar panels for viewports, network rules, 3D stacking, focus and more. The old developer tools window has been replaced; Shaar Inspector remains available.",
     "Inactive tabs can sleep to save memory. Choose when they sleep and which sites stay awake in Settings; pinned, active and playing tabs stay awake.",
